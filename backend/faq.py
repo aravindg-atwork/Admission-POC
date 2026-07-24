@@ -11,6 +11,9 @@ Two ways entries get here:
 Matching is language-aware by construction: the embedding of a Hindi question is
 close to other Hindi phrasings, not to the English one, so cached answers stay in
 the language they were created for.
+
+One cache per project - every function takes that project's own faq_path
+(see projects.py) rather than a single global file.
 """
 
 import json
@@ -30,21 +33,27 @@ def _cosine(a, b):
     return dot / (na * nb)
 
 
-def _load():
-    if not config.FAQ_PATH.exists():
+def _load(faq_path):
+    if not faq_path.exists():
         return []
-    return json.loads(config.FAQ_PATH.read_text(encoding="utf-8") or "[]")
+    return json.loads(faq_path.read_text(encoding="utf-8") or "[]")
 
 
-def _save(entries):
-    config.FAQ_PATH.parent.mkdir(parents=True, exist_ok=True)
-    config.FAQ_PATH.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+def _save(faq_path, entries):
+    faq_path.parent.mkdir(parents=True, exist_ok=True)
+    faq_path.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def match(query_vector):
-    """Return a cached entry {answer, pages, question} if one is close enough, else None."""
+def match(faq_path, query_vector):
+    """Return a cached entry {answer, pages, question} if one is close enough, else None.
+
+    Cached answers are always native-script (generation never varies by script
+    preference - see rag.py); Hinglish is a display-time transliteration applied
+    uniformly to both fresh and cached answers, so there's nothing script-specific
+    to match on here.
+    """
     best, best_score = None, 0.0
-    for entry in _load():
+    for entry in _load(faq_path):
         score = _cosine(query_vector, entry["vector"])
         if score > best_score:
             best, best_score = entry, score
@@ -54,18 +63,18 @@ def match(query_vector):
     return None
 
 
-def add(question, answer, pages, vector):
+def add(faq_path, question, answer, pages, vector):
     """Cache a generated answer for instant reuse next time."""
     with _lock:
-        entries = _load()
+        entries = _load(faq_path)
         entries.append({"question": question, "answer": answer, "pages": pages, "vector": vector})
-        _save(entries)
+        _save(faq_path, entries)
 
 
-def list_entries():
-    return [{k: v for k, v in e.items() if k != "vector"} for e in _load()]
+def list_entries(faq_path):
+    return [{k: v for k, v in e.items() if k != "vector"} for e in _load(faq_path)]
 
 
-def clear():
+def clear(faq_path):
     with _lock:
-        _save([])
+        _save(faq_path, [])

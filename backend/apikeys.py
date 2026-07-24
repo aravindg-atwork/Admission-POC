@@ -3,7 +3,9 @@
 
 Every consumer (the admission site's own widget, the browser extension, any
 integration) holds its own key, so any one can be revoked without touching the
-others. Backed by a single JSON file - enough at POC scale.
+others. Backed by a single JSON file - enough at POC scale. Each key belongs
+to exactly one project; resolve_active() is how /api/chat and /api/ingest
+figure out which project's pipeline a request is for.
 """
 
 import json
@@ -27,28 +29,41 @@ def _save(keys):
     config.KEYS_PATH.write_text(json.dumps(keys, indent=2), encoding="utf-8")
 
 
-def _new_entry(label):
+def _new_entry(label, project_id):
     return {
         "id": secrets.token_hex(6),
         "key": "aas_" + secrets.token_urlsafe(32),
         "label": label or "unlabeled",
+        "project_id": project_id,
         "active": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
-def list_keys():
-    with _lock:
-        return _load()
-
-
-def create(label):
+def list_keys(project_id=None):
     with _lock:
         keys = _load()
-        entry = _new_entry(label)
+        return keys if project_id is None else [k for k in keys if k.get("project_id") == project_id]
+
+
+def create(label, project_id):
+    with _lock:
+        keys = _load()
+        entry = _new_entry(label, project_id)
         keys.append(entry)
         _save(keys)
         return entry
+
+
+def set_project(key_id, project_id):
+    with _lock:
+        keys = _load()
+        for entry in keys:
+            if entry["id"] == key_id:
+                entry["project_id"] = project_id
+                _save(keys)
+                return entry
+        return None
 
 
 def set_active(key_id, active):
@@ -79,13 +94,24 @@ def is_active(key_value):
         return any(k["key"] == key_value and k["active"] for k in _load())
 
 
-def get_or_create_default():
+def resolve_active(key_value):
+    """Return the project_id an active key belongs to, or None."""
+    if not key_value:
+        return None
+    with _lock:
+        for k in _load():
+            if k["key"] == key_value and k["active"]:
+                return k.get("project_id")
+    return None
+
+
+def get_or_create_default(project_id):
     with _lock:
         keys = _load()
         for entry in keys:
-            if entry["label"] == config.DEFAULT_KEY_LABEL:
+            if entry["label"] == config.DEFAULT_KEY_LABEL and entry.get("project_id") == project_id:
                 return entry
-        entry = _new_entry(config.DEFAULT_KEY_LABEL)
+        entry = _new_entry(config.DEFAULT_KEY_LABEL, project_id)
         keys.append(entry)
         _save(keys)
         return entry

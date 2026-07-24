@@ -20,16 +20,17 @@ FAQ cache lookup ──► hit (cosine ≥ 0.93)? ──► return cached answer
 RAG search  (cosine over prospectus chunks, reuses the same embedding)
    │
    ▼
-Language router  (script detection: Latin vs Devanagari/Tamil)
-   │                                   │
-   ▼ English                           ▼ Hindi / Marathi / Tamil
-llama3.2:3b (local Ollama)      Sarvam AI cloud (sarvam-m)
-   │                                   │  (local gemma2:2b fallback if offline)
-   ▼                                   ▼
-                Answer  (+ page citations)
+LLM generate ──► Sarvam AI cloud (sarvam-30b), if under the daily call cap
+   │                (handles English AND Hindi/Marathi/Tamil - one strong model,
+   │                 no per-language split needed)
+   ▼ cap hit / cloud error
+Local fallback (gemma2:2b via Ollama) ──► Answer  (+ page citations)
    │
    ▼
-Auto-cache the answer  → next similar ask is instant
+Auto-cache the answer → next similar ask is instant
+   │
+   ▼ (if voice reply requested)
+Indic script? ──► AI4Bharat Indic-TTS (Dockerized)  │  Latin script ──► browser voice (instant)
 ```
 
 ## 2. Frozen models
@@ -37,16 +38,17 @@ Auto-cache the answer  → next similar ask is instant
 | Role | Model | Where it runs | Why |
 |------|-------|---------------|-----|
 | Embeddings (RAG + FAQ match) | `nomic-embed-text-v1` | Docker (self-host) | Open, strong retrieval, one model for both search and cache matching |
-| English chat | `llama3.2:3b` | Local Ollama | Small, fast, good English on CPU |
-| Hindi / Marathi / Tamil chat | `sarvam-m` (Sarvam AI) | **Cloud API** | Purpose-built for Indian languages: fast AND high quality — the only way to get both on non-GPU hardware |
-| Indic offline fallback | `gemma2:2b` | Local Ollama | Keeps the system working without internet (lower quality) |
-| Global fallback | `llama3.1:8b` | Local Ollama | Used only if a routed model is missing at request time |
-| Voice output (TTS) | AI4Bharat Indic-TTS | Docker (self-host) | Natural Tamil/Hindi/Marathi; browser TTS is the placeholder until this lands |
-| Voice input (STT) | Browser Web Speech API (POC) | Client | Zero-setup; AI4Bharat ASR is the production upgrade |
+| Chat — all languages, online | `sarvam-30b` (Sarvam AI) | **Cloud API** | One model strong at English AND Hindi/Marathi/Tamil: fast (~5-12s) AND high quality — the only way to get both on non-GPU hardware. Capped at `SARVAM_DAILY_LIMIT` (default 150) calls/day so the system can never drift into paid usage on its own. |
+| Chat — offline / cap-exceeded fallback | `gemma2:2b` | Local Ollama | Single local model covers all languages when Sarvam is unavailable (lower quality, ~30-80s on CPU) |
+| Global fallback | `llama3.1:8b` | Local Ollama | Used only if the configured local model is missing at request time |
+| Voice output (TTS), Hindi/Marathi/Tamil | AI4Bharat `indic-parler-tts` (0.9B) | Docker (self-host) | Natural Indic voices (Divya/Sunita/Jaya); slow on CPU, so calls are async and fall back to the browser voice on error/timeout |
+| Voice output (TTS), English | Browser Web Speech API | Client | Instant, no reason to wait on a model for English |
+| Voice input (STT) | Browser Web Speech API (POC) | Client | Zero-setup; AI4Bharat ASR is a future upgrade if browser STT proves insufficient |
 
 Everything above is config-driven (`backend/config.py` + env vars). Swapping any
 model is a one-line change, no code edits. `SARVAM_API_KEY` is read from the
-environment — never committed.
+environment — never committed. The console's **Cost** tab shows live usage against
+the daily cap and a per-agent breakdown (Sarvam cloud / local / free cache).
 
 ## 3. What has to be hosted
 

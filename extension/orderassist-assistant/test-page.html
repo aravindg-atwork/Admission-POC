@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Fake OrderAssist quotation page (for testing the extension)</title>
+  <style>
+    body { font: 15px/1.5 -apple-system, "Segoe UI", Arial, sans-serif; max-width: 560px; margin: 60px auto; color: #1a1f27; }
+    textarea { width: 100%; height: 90px; font: inherit; padding: 10px; box-sizing: border-box; }
+    button { font: inherit; font-weight: 600; padding: 10px 16px; border-radius: 8px; border: none; background: #1a7f4e; color: #fff; cursor: pointer; margin-top: 10px; }
+    #log { margin-top: 16px; font-family: monospace; font-size: 13px; white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 8px; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Fake quotation page</h1>
+  <p>Not real OrderAssist - just enough DOM structure to test the extension's selectors against. Edit the text below to simulate different quotations.</p>
+
+  <label>Quotation summary</label>
+  <div class="quotation-summary" contenteditable="true" style="border:1px solid #d8dee5;border-radius:8px;padding:10px;min-height:60px;">Quotation for a 3-bedroom luxury villa, gated community, premium finishes.</div>
+
+  <input type="file" class="attachments" multiple style="margin-top:14px;" />
+
+  <button class="send-quotation">Send quotation</button>
+
+  <div id="log"></div>
+
+  <script>
+    document.querySelector(".send-quotation").addEventListener("click", () => {
+      const files = document.querySelector(".attachments").files;
+      document.getElementById("log").textContent =
+        "Send fired. Attached files: " + (files.length ? Array.from(files).map(f => f.name).join(", ") : "(none)");
+    });
+  </script>
+</body>
+</html>

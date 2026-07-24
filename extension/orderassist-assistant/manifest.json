@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "OrderAssist Catalogue Assistant (POC)",
+  "version": "0.2.1",
+  "description": "When a quotation is about to be sent in OrderAssist, suggests and attaches the best-matching brochure/template from a Google Drive catalogue.",
+  "permissions": ["storage", "identity", "scripting", "tabs"],
+  "host_permissions": [
+    "https://www.googleapis.com/*",
+    "*://*/view_proposal/*",
+    "file:///*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/view_proposal/*", "file:///*"],
+      "js": ["interceptor.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://*/view_proposal/*", "file:///*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "options_page": "popup.html",
+  "oauth2": {
+    "client_id": "285946928264-qtopecu17iuo6c38q63pq64hbdapqb48.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/drive.readonly"]
+  }
+}

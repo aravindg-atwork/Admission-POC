@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>OrderAssist Catalogue Assistant</title>
+  <style>
+    body { width: 320px; font: 13px/1.4 -apple-system, "Segoe UI", Arial, sans-serif; padding: 14px; color: #1a1f27; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    p.hint { color: #5b6572; font-size: 10.5px; margin: 0 0 12px; }
+    label { display: block; font-size: 10.5px; font-weight: 600; color: #5b6572; margin: 10px 0 3px; }
+    input { width: 100%; box-sizing: border-box; font-size: 13px; padding: 7px 9px; border: 1px solid #d8dee5; border-radius: 7px; }
+    .row { display: flex; gap: 8px; margin-top: 14px; }
+    button { font-size: 13px; font-weight: 600; padding: 8px 10px; border-radius: 7px; border: 1px solid #d8dee5; background: #f3f4f6; cursor: pointer; flex: 1; }
+    button.primary { background: #1a7f4e; border-color: #1a7f4e; color: #fff; }
+    #status { margin-top: 10px; font-size: 10.5px; min-height: 16px; }
+    #status.ok { color: #1a7f4e; }
+    #status.err { color: #c23a2e; }
+    #diag { margin-top: 8px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.6;
+      background: #f3f4f6; border-radius: 8px; padding: 10px; white-space: pre-wrap; display: none; }
+  </style>
+</head>
+<body>
+  <h1>OrderAssist Catalogue Assistant <span id="version" style="font-size:11px;font-weight:400;color:#5b6572;"></span></h1>
+  <p class="hint">POC settings - these point the extension at your backend, your Drive catalogue folder, and the OrderAssist page elements it should watch.</p>
+
+  <label>Backend URL</label>
+  <input id="backendUrl" placeholder="http://localhost:5050" />
+
+  <label>Backend API key</label>
+  <input id="apiKey" placeholder="aas_... (or generate one below)" />
+  <div class="row" style="margin-top:6px;">
+    <input id="adminToken" placeholder="admin token (one-time, to generate a key)" />
+    <button id="generateKey">Generate</button>
+  </div>
+
+  <label>Drive catalogue folder ID</label>
+  <input id="driveFolderId" placeholder="the ID from the Drive folder's URL" />
+
+  <label>Match threshold (0-1, lower = less strict)</label>
+  <input id="matchThreshold" placeholder="0.55" />
+
+  <label>Test quotation text (optional - for "Test Drive access" below)</label>
+  <input id="testQuotationText" placeholder="e.g. MacBook Pro 14 x2 - try real product names" />
+
+  <label>Quotation text selector (CSS, optional fallback)</label>
+  <input id="quotationTextSelector" placeholder="not needed on the real proposal page - it reads the API response" />
+
+  <label>Send button selector (CSS)</label>
+  <input id="sendButtonSelector" value=".btn-global.btn-add-roles" />
+
+  <label>Attachment file input selector (CSS, optional)</label>
+  <input id="fileInputSelector" value='input[type="file"][accept=".pdf,.jpg,.jpeg"]' />
+
+  <div class="row">
+    <button id="save" class="primary">Save</button>
+    <button id="testDrive">Test Drive access</button>
+  </div>
+  <div class="row">
+    <button id="resetAuth">Reset Google sign-in</button>
+    <button id="diagnose">Diagnose current tab</button>
+  </div>
+  <div id="status"></div>
+  <pre id="diag"></pre>
+
+  <script src="popup.js"></script>
+</body>
+</html>

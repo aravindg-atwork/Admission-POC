@@ -1,7 +1,8 @@
 """In-memory JSON vector store with cosine similarity search.
 
 At POC scale (one prospectus, a few hundred chunks) this fits comfortably in
-memory and needs no dedicated vector database.
+memory and needs no dedicated vector database. One store per project - the
+caller passes the project's own store_path (see projects.py).
 """
 
 import json
@@ -18,15 +19,15 @@ def _cosine(a, b):
     return dot / (na * nb)
 
 
-def load():
-    if not config.STORE_PATH.exists():
+def load(store_path):
+    if not store_path.exists():
         return []
-    return json.loads(config.STORE_PATH.read_text(encoding="utf-8"))
+    return json.loads(store_path.read_text(encoding="utf-8"))
 
 
-def save(entries):
-    config.STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    config.STORE_PATH.write_text(json.dumps(entries), encoding="utf-8")
+def save(store_path, entries):
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    store_path.write_text(json.dumps(entries), encoding="utf-8")
 
 
 def search(store, query_vector, top_k=None):

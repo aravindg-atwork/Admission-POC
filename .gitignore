@@ -25,6 +25,11 @@ data/vector-store/*
 !data/prospectus/.gitkeep
 !data/vector-store/.gitkeep
 
+# --- Per-project data (multi-project console: one prospectus/store/cache/stats per project) ---
+data/projects.json
+data/projects/*
+!data/projects/.gitkeep
+
 # --- Dev/demo generated artifacts ---
 tools/demo-vector-store.json
 tools/demo-api-keys.json
@@ -32,3 +37,7 @@ tools/demo-api-keys.json
 # --- Logs / scratch ---
 *.log
 selfhost.pid
+data/sarvam-usage.json
+
+# --- Google OAuth credentials (never commit) ---
+client_secret_*.json

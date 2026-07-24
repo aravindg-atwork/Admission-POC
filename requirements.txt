@@ -1,0 +1,7 @@
+# Host-side dependencies for the pure-Python backend (backend/).
+# Pure Python only, deliberately - this runs directly on the Windows host, which
+# blocks freshly-installed compiled binaries (see README.md / docs). ML pieces
+# (embeddings, TTS) run in Docker instead, for exactly that reason.
+
+pypdf                  # prospectus PDF text extraction (backend/pdf.py)
+indic-transliteration  # Devanagari -> Hinglish transliteration (backend/transliterate.py)
