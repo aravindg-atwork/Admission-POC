@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Embedding Service — API Keys</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; background: #f5f6f8; margin: 0; }
+  #root { max-width: 720px; margin: 40px auto; background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  h1 { font-size: 20px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; font-size: 14px; }
+  code { background: #f0f0f0; padding: 2px 4px; border-radius: 3px; }
+  button { padding: 6px 12px; cursor: pointer; }
+  .active { color: #0a7a2f; }
+  .inactive { color: #999; }
+  input[type=text] { padding: 6px; width: 220px; }
+  #token-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div id="root">
+  <h1>Embedding Service — API Keys</h1>
+  <div id="token-bar">
+    <input type="text" id="admin-token" placeholder="Admin token" />
+    <button id="save-token">Connect</button>
+  </div>
+  <div id="key-manager" style="display:none">
+    <div>
+      <input type="text" id="new-label" placeholder="Label (e.g. admission-webforms)" />
+      <button id="generate-btn">Generate new key</button>
+    </div>
+    <table id="keys-table">
+      <thead><tr><th>Label</th><th>Key</th><th>Status</th><th>Created</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+<script>
+  var tokenInput = document.getElementById("admin-token");
+  var saved = localStorage.getItem("adminToken");
+  if (saved) tokenInput.value = saved;
+
+  document.getElementById("save-token").addEventListener("click", function () {
+    localStorage.setItem("adminToken", tokenInput.value.trim());
+    loadKeys();
+  });
+
+  document.getElementById("generate-btn").addEventListener("click", function () {
+    var label = document.getElementById("new-label").value.trim();
+    fetch("/admin/keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken() },
+      body: JSON.stringify({ label: label })
+    }).then(function (r) { return r.json(); }).then(function () {
+      document.getElementById("new-label").value = "";
+      loadKeys();
+    });
+  });
+
+  function adminToken() {
+    return localStorage.getItem("adminToken") || "";
+  }
+
+  function toggleKey(id, active) {
+    fetch("/admin/keys/" + id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken() },
+      body: JSON.stringify({ active: active })
+    }).then(loadKeys);
+  }
+
+  function deleteKey(id) {
+    if (!confirm("Delete this key? Anything using it will stop working.")) return;
+    fetch("/admin/keys/" + id, {
+      method: "DELETE",
+      headers: { "X-Admin-Token": adminToken() }
+    }).then(loadKeys);
+  }
+
+  function loadKeys() {
+    fetch("/admin/keys", { headers: { "X-Admin-Token": adminToken() } })
+      .then(function (r) {
+        if (!r.ok) throw new Error("unauthorized");
+        return r.json();
+      })
+      .then(function (keys) {
+        document.getElementById("key-manager").style.display = "block";
+        var tbody = document.querySelector("#keys-table tbody");
+        tbody.innerHTML = "";
+        keys.forEach(function (k) {
+          var tr = document.createElement("tr");
+          tr.innerHTML =
+            "<td>" + k.label + "</td>" +
+            "<td><code>" + k.key + "</code></td>" +
+            "<td class=\"" + (k.active ? "active" : "inactive") + "\">" + (k.active ? "Active" : "Inactive") + "</td>" +
+            "<td>" + new Date(k.created_at).toLocaleString() + "</td>" +
+            "<td></td>";
+          var actionsCell = tr.lastElementChild;
+
+          var toggleBtn = document.createElement("button");
+          toggleBtn.textContent = k.active ? "Deactivate" : "Activate";
+          toggleBtn.addEventListener("click", function () { toggleKey(k.id, !k.active); });
+          actionsCell.appendChild(toggleBtn);
+
+          var delBtn = document.createElement("button");
+          delBtn.textContent = "Delete";
+          delBtn.style.marginLeft = "6px";
+          delBtn.addEventListener("click", function () { deleteKey(k.id); });
+          actionsCell.appendChild(delBtn);
+
+          tbody.appendChild(tr);
+        });
+      })
+      .catch(function () {
+        document.getElementById("key-manager").style.display = "none";
+      });
+  }
+
+  if (saved) loadKeys();
+</script>
+</body>
+</html>

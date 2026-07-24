@@ -1,0 +1,34 @@
+# --- .NET build output ---
+bin/
+obj/
+*.user
+.vs/
+packages/
+App_Data/
+
+# --- Python ---
+__pycache__/
+*.pyc
+.env
+services/embedding-service/.venv/
+services/embedding-service/api_keys.json
+.venv/
+
+# --- Node ---
+node_modules/
+
+# --- Generated data (keys, cache, indexes, uploaded PDFs) ---
+data/api-keys.json
+data/faq-cache.json
+data/prospectus/*
+data/vector-store/*
+!data/prospectus/.gitkeep
+!data/vector-store/.gitkeep
+
+# --- Dev/demo generated artifacts ---
+tools/demo-vector-store.json
+tools/demo-api-keys.json
+
+# --- Logs / scratch ---
+*.log
+selfhost.pid

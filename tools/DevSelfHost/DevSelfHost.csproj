@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net45</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>DevSelfHost</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Owin.Hosting" Version="4.2.2" />
+    <PackageReference Include="Microsoft.Owin.Host.HttpListener" Version="4.2.2" />
+    <PackageReference Include="Microsoft.Owin.StaticFiles" Version="4.2.2" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Owin" Version="5.3.0" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="6.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AdmissionAssistant.Core\AdmissionAssistant.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Linked, not copied: this is the same source the Web project ships, compiled here
+       only because the legacy Web.csproj needs VS's web tooling / .NET 4.5 targeting pack
+       to build via MSBuild directly, neither of which is installed on this machine. -->
+  <ItemGroup>
+    <Compile Include="..\..\src\AdmissionAssistant.Web\App_Start\WebApiConfig.cs" Link="WebProject\WebApiConfig.cs" />
+    <Compile Include="..\..\src\AdmissionAssistant.Web\Config\AssistantServiceFactory.cs" Link="WebProject\AssistantServiceFactory.cs" />
+    <Compile Include="..\..\src\AdmissionAssistant.Web\Filters\ApiKeyAuthorizeAttribute.cs" Link="WebProject\ApiKeyAuthorizeAttribute.cs" />
+    <Compile Include="..\..\src\AdmissionAssistant.Web\Controllers\ChatController.cs" Link="WebProject\ChatController.cs" />
+    <Compile Include="..\..\src\AdmissionAssistant.Web\Controllers\IngestController.cs" Link="WebProject\IngestController.cs" />
+    <Compile Include="..\..\src\AdmissionAssistant.Web\Controllers\AdminController.cs" Link="WebProject\AdminController.cs" />
+  </ItemGroup>
+
+</Project>

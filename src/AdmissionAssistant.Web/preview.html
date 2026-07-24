@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admission Assistant (preview)</title>
+    <link rel="stylesheet" href="Content/site.css" />
+</head>
+<body>
+    <div class="app">
+        <header class="app-header">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true">A</span>
+                <span class="brand-name">Admission Assistant</span>
+            </div>
+            <span class="status-pill" id="status-pill">Online</span>
+        </header>
+
+        <main class="thread" id="thread" aria-live="polite">
+            <div class="empty-state" id="empty-state">
+                <h1>Ask anything about admissions</h1>
+                <p>Answers come straight from the prospectus, with page references.</p>
+                <div class="suggestions" id="suggestions">
+                    <button type="button" class="suggestion-chip">What are the eligibility criteria?</button>
+                    <button type="button" class="suggestion-chip">When does the application window close?</button>
+                    <button type="button" class="suggestion-chip">What documents do I need to submit?</button>
+                </div>
+            </div>
+        </main>
+
+        <footer class="composer">
+            <div class="composer-bar">
+                <textarea id="chat-input" placeholder="Ask about admissions..." rows="1"></textarea>
+                <button id="chat-send" type="button" aria-label="Send message">
+                    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
+                        <path d="M3 10L17 3L11.5 17L9.5 11L3 10Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" />
+                    </svg>
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Preview-only mock: real chat.js calls the live /api/chat endpoint. -->
+    <script>
+        window.fetch = function (url, opts) {
+            if (url !== "/api/chat") return Promise.reject(new Error("unmocked"));
+            var body = JSON.parse(opts.body);
+            var q = body.question.toLowerCase();
+            var answer, pages;
+            if (q.indexOf("eligib") !== -1) {
+                answer = "Candidates need a minimum of 60% aggregate in their qualifying examination, with Physics, Chemistry, and Mathematics as core subjects.";
+                pages = [4, 5];
+            } else if (q.indexOf("close") !== -1 || q.indexOf("deadline") !== -1 || q.indexOf("window") !== -1) {
+                answer = "The application window closes on 30th September. Late applications are accepted until 7th October with a late fee.";
+                pages = [2];
+            } else if (q.indexOf("document") !== -1) {
+                answer = "You'll need your qualifying mark sheet, a government photo ID, two passport photos, and a transfer certificate from your previous institution.";
+                pages = [7, 8];
+            } else {
+                answer = "I don't have that in the prospectus. Try asking about eligibility, deadlines, or required documents.";
+                pages = [];
+            }
+            return new Promise(function (resolve) {
+                setTimeout(function () {
+                    resolve({
+                        ok: true,
+                        json: function () { return Promise.resolve({ answerText: answer, pageReferences: pages }); }
+                    });
+                }, 700);
+            });
+        };
+    </script>
+    <script src="Scripts/chat.js"></script>
+</body>
+</html>
