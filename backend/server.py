@@ -14,6 +14,7 @@ frontend (static files) and the JSON API:
   GET             /admin/projects/id/stats   X-Admin-Token gated - dashboard/cost metrics + health
   POST            /admin/projects/id/ingest  X-Admin-Token gated - upload a prospectus PDF (multipart)
   POST            /admin/projects/id/cache/clear  X-Admin-Token gated - clear that project's FAQ cache
+  POST            /admin/projects/id/cache/seed   X-Admin-Token gated - bulk-load curated Q&A into that cache
   GET/POST/PATCH/DELETE /admin/keys[/id] X-Admin-Token gated - manage keys
 
 Every key belongs to exactly one project; /api/chat and /api/ingest resolve
@@ -27,7 +28,8 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import apikeys, catalogue, config, faq, llm, projects, rag, stats, textclean
+from . import (apikeys, catalogue, config, embeddings, faq, llm, projects, rag,
+               stats, textclean)
 
 # Injected into index.html so the first-party chat widget authenticates without the
 # key being hard-coded in client files.
@@ -150,6 +152,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         m_ingest = re.match(r"^/admin/projects/([^/]+)/ingest$", self.path)
         m_clear = re.match(r"^/admin/projects/([^/]+)/cache/clear$", self.path)
+        m_seed = re.match(r"^/admin/projects/([^/]+)/cache/seed$", self.path)
 
         if self.path == "/api/chat":
             project_id = apikeys.resolve_active(self.headers.get("X-API-Key"))
@@ -161,11 +164,15 @@ class Handler(BaseHTTPRequestHandler):
             if not question:
                 self._json(400, {"error": "Question is required."})
                 return
-            # "hinglish" is the only non-default value: Hindi answered in Roman
-            # script instead of Devanagari, an explicit user choice (see rag.py).
-            script_pref = "hinglish" if body.get("scriptPreference") == "hinglish" else "auto"
+            # Romanized (Hinglish/Tanglish) is the default for Hindi/Marathi/Tamil
+            # - "native" is the only non-default value, an explicit user choice to
+            # see Devanagari/Tamil script instead (see rag.py).
+            script_pref = "native" if body.get("scriptPreference") == "native" else "auto"
+            # The language the student picked in the app's own selector, not a guess -
+            # disambiguates Hindi vs Marathi for the model (see rag._language_hint).
+            ui_language = body.get("uiLanguage") if body.get("uiLanguage") in ("en", "hi", "mr", "ta") else None
             try:
-                result = rag.answer(project_id, question, script_pref)
+                result = rag.answer(project_id, question, script_pref, ui_language)
                 self._json(200, {
                     "answerText": result["answer"],
                     "pageReferences": result["pages"],
@@ -245,6 +252,24 @@ class Handler(BaseHTTPRequestHandler):
                 return
             faq.clear(projects.faq_path(project_id))
             self._json(200, {"cleared": True})
+
+        elif m_seed:
+            if not self._admin_ok():
+                self._json(401, {"error": "Invalid admin token."})
+                return
+            project_id = m_seed.group(1)
+            if not projects.get(project_id):
+                self._json(404, {"error": "Project not found."})
+                return
+            items = self._read_json().get("items") or []
+            if not isinstance(items, list) or not items:
+                self._json(400, {"error": "Expected a non-empty 'items' list."})
+                return
+            try:
+                count = faq.seed(projects.faq_path(project_id), items, embeddings.embed)
+                self._json(200, {"seeded": count})
+            except Exception as exc:  # noqa: BLE001 - surface embedding failures
+                self._json(500, {"error": str(exc)})
 
         else:
             self._send(404, "Not found", "text/plain")

@@ -1,6 +1,7 @@
 /* Admission Assistant — design system (emerald on cool neutral, Linear-esque crisp) */
+/* Forced light theme - white chat space regardless of system dark-mode preference. */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: hsl(210 20% 98%);
   --surface: hsl(0 0% 100%);
   --surface-2: hsl(210 20% 96%);
@@ -26,29 +27,6 @@
   --font: "Inter", "Noto Sans Devanagari", "Noto Sans Tamil", "Segoe UI", -apple-system, system-ui, sans-serif;
   --font-display: "Bricolage Grotesque", "Inter", "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: hsl(215 28% 8%);
-    --surface: hsl(215 25% 11%);
-    --surface-2: hsl(215 22% 14%);
-    --surface-3: hsl(215 20% 18%);
-    --ink: hsl(210 18% 93%);
-    --ink-2: hsl(212 12% 64%);
-    --ink-3: hsl(212 12% 50%);
-    --border: hsl(215 18% 20%);
-    --border-2: hsl(215 16% 26%);
-    --accent: hsl(160 56% 46%);
-    --accent-hover: hsl(160 56% 52%);
-    --accent-ink: hsl(215 30% 7%);
-    --accent-soft: hsl(162 30% 16%);
-    --danger: hsl(2 70% 62%);
-    --danger-soft: hsl(2 40% 16%);
-    --amber: hsl(38 76% 58%);
-    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.3);
-    --shadow: 0 4px 14px hsl(0 0% 0% / 0.36);
-    --shadow-lg: 0 16px 40px hsl(0 0% 0% / 0.5);
-  }
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -100,6 +78,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .icon-btn:hover { color: var(--accent); border-color: var(--accent); }
 .icon-btn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.script-toggle { font-size: 13px; font-weight: 600; }
 
 .thread { flex: 1; overflow-y: auto; padding: 26px 22px; display: flex; flex-direction: column; gap: 18px; }
 
@@ -324,6 +303,39 @@ table.keys tr:last-child td { border-bottom: none; }
 }
 
 .tester-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+.modal-backdrop {
+  position: fixed; inset: 0; background: hsl(215 25% 14% / 0.45); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; z-index: 60; padding: 24px;
+}
+.modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-lg); width: min(640px, 100%); max-height: min(720px, 90vh);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.modal-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+}
+.modal-header h2 { font-family: var(--font-display); font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+.modal-header p { font-size: 13px; color: var(--ink-2); margin: 0; line-height: 1.4; }
+.modal-body { overflow-y: auto; padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 18px; }
+.demo-group h3 {
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink-3); margin: 0 0 8px;
+}
+.demo-list { display: flex; flex-direction: column; gap: 6px; }
+.demo-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  text-align: left; padding: 9px 12px; border-radius: var(--radius-xs);
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--ink);
+  font-size: 13.5px; line-height: 1.4; cursor: pointer; transition: all .12s ease;
+}
+.demo-item:hover { border-color: var(--accent); background: var(--accent-soft); }
+.demo-item svg { flex-shrink: 0; color: var(--ink-3); }
+.demo-item:hover svg { color: var(--accent); }
+.demo-item.copied { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-hover); }
+.demo-item.copied svg { color: var(--accent); }
 
 @media (max-width: 900px) {
   .shell { flex-direction: column; height: auto; overflow: visible; }

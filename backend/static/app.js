@@ -22,11 +22,116 @@ const SUGGESTIONS = [
   "What documents are required at admission?",
 ];
 
+// Demo/copy-paste library for showing the assistant off - grouped so a demo can
+// jump straight to "here's Hindi", "here's Hinglish", "here's a payment issue",
+// etc. Not exhaustive coverage of the prospectus, just a broad, realistic spread.
+const DEMO_QUESTIONS = [
+  {
+    label: "English",
+    items: [
+      "What are the eligibility criteria for admission?",
+      "How many marks do I need in NEET-UG for admission?",
+      "What documents are required for admission?",
+      "When is the last date to apply?",
+      "What is the application fee?",
+      "What is the admission fee for the unreserved category?",
+      "Is hostel accommodation available?",
+      "What are the hostel fees?",
+      "Where are the colleges located?",
+      "When will the provisional merit list be released?",
+      "How do I file a grievance about the merit list?",
+      "Are there separate seats for NRI candidates?",
+      "What is the refund policy if I cancel my admission?",
+      "Can I transfer to another veterinary college later?",
+    ],
+  },
+  {
+    label: "हिंदी (Hindi, native script)",
+    items: [
+      "प्रवेश के लिए पात्रता मानदंड क्या हैं?",
+      "NEET-UG में प्रवेश के लिए कितने अंक चाहिए?",
+      "मुझे कौन से दस्तावेज़ चाहिए?",
+      "आवेदन की अंतिम तिथि क्या है?",
+      "आवेदन शुल्क कितना है?",
+      "छात्रावास की सुविधा उपलब्ध है क्या?",
+      "कॉलेज कहाँ स्थित हैं?",
+      "मेरिट लिस्ट कब आएगी?",
+      "शिकायत कैसे दर्ज करें?",
+      "क्या NRI उम्मीदवारों के लिए अलग सीटें हैं?",
+      "प्रवेश रद्द करने पर पैसे वापस मिलेंगे क्या?",
+    ],
+  },
+  {
+    label: "Hindi (Hinglish, romanized)",
+    items: [
+      "Eligibility criteria kya hai admission ke liye?",
+      "NEET mein kitne marks chahiye?",
+      "Mera pass kya kya documents hona chahiye?",
+      "Apply karne ki last date kab hai?",
+      "Application fees kitni hai?",
+      "Hostel milega kya?",
+      "College kahan hai bata do",
+      "Merit list kab aayegi?",
+      "Complaint kaise karu grievance ke liye?",
+      "NRI candidates ke liye alag seats hai kya?",
+      "Admission cancel karne par refund milega kya?",
+    ],
+  },
+  {
+    label: "मराठी (Marathi, native script)",
+    items: [
+      "प्रवेशासाठी पात्रता निकष काय आहेत?",
+      "NEET मध्ये प्रवेशासाठी किती गुण लागतात?",
+      "मला कोणती कागदपत्रे लागतील?",
+      "अर्ज करण्याची शेवटची तारीख कधी आहे?",
+      "अर्ज शुल्क किती आहे?",
+      "वसतिगृहाची सोय उपलब्ध आहे का?",
+      "महाविद्यालये कुठे आहेत?",
+      "गुणवत्ता यादी कधी जाहीर होईल?",
+      "तक्रार कशी नोंदवायची?",
+      "NRI उमेदवारांसाठी वेगळ्या जागा आहेत का?",
+    ],
+  },
+  {
+    label: "Marathi (Marathinglish, romanized)",
+    items: [
+      "Praveshasathi patrata nikash kay ahet?",
+      "NEET madhe kiti marks lagtat?",
+      "Mala konti kagadpatra lagtil?",
+      "Arj karaychi last date kadhi ahe?",
+      "Fee kiti ahe?",
+      "Hostel ahe ka?",
+      "College kuthe ahe?",
+      "Merit list kadhi yeil?",
+      "Takrar kashi karaychi?",
+      "NRI umedwaransathi vegli seat ahe ka?",
+    ],
+  },
+  {
+    label: "Payment issues (all languages)",
+    items: [
+      "I paid the application fee but the payment shows failed. What should I do?",
+      "Amount was deducted twice for the application fee, how do I get a refund?",
+      "Payment gateway showed an error but my bank shows the amount debited.",
+      "Mera payment fail ho gaya aur paise kat gaye, ab kya karu?",
+      "Fee payment ke baad bhi application status update nahi hua",
+      "पैसे कट गए लेकिन कन्फर्मेशन नहीं मिला, क्या करूं?",
+      "मी पेमेंट केले पण अर्जावर दिसत नाहीये, मी काय करू?",
+      "Payment successful zaala pan receipt nahi ali",
+    ],
+  },
+];
+
 const Icon = {
   send: html`<svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="M3 10L17 3L11.5 17L9.5 11L3 10Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>`,
   mic: html`<svg viewBox="0 0 20 20" width="18" height="18" fill="none"><rect x="7.5" y="2.5" width="5" height="9" rx="2.5" fill="currentColor"/><path d="M5 9a5 5 0 0 0 10 0M10 14v3M7.5 17h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   speaker: html`<svg viewBox="0 0 20 20" width="17" height="17" fill="none"><path d="M4 8v4h3l4 3V5L7 8H4z" fill="currentColor"/><path d="M14 7c1 1 1 5 0 6M16 5c2 2 2 8 0 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   play: html`<svg viewBox="0 0 20 20" width="14" height="14" fill="none"><path d="M4 8v4h3l4 3V5L7 8H4z" fill="currentColor"/><path d="M14 7c1 1 1 5 0 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  clear: html`<svg viewBox="0 0 20 20" width="17" height="17" fill="none"><path d="M4 6h12M8 6V4.5a1 1 0 011-1h2a1 1 0 011 1V6m-7 0 .6 9.4a1 1 0 001 .94h5.8a1 1 0 001-.94L14.5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  list: html`<svg viewBox="0 0 20 20" width="17" height="17" fill="none"><path d="M7 5h9M7 10h9M7 15h9M3.5 5h.01M3.5 10h.01M3.5 15h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+  copy: html`<svg viewBox="0 0 20 20" width="14" height="14" fill="none"><rect x="7" y="7" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M13 7V5.5A1.5 1.5 0 0011.5 4h-7A1.5 1.5 0 003 5.5v7A1.5 1.5 0 004.5 14H6" stroke="currentColor" stroke-width="1.4"/></svg>`,
+  check: html`<svg viewBox="0 0 20 20" width="14" height="14" fill="none"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  close: html`<svg viewBox="0 0 20 20" width="16" height="16" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
 };
 
 function useSpeech() {
@@ -122,9 +227,11 @@ function Message({ m, lang, onReplayBrowser }) {
   const title = state === "generating" ? "Generating natural voice…"
     : state === "ready" ? "Play natural voice"
     : state === "error" ? "Natural voice unavailable — tap for device voice"
+    : state === "unspeakable" ? "Voice unavailable for romanized text — switch to native script for audio"
     : "Read aloud";
 
   const handleClick = () => {
+    if (state === "unspeakable") return;
     if (state === "ready" && m.audioUrl) playUrl(m.audioUrl);
     else if (state !== "generating") onReplayBrowser(m.text);
   };
@@ -137,9 +244,68 @@ function Message({ m, lang, onReplayBrowser }) {
           ${(m.pages || []).map((p) => html`<span class="pill" key=${p}>p. ${p}</span>`)}
           ${srcPill}
           <button class=${"mini-btn" + (state === "ready" ? " on" : "")} title=${title}
-                  disabled=${state === "generating"} onClick=${handleClick}>
+                  disabled=${state === "generating" || state === "unspeakable"} onClick=${handleClick}>
             ${state === "generating" ? html`<span class="dots" style=${{ padding: 0 }}><i></i><i></i><i></i></span>` : Icon.play}
           </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function DemoLibrary({ onClose }) {
+  const [copiedKey, setCopiedKey] = useState(null);
+
+  const copy = (key, text) => {
+    const markCopied = () => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1400);
+    };
+    // Fallback for when the async Clipboard API is unavailable or denied
+    // (permissions, non-HTTPS, unfocused document) - never leave the click
+    // silently doing nothing, and never leave an unhandled rejection either.
+    const fallbackCopy = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); markCopied(); } catch {}
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(markCopied).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
+  };
+
+  return html`
+    <div class="modal-backdrop" onClick=${onClose}>
+      <div class="modal" onClick=${(e) => e.stopPropagation()}>
+        <div class="modal-header">
+          <div>
+            <h2>Demo question library</h2>
+            <p>Click any question to copy it - English, Hindi, Marathi, native script and romanized, plus payment-issue examples.</p>
+          </div>
+          <button class="icon-btn" title="Close" onClick=${onClose}>${Icon.close}</button>
+        </div>
+        <div class="modal-body">
+          ${DEMO_QUESTIONS.map((group, gi) => html`
+            <div class="demo-group" key=${gi}>
+              <h3>${group.label}</h3>
+              <div class="demo-list">
+                ${group.items.map((q, qi) => {
+                  const key = `${gi}-${qi}`;
+                  const copied = copiedKey === key;
+                  return html`
+                    <button class=${"demo-item" + (copied ? " copied" : "")} key=${key} onClick=${() => copy(key, q)}>
+                      <span>${q}</span>
+                      ${copied ? Icon.check : Icon.copy}
+                    </button>`;
+                })}
+              </div>
+            </div>`)}
         </div>
       </div>
     </div>`;
@@ -151,8 +317,13 @@ function App() {
   const [sending, setSending] = useState(false);
   const [lang, setLang] = useState("en-IN");
   const [speakOn, setSpeakOn] = useState(true);
+  // Romanized (Hinglish/Tanglish) is the default for Hindi/Marathi/Tamil - most
+  // students type and read code-mixed Roman script day to day. Native script is
+  // an explicit opt-in via this toggle.
+  const [nativeScript, setNativeScript] = useState(false);
   const [recording, setRecording] = useState(false);
   const [hint, setHint] = useState("");
+  const [showDemo, setShowDemo] = useState(false);
 
   const patchMessage = (id, patch) =>
     setMessages((m) => m.map((msg) => (msg.id === id ? { ...msg, ...patch } : msg)));
@@ -176,17 +347,21 @@ function App() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(API_KEY ? { "X-API-Key": API_KEY } : {}) },
-        body: JSON.stringify({ question: q }),
+        body: JSON.stringify({
+          question: q,
+          scriptPreference: nativeScript ? "native" : "auto",
+          uiLanguage: TTS_LANG_MAP[lang] || "en",
+        }),
       });
       if (!res.ok) throw new Error(res.status);
       const d = await res.json();
       const botId = nextId();
       setMessages((m) => [...m.slice(0, -1), {
         id: botId, role: "bot", text: d.answerText, pages: d.pageReferences || [],
-        model: d.model, source: d.source, audioState: "idle",
+        model: d.model, source: d.source, audioState: d.speakable ? "idle" : "unspeakable",
       }]);
 
-      if (speakOn) {
+      if (speakOn && d.speakable) {
         const short = TTS_LANG_MAP[lang] || "en";
         if (short === "en") {
           speakBrowserNow(d.answerText, lang);
@@ -207,7 +382,7 @@ function App() {
     } finally {
       setSending(false);
     }
-  }, [sending, lang, speakOn]);
+  }, [sending, lang, speakOn, nativeScript]);
 
   const toggleMic = useCallback(() => {
     const r = rec.current;
@@ -223,6 +398,11 @@ function App() {
     r.onerror = () => { setRecording(false); setHint("Couldn't hear that — try again or type."); };
     try { r.start(); setRecording(true); setHint("Listening… speak now."); } catch {}
   }, [recording, lang, send, rec]);
+
+  const clearChat = () => {
+    stopSpeaking();
+    setMessages([]);
+  };
 
   const onKey = (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
@@ -244,13 +424,26 @@ function App() {
           </div>
         </div>
         <div class="header-tools">
+          <button class="icon-btn" title="Demo question library" onClick=${() => setShowDemo(true)}>
+            ${Icon.list}
+          </button>
           <select class="lang-select" value=${lang} onChange=${(e) => setLang(e.target.value)} aria-label="Voice language">
             ${LANGS.map((l) => html`<option key=${l.code} value=${l.code}>${l.label}</option>`)}
           </select>
+          ${lang !== "en-IN" && html`
+            <button class=${"icon-btn script-toggle" + (nativeScript ? " on" : "")}
+                    title=${nativeScript ? "Native script — tap for romanized (Hinglish/Tanglish)" : "Romanized (Hinglish/Tanglish) — tap for native script"}
+                    onClick=${() => setNativeScript(!nativeScript)}>
+              ${nativeScript ? "अ" : "aA"}
+            </button>`}
           <button class=${"icon-btn" + (speakOn ? " on" : "")} title="Read answers aloud"
                   onClick=${() => { setSpeakOn(!speakOn); if (speakOn) stopSpeaking(); }}>
             ${Icon.speaker}
           </button>
+          ${messages.length > 0 && html`
+            <button class="icon-btn" title="Clear chat" onClick=${clearChat}>
+              ${Icon.clear}
+            </button>`}
         </div>
       </header>
 
@@ -275,6 +468,8 @@ function App() {
         </div>
         <p class="hint">${hint}</p>
       </footer>
+
+      ${showDemo && html`<${DemoLibrary} onClose=${() => setShowDemo(false)} />`}
     </div>`;
 }
 

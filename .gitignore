@@ -41,3 +41,10 @@ data/sarvam-usage.json
 
 # --- Google OAuth credentials (never commit) ---
 client_secret_*.json
+
+# --- Extension signing key (private half - keeps the unpacked extension ID stable
+# across reloads; the manifest.json "key" field is the public half, safe to commit).
+# Lives outside extension/orderassist-assistant/ itself so "Load unpacked" never
+# scans it - Chrome warns (rightly) if a private key sits inside a loaded extension. ---
+extension/.keys/
+.venv-backend/

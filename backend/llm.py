@@ -1,22 +1,21 @@
-"""Chat generation: Sarvam cloud for all languages online, one local model offline.
+"""Chat orchestration: pick a provider, apply spend policy, fall back on failure.
 
-sarvam-m (24B) is strong at English and Hindi/Marathi/Tamil alike, so when a Sarvam
-key is configured it handles every language - fast, cloud-side, high quality. When
-there's no key or the cloud call fails, a single small local model (gemma2:2b) covers
-all languages offline at lower quality. No per-language model split is needed.
+The providers themselves live in providers.py; this module owns the decisions
+*around* them - which one is primary, when a cloud call is allowed, the daily
+spend cap, and what happens when the primary fails. Keeping policy here means
+swapping vendors is a config change, not a code change, which matters because
+the vendor choice is still open (Sarvam is capped on the current tier; Bhashini
+is a live alternative with a different shape).
 
-Language detection still happens elsewhere (for TTS voice and labeling), just not for
-picking the chat model.
+Language detection still happens elsewhere (for TTS voice and labeling), not for
+picking the chat model - one provider serves all languages.
 """
 
 import json
 import threading
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 
-from . import config
-from .lang import detect_script
+from . import config, providers
 
 _usage_lock = threading.Lock()
 
@@ -61,87 +60,74 @@ LANGUAGE_RULE = (
     "used, and never answer a real question with only a greeting."
 )
 
-# gemma2:2b (the local fallback) reliably ignores the system-prompt language rule for
-# Indic questions and answers in English instead - verified 3/3 in testing. Repeating
-# the instruction at the end of the user turn (recency, not just system prompt) fixed
-# it 3/3 in the same test. Sarvam doesn't need this, so it's only applied to the local
-# path to keep the primary path's prompt untouched.
-_SCRIPT_REMINDER = {
-    "devanagari": "\n\n(Reply in Hindi/Marathi, using Devanagari script, matching the question above - not in English.)",
-    "tamil": "\n\n(Reply in Tamil, using Tamil script, matching the question above - not in English.)",
-}
+def _usable(provider, allow_cloud):
+    """Whether this provider may be called for this request.
 
-_END_TOKENS = ("</s>", "<|im_end|>", "<end_of_turn>", "<eos>")
-
-
-def _clean(text):
-    for tok in _END_TOKENS:
-        text = text.replace(tok, "")
-    return text.strip()
-
-
-def _post(url, payload, headers, timeout):
-    req = urllib.request.Request(
-        url, data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", **headers}, method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
-
-
-def _messages(system_prompt, user_prompt):
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
-
-
-def _sarvam_chat(system_prompt, user_prompt, timeout):
-    payload = {"model": config.SARVAM_MODEL, "messages": _messages(system_prompt, user_prompt)}
-    headers = {"api-subscription-key": config.SARVAM_API_KEY}
-    result = _post(config.SARVAM_URL, payload, headers, timeout)
-    return _clean(result["choices"][0]["message"]["content"]), "sarvam:" + config.SARVAM_MODEL
-
-
-def _ollama_chat(system_prompt, user_prompt, timeout, model=None, question=""):
-    model = model or config.MODEL_LOCAL
-    user_prompt += _SCRIPT_REMINDER.get(detect_script(question), "")
-    payload = {
-        "model": model,
-        "stream": False,
-        "keep_alive": config.OLLAMA_KEEP_ALIVE,
-        "messages": _messages(system_prompt, user_prompt),
-    }
-    url = config.OLLAMA_URL.rstrip("/") + "/api/chat"
-    try:
-        result = _post(url, payload, {}, timeout)
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404 and model != config.MODEL_FALLBACK:
-            payload["model"] = config.MODEL_FALLBACK
-            result = _post(url, payload, {}, timeout)
-        else:
-            raise
-    return _clean(result["message"]["content"]), model
+    Cloud providers carry two extra gates that local ones don't: the per-project
+    `allow_cloud` switch, and the account-wide daily spend cap.
+    """
+    if provider is None or not provider.configured():
+        return False
+    if provider.is_cloud and (not allow_cloud or not _sarvam_under_cap()):
+        return False
+    return True
 
 
 def generate(system_prompt, user_prompt, question, timeout=280, allow_cloud=True):
     """Generate an answer and return (answer_text, model_label).
 
-    `question` is accepted for interface stability (language routing hook) but no
-    longer selects the model - one model serves all languages. `allow_cloud` is the
-    per-project switch (projects.allow_cloud) - when False this project never calls
-    Sarvam at all, independent of the key or the account-wide daily cap.
+    Tries the configured primary provider, then the fallback. Which providers
+    those are is config, not code (see config.CHAT_PRIMARY / CHAT_FALLBACK), so
+    the Sarvam-vs-local-vs-Bhashini decision can be made and A/B tested without
+    touching this call path.
+
+    `allow_cloud` is the per-project switch (projects.allow_cloud) - when False
+    this project never calls a cloud provider, independent of any key or cap.
     """
-    if allow_cloud and config.SARVAM_API_KEY and _sarvam_under_cap():
+    primary = providers.get(config.CHAT_PRIMARY)
+    fallback = providers.get(config.CHAT_FALLBACK)
+
+    if _usable(primary, allow_cloud):
         try:
-            # Short timeout: if the cloud stalls, fail over to local instead of hanging.
-            result = _sarvam_chat(system_prompt, user_prompt, min(timeout, config.SARVAM_TIMEOUT))
-            _record_sarvam_call()
-            return result
-        except Exception:  # noqa: BLE001 - cloud down/misconfigured -> local fallback
-            return _ollama_chat(system_prompt, user_prompt, timeout, question=question)
-    # No key, cap reached, or this project has cloud disabled -> stay local.
-    return _ollama_chat(system_prompt, user_prompt, timeout, question=question)
+            # Two attempts before giving up on the cloud. How many tokens the
+            # reasoning pass burns varies run to run, so a hard question can
+            # exhaust the 4096 ceiling once and complete fine on a retry. Worth
+            # one extra call: the local fallback is markedly worse at exactly
+            # these questions (it misread the hostel fee grid every time), so
+            # silently dropping to it costs accuracy where it matters most.
+            call_timeout = min(timeout, config.SARVAM_TIMEOUT) if primary.is_cloud else timeout
+            for attempt in (1, 2):
+                try:
+                    result = primary.chat(system_prompt, user_prompt, call_timeout,
+                                          question=question)
+                    if primary.is_cloud:
+                        _record_sarvam_call()
+                    return result
+                except Exception as exc:  # noqa: BLE001
+                    if primary.is_cloud:
+                        _record_sarvam_call()  # a truncated attempt still bills
+                    if attempt == 2:
+                        raise
+                    print(f"[llm] {primary.name} attempt 1 failed ({exc!r}); retrying once")
+        except Exception as exc:  # noqa: BLE001 - primary down/misconfigured -> fallback
+            # This used to be silent - a failed Sarvam call would fall back to
+            # gemma2:2b with zero trace of why, making a run of poor-quality local
+            # answers (seen in testing: garbled Hindi, a misspelled loanword) look
+            # like a model-quality mystery instead of what it was - Sarvam calls
+            # quietly timing out/erroring under load. Print, not raise: the
+            # fallback itself should still succeed for the student.
+            print(f"[llm] {primary.name} failed, falling back to "
+                  f"{fallback.name if fallback else 'nothing'}: {exc!r}")
+
+    # Primary unavailable (no key, cap reached, cloud disabled) or it failed.
+    if not _usable(fallback, allow_cloud):
+        raise RuntimeError(
+            f"No usable chat provider: primary={config.CHAT_PRIMARY!r} "
+            f"fallback={config.CHAT_FALLBACK!r} (known: {providers.available()})")
+    result = fallback.chat(system_prompt, user_prompt, timeout, question=question)
+    if fallback.is_cloud:
+        _record_sarvam_call()
+    return result
 
 
 _TRANSLATE_SYSTEM = (
@@ -165,10 +151,13 @@ def translate_to_english(text):
     Sarvam call (or fight its bias) for this.
 
     `question=""` in the generate() call suppresses the reply-in-native-script
-    reminder _ollama_chat adds for answer generation, which would otherwise
-    contradict a translate-to-English instruction. Falls back to the original text
-    on any failure - a missed translation should degrade retrieval quality, not
-    break the request.
+    reminder the Ollama provider appends for answer generation, which would
+    otherwise contradict a translate-to-English instruction. Falls back to the
+    original text on any failure - a missed translation should degrade retrieval
+    quality, not break the request.
+
+    (This is also the natural seam for Bhashini: a translation provider would
+    replace this function's body, leaving every caller untouched.)
     """
     try:
         reply, _ = generate(_TRANSLATE_SYSTEM, text, "", timeout=30, allow_cloud=False)

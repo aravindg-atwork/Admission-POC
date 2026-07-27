@@ -18,5 +18,9 @@ def embed(texts):
         headers={"Content-Type": "application/json", "X-API-Key": config.EMBEDDING_API_KEY},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=120) as resp:
+    # Generous: the service runs the model on CPU, and an ingest batch of full
+    # table pages (several KB each) is far slower than a single short query.
+    # 120s was enough for prose-sized chunks but timed out once whole tables
+    # started being embedded as single chunks.
+    with urllib.request.urlopen(req, timeout=600) as resp:
         return json.loads(resp.read().decode("utf-8"))["embeddings"]

@@ -70,6 +70,16 @@ OLLAMA_KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
 MODEL_LOCAL = os.environ.get("MODEL_LOCAL", "gemma2:2b")
 MODEL_FALLBACK = os.environ.get("MODEL_FALLBACK", "llama3.1")
 
+# --- Chat provider selection (see providers.py) ---
+# Which backend answers questions, and what to fall back to when it fails or is
+# unavailable. Config rather than code because the choice is genuinely open:
+# Sarvam's current tier caps calls/day and max_tokens, and Bhashini is a live
+# alternative built around translation rather than generation. Set
+# CHAT_PRIMARY=ollama to run fully local and free (slower, weaker on tables -
+# though the deterministic table lookup removes most of that gap).
+CHAT_PRIMARY = os.environ.get("CHAT_PRIMARY", "sarvam")
+CHAT_FALLBACK = os.environ.get("CHAT_FALLBACK", "ollama")
+
 SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
 SARVAM_URL = os.environ.get("SARVAM_URL", "https://api.sarvam.ai/v1/chat/completions")
 SARVAM_MODEL = os.environ.get("SARVAM_MODEL", "sarvam-30b")
@@ -88,11 +98,42 @@ TTS_URL = os.environ.get("TTS_URL", "http://localhost:8001/tts")
 # --- FAQ cache ---
 # Semantically-close past/seeded questions return instantly, skipping RAG + the LLM.
 # A match at or above this cosine threshold is treated as the same question.
-FAQ_THRESHOLD = float(os.environ.get("FAQ_THRESHOLD", "0.93"))
+# Chosen from the measured score distribution on this corpus, not by feel.
+# Genuine paraphrases of a cached question score 0.91-0.99 ("where is the
+# college located" vs "Where are the colleges located?" = 0.913), while
+# genuinely different questions top out around 0.58 ("How do I contact the
+# hostel warden?" vs "Is hostel accommodation available?" = 0.579). That is a
+# wide, safe gap. The old 0.93 sat just above the paraphrase band and so missed
+# most real rephrasing - only 1 of 5 natural paraphrases hit the cache, which
+# matters enormously at admission scale where a miss costs a 5-30s LLM call.
+# 0.88 captures the paraphrase band while staying ~0.30 clear of any false hit.
+FAQ_THRESHOLD = float(os.environ.get("FAQ_THRESHOLD", "0.88"))
+# Upper bound on cached entries per project. Every distinct question stores a
+# 768-float vector, so an admission rush would otherwise grow this file without
+# limit. Curated (seeded) entries are never pruned; the oldest auto-cached ones
+# go first. 0 disables pruning.
+#
+# The cap is really a latency budget. Matching is a pure-Python scan costing a
+# measured ~0.05ms per entry, and it is GIL-bound, so it limits concurrent
+# throughput rather than just adding delay: 1000 entries is ~50ms per request
+# (~20 requests/sec per core). Raising this trades throughput for a higher cache
+# hit rate - worth it only if a hit is still far cheaper than the 5-30s LLM call
+# it avoids, which it is, so tune upward only alongside more worker processes.
+FAQ_MAX_ENTRIES = int(os.environ.get("FAQ_MAX_ENTRIES", "1000"))
+# How long auto-cached answers may sit in memory before being written to disk.
+# Rewriting the whole cache file on every miss stalls writers; entries are
+# reproducible, so a short delay costs nothing but a re-answer after a hard
+# crash. 0 writes through immediately.
+FAQ_FLUSH_SECONDS = float(os.environ.get("FAQ_FLUSH_SECONDS", "5"))
 FAQ_AUTOCACHE = os.environ.get("FAQ_AUTOCACHE", "1") == "1"
 
 # --- Retrieval ---
-TOP_K = int(os.environ.get("TOP_K", "5"))
+# 8, not 5: the admission-schedule table ranked 9th for "last date to submit the
+# online application form" - a near miss that left the model answering from an
+# unrelated page that happened to mention a different deadline. Table pages
+# compete poorly on cosine similarity because one chunk covers many rows, so the
+# extra headroom matters more than the slightly longer prompt.
+TOP_K = int(os.environ.get("TOP_K", "8"))
 CHUNK_CHARS = int(os.environ.get("CHUNK_CHARS", "1200"))
 CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "200"))
 
