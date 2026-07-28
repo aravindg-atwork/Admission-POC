@@ -10,8 +10,8 @@ import json
 import time
 from datetime import datetime, timezone
 
-from . import (config, embeddings, faq, llm, projects, stats, tablelookup,
-               textclean, transliterate, vectorstore)
+from . import (config, embeddings, faq, glossary, llm, projects, stats,
+               tablelookup, textclean, transliterate, vectorstore)
 from .intent import is_payment_issue
 from .lang import detect_romanized_indic, detect_script
 
@@ -22,7 +22,9 @@ from .lang import detect_romanized_indic, detect_script
 #       line-boundary chunking, tables kept whole
 #   3 - explicit linearized readings appended to table pages
 #   4 - table detection widened to 2-column tables (schedule/date grids)
-PIPELINE_VERSION = "10"
+#  11 - single-level year-column fee tables linearized too (Annexure III-A/III-C),
+#       which previously produced no readings at all
+PIPELINE_VERSION = "11"
 
 SYSTEM_PROMPT_BASE = (
     "You are an admissions counselor for the B.V.Sc. & A.H. program. Answer the "
@@ -301,16 +303,39 @@ def _answer(project_id, question, script_pref, ui_language):
     # English one found). The FAQ-cache vector above stays untranslated on purpose,
     # so cache matching stays consistent with how earlier entries were embedded.
     retrieval_vector = query_vector
+    # Text used for the LEXICAL half of retrieval and for the table lookup, as
+    # opposed to `question`, which is what the student actually typed. These
+    # diverge for Indic input and keeping them separate is the point: both of
+    # those mechanisms compare against an English prospectus, so handing them
+    # Devanagari guarantees zero matches (see below).
+    retrieval_text = question
     if language != "latin":
-        translated = llm.translate_to_english(question)
+        translated = llm.translate_to_english(question, ui_language)
         if translated and translated != question:
             retrieval_vector = embeddings.embed([translated])[0]
+            # Append the deterministic domain terms rather than relying on the
+            # translation alone. The 2B translator drops or inverts exactly the
+            # domain nouns that decide which part of the prospectus is relevant
+            # (a reservation-percentage question came back as a question about
+            # fees, and duly retrieved the fee tables), so the terms it must not
+            # lose are added mechanically. Used only for the lexical half of
+            # retrieval and the table lookup - never shown to the student, and
+            # never embedded, so a spurious term costs ranking noise at worst.
+            retrieval_text = " ".join(
+                filter(None, [translated, glossary.english_terms(question)]))
 
     store = vectorstore.load(projects.store_path(project_id))
-    # Pass the question text too: retrieval is hybrid (cosine + keyword overlap),
-    # which is what lets an exact-phrase lookup like a specific deadline find the
-    # schedule table that pure vector similarity ranked out of the top-K.
-    top = vectorstore.search(store, retrieval_vector, config.TOP_K, question)
+    # Pass the translated text, not the original: retrieval is hybrid (cosine +
+    # keyword overlap), and the keyword half is what lets an exact-phrase lookup
+    # like a specific deadline find the schedule table that pure vector
+    # similarity ranked out of the top-K. The corpus is English, so a Devanagari
+    # question scored zero lexical overlap against every chunk - silently
+    # downgrading the entire Hindi/Marathi lane to pure vector search, i.e. the
+    # exact behaviour the keyword half was added to fix, in the one lane where
+    # it was never measured. Measured on 16 Hindi/Marathi questions with a known
+    # answer page: 12/16 retrieved that page before, 16/16 after (together with
+    # the translation-prompt fix in llm.translate_to_english).
+    top = vectorstore.search(store, retrieval_vector, config.TOP_K, retrieval_text)
 
     if not top:
         # No prospectus uploaded for this project yet. An empty excerpts block was
@@ -351,7 +376,34 @@ def _answer(project_id, question, script_pref, ui_language):
     # model still writes the sentence (so Hindi/Marathi phrasing keeps working),
     # it just isn't the one deciding which number is right. Returns None
     # whenever the match is ambiguous, in which case nothing changes.
-    verified = tablelookup.lookup(question, top)
+    # Same reason the search above uses retrieval_text: the linearized readings
+    # this matches against are English ("Hostel Fees - Total for 1st Year at
+    # Nagpur: 27300"), so a Devanagari question overlaps zero terms and lookup()
+    # returned None for every Hindi/Marathi question ever asked. That left the
+    # Indic lane picking fee figures the way this module exists to stop - by
+    # asking the model to eyeball a grid of ~45 near-identical rows, which it
+    # demonstrably gets wrong. Verified: the Hindi and Marathi answers to "what
+    # is the first-year tuition fee" quoted Rs.62635 (the TOTAL admission fee)
+    # and, in Marathi, Rs.63135 as the reserved-category figure when reserved is
+    # actually Rs.26135 - a ~37,000 rupee error stated with full confidence,
+    # while the English answer to the same question was correct.
+    verified = tablelookup.lookup(retrieval_text, top)
+    # Veto a reading that contradicts the ORIGINAL question, in the student's own
+    # language. Routing the lookup through the English translation is what made
+    # it work for Indic at all, but it also put a 2B translation model in front
+    # of a figure the prompt then tells the model to state as authoritative -
+    # so a mistranslation stops being a retrieval nuisance and becomes a
+    # confidently wrong number. Observed: "पहले वर्ष की परीक्षा शुल्क" (first-year
+    # EXAMINATION fee) was translated as "tuition fee for the first year" and
+    # resolved to 27500 instead of 6000.
+    #
+    # faq's discriminators already encode the fee-type/ordinal vocabulary in
+    # Hindi, Marathi and English, so the same comparison that keeps the cache
+    # honest is reused here against the descriptor - if the question says exam
+    # and the descriptor says tuition, the shortcut is dropped and the model
+    # answers from the excerpts instead, which is the safe direction.
+    if verified and not faq.compatible_questions(question, verified["descriptor"]):
+        verified = None
     verified_block = ""
     if verified:
         verified_block = (

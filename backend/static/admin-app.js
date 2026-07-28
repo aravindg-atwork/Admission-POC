@@ -29,9 +29,6 @@ const Icon = {
   play: html`<svg viewBox="0 0 20 20" width="13" height="13" fill="none"><path d="M4 8v4h3l4 3V5L7 8H4z" fill="currentColor"/><path d="M14 7c1 1 1 5 0 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
 };
 
-// Voice, shared with the student-facing widget's approach (app.js): Indic
-// languages get the self-hosted AI4Bharat voice via /api/tts, English stays on
-// the instant browser voice. Lets an admin test the exact voice path a student gets.
 const TTS_LANG_MAP = { "hi-IN": "hi", "mr-IN": "mr", "ta-IN": "ta", "en-IN": "en" };
 const VOICE_LANGS = [
   { code: "en-IN", label: "English" },
@@ -63,34 +60,20 @@ async function speak(text, lang, apiKey, hooks = {}) {
   if (short === "en") { speakBrowser(text, lang, hooks.onEnd); return; }
   hooks.onStart && hooks.onStart();
   try {
-    const res = await fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(apiKey ? { "X-API-Key": apiKey } : {}) },
-      body: JSON.stringify({ text, language: short }),
-    });
+    const res = await fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json", ...(apiKey ? { "X-API-Key": apiKey } : {}) }, body: JSON.stringify({ text, language: short }) });
     if (!res.ok) throw new Error(String(res.status));
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+    const blob = await res.blob(); const url = URL.createObjectURL(blob);
     currentAudio = new Audio(url);
     currentAudio.onended = () => { hooks.onEnd && hooks.onEnd(); URL.revokeObjectURL(url); };
     currentAudio.onerror = () => { hooks.onEnd && hooks.onEnd(); URL.revokeObjectURL(url); };
     await currentAudio.play();
-  } catch (e) {
-    hooks.onError && hooks.onError(e);
-    speakBrowser(text, lang, hooks.onEnd);
-  }
+  } catch (e) { hooks.onError && hooks.onError(e); speakBrowser(text, lang, hooks.onEnd); }
 }
 
 function useSpeechRecognition() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const recRef = useRef(null);
-  useEffect(() => {
-    if (!SR) return;
-    const r = new SR();
-    r.interimResults = false;
-    r.maxAlternatives = 1;
-    recRef.current = r;
-  }, []);
+  useEffect(() => { if (!SR) return; const r = new SR(); r.interimResults = false; r.maxAlternatives = 1; recRef.current = r; }, []);
   return { supported: !!SR, rec: recRef };
 }
 
@@ -106,171 +89,92 @@ function Dashboard({ token, projectId }) {
   const [d, setD] = useState(null);
   const load = useCallback(() => { if (token && projectId) api(`/admin/projects/${projectId}/stats`, { token }).then(setD).catch(() => {}); }, [token, projectId]);
   useEffect(() => { setD(null); load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
-
   if (!token) return html`<div class="panel"><h1>Dashboard</h1><p class="lead">Connect with the admin token to view live metrics.</p></div>`;
   if (!d) return html`<div class="panel"><h1>Dashboard</h1><p class="lead">Loading…</p></div>`;
-
   const langTotal = Object.values(d.languages).reduce((a, b) => a + b, 0) || 1;
-
   return html`
-    <div class="panel">
-      <h1>Dashboard</h1>
-      <p class="lead">Live overview of the admission assistant — volume, cache effectiveness, and system health.</p>
-
+    <div class="panel"><h1>Dashboard</h1><p class="lead">Live overview of the admission assistant — volume, cache effectiveness, and system health.</p>
       <div class="health-strip">
-        <div class="health-item"><span class=${"status-dot " + (d.health.embedding === "up" ? "ok" : "err")}></span>Embeddings ${d.health.embedding}</div>
-        <div class="health-item"><span class=${"status-dot " + (d.health.ollama === "up" ? "ok" : "err")}></span>Ollama ${d.health.ollama}</div>
-        <div class="health-item"><span class=${"status-dot " + (d.health.sarvam === "configured" ? "ok" : "idle")}></span>Sarvam ${d.health.sarvam}</div>
-      </div>
-
+        <div class="health-item"><span class=${"status-dot "+(d.health.embedding==="up"?"ok":"err")}></span>Embeddings ${d.health.embedding}</div>
+        <div class="health-item"><span class=${"status-dot "+(d.health.ollama==="up"?"ok":"err")}></span>Ollama ${d.health.ollama}</div>
+        <div class="health-item"><span class=${"status-dot "+(d.health.sarvam==="configured"?"ok":"idle")}></span>Sarvam ${d.health.sarvam}</div>
       <div class="stat-grid">
-        <div class="stat-card"><div class="num">${d.totalQuestions}</div><div class="lbl">Questions answered</div></div>
-        <div class="stat-card"><div class="num">${d.cacheHitRate}%</div><div class="lbl">Cache hit rate</div><div class="sub">${d.cacheHits} instant</div></div>
-        <div class="stat-card"><div class="num">${d.avgLatencyMs ? (d.avgLatencyMs / 1000).toFixed(1) + "s" : "—"}</div><div class="lbl">Avg response time</div></div>
-        <div class="stat-card"><div class="num">${d.activeKeys}<span style=${{fontSize:"1rem",color:"var(--ink-3)"}}>/${d.totalKeys}</span></div><div class="lbl">Active keys</div></div>
+        <div class="stat-card"><div class="num">${d.totalQuestions}</div><div class="lbl">Questions answered</div>
+        <div class="stat-card"><div class="num">${d.cacheHitRate}%</div><div class="lbl">Cache hit rate</div><div class="sub">${d.cacheHits} instant</div>
+        <div class="stat-card"><div class="num">${d.avgLatencyMs?(d.avgLatencyMs/1000).toFixed(1)+"s":"—"}</div><div class="lbl">Avg response time</div>
+        <div class="stat-card"><div class="num">${d.activeKeys}<span style=${{fontSize:"1rem",color:"var(--ink-3)"}}>/${d.totalKeys}</span></div><div class="lbl">Active keys</div>
       </div>
-
       <div class="section-h">Language mix</div>
       <div class="card" style=${{padding:"18px 20px"}}>
-        <div class="lang-bars">
-          ${Object.entries(d.languages).map(([k, v]) => html`
-            <div class="lang-bar-row" key=${k}>
-              <span class="lbl">${LANG_LABELS[k] || k}</span>
-              <div class="lang-bar-track"><div class="lang-bar-fill" style=${{width: Math.round(v / langTotal * 100) + "%"}}></div></div>
-              <span class="cnt">${v}</span>
-            </div>`)}
-        </div>
-      </div>
-
+        <div class="lang-bars">${Object.entries(d.languages).map(([k,v])=>html`<div class="lang-bar-row" key=${k}><span class="lbl">${LANG_LABELS[k]||k}</span><div class="lang-bar-track"><div class="lang-bar-fill" style=${{width:Math.round(v/langTotal*100)+"%"}}></div><span class="cnt">${v}</span></div>`)}</div>
       <div class="section-h">Recent activity</div>
-      <div class="card activity">
-        ${d.recent.length === 0 ? html`<div class="empty-hint">No questions answered yet.</div>` :
-          d.recent.map((r, i) => html`
-            <div class="activity-row" key=${i}>
-              <span class="t">${timeAgo(r.ts)}</span>
-              <span class=${"pill " + (r.source === "faq-cache" ? "cache" : "src")}>${r.source === "faq-cache" ? "⚡ cache" : (r.model || "").replace("sarvam:", "")}</span>
-              <span class="muted">${LANG_LABELS[r.language] || r.language}</span>
-              <span class="muted" style=${{marginLeft:"auto"}}>${(r.latencyMs / 1000).toFixed(1)}s</span>
-            </div>`)}
-      </div>
-    </div>`;
+      <div class="card activity">${d.recent.length===0?html`<div class="empty-hint">No questions answered yet.</div>`:d.recent.map((r,i)=>html`<div class="activity-row" key=${i}><span class="t">${timeAgo(r.ts)}</span><span class=${"pill "+(r.source==="faq-cache"?"cache":"src")}>${r.source==="faq-cache"?"⚡ cache":(r.model||"").replace("sarvam:","")}</span><span class="muted">${LANG_LABELS[r.language]||r.language}</span><span class="muted" style=${{marginLeft:"auto"}}>${(r.latencyMs/1000).toFixed(1)}s</span></div>`)}</div>`;
 }
 
 // ---------- Cost ----------
 function Cost({ token, projectId, onChange }) {
   const [d, setD] = useState(null);
-  const load = useCallback(() => { if (token && projectId) api(`/admin/projects/${projectId}/stats`, { token }).then(setD).catch(() => {}); }, [token, projectId]);
+  const load = useCallback(() => { if (token && projectId) api(`/admin/projects/${projectId}/stats`,{token}).then(setD).catch(()=>{}); }, [token, projectId]);
   useEffect(() => { setD(null); load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
-
-  const clearCache = async () => {
-    if (!confirm("Clear the FAQ cache? Future questions will re-run the full pipeline until re-cached.")) return;
-    await api(`/admin/projects/${projectId}/cache/clear`, { method: "POST", token });
-    load();
-  };
-
-  const toggleCloud = async () => {
-    await api(`/admin/projects/${projectId}`, { method: "PATCH", token, body: { allow_cloud: !d.allowCloud } });
-    load();
-    onChange && onChange();
-  };
-
+  const clearCache = async () => { if (!confirm("Clear the FAQ cache? Future questions will re-run the full pipeline until re-cached.")) return; await api(`/admin/projects/${projectId}/cache/clear`,{method:"POST",token}); load(); };
+  const toggleCloud = async () => { await api(`/admin/projects/${projectId}`,{method:"PATCH",token,body:{allow_cloud:!d.allowCloud}}); load(); onChange && onChange(); };
   if (!token) return html`<div class="panel"><h1>Cost</h1><p class="lead">Connect with the admin token to view usage and cost exposure.</p></div>`;
   if (!d) return html`<div class="panel"><h1>Cost</h1><p class="lead">Loading…</p></div>`;
-
-  const pct = Math.min(100, Math.round(d.sarvam.count / d.sarvam.limit * 100));
-  const warn = pct >= 80;
-
+  const pct = Math.min(100, Math.round(d.sarvam.count/d.sarvam.limit*100)); const warn = pct >= 80;
   return html`
-    <div class="panel">
-      <h1>Cost</h1>
-      <p class="lead">What this project's answers cost, and which model is allowed to answer them. The Sarvam daily cap below is a shared, account-wide safety limit — it can never drift into paid usage on its own, it just falls back to the free local model once the cap is hit.</p>
-
-      <div class="cap-bar-wrap">
-        <div class="cap-bar-head">
-          <span>Sarvam cloud calls today (all projects)</span>
-          <span class="n">${d.sarvam.count} / ${d.sarvam.limit}</span>
-        </div>
-        <div class="cap-track"><div class=${"cap-fill" + (warn ? " warn" : "")} style=${{width: pct + "%"}}></div></div>
-      </div>
-
+    <div class="panel"><h1>Cost</h1><p class="lead">What this project's answers cost, and which model is allowed to answer them.</p>
+      <div class="cap-bar-wrap"><div class="cap-bar-head"><span>Sarvam cloud calls today</span><span class="n">${d.sarvam.count} / ${d.sarvam.limit}</span></div><div class="cap-track"><div class=${"cap-fill"+(warn?" warn":"")} style=${{width:pct+"%"}}></div></div>
       <div class="section-h">This project's model policy</div>
       <div class="card">
-        <div class="agent-row">
-          <span class="agent-name"><span class="agent-dot" style=${{background: d.allowCloud ? "var(--amber)" : "var(--ink-3)"}}></span>Sarvam AI (cloud)</span>
-          <div class="agent-meta">
-            <span class="agent-cost cloud">${d.allowCloud ? `allowed — shares the ${d.sarvam.limit}/day cap` : "disabled for this project"}</span>
-            <span class="agent-count">${d.sarvamCalls}</span>
-            <button class=${"switch" + (d.allowCloud ? " on" : "")} title=${d.allowCloud ? "Turn off cloud for this project" : "Allow cloud for this project"} onClick=${toggleCloud}></button>
-          </div>
-        </div>
-        <div class="agent-row">
-          <span class="agent-name"><span class="agent-dot" style=${{background:"var(--ink-3)"}}></span>Local model (Ollama)</span>
-          <div class="agent-meta"><span class="agent-cost free">${d.allowCloud ? "$0 — the fallback, runs on your server" : "$0 — the only model this project uses"}</span><span class="agent-count">${d.localCalls}</span></div>
-        </div>
-        <div class="agent-row">
-          <span class="agent-name"><span class="agent-dot" style=${{background:"var(--accent)"}}></span>FAQ cache</span>
-          <div class="agent-meta"><span class="agent-cost free">$0 — no model call at all</span><span class="agent-count">${d.cacheHits}</span></div>
-        </div>
+        <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:d.allowCloud?"var(--amber)":"var(--ink-3)"}}></span>Sarvam AI (cloud)</span><div class="agent-meta"><span class="agent-cost cloud">${d.allowCloud?"allowed":"disabled"}</span><span class="agent-count">${d.sarvamCalls}</span><button class=${"switch"+(d.allowCloud?" on":"")} onClick=${toggleCloud}></button></div>
+        <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:"var(--ink-3)"}}></span>Local model (Ollama)</span><div class="agent-meta"><span class="agent-cost free">$0</span><span class="agent-count">${d.localCalls}</span></div>
+        <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:"var(--accent)"}}></span>FAQ cache</span><div class="agent-meta"><span class="agent-cost free">$0</span><span class="agent-count">${d.cacheHits}</span></div>
       </div>
-      <p style=${{fontSize:12.5,color:"var(--ink-3)",margin:"10px 2px 0"}}>Turn Sarvam off here for projects that don't need cloud quality — they'll always use the free local model instead, and never touch the shared daily cap. Every project in the sidebar has its own policy and its own row like this one.</p>
-
       <div class="section-h">Cache</div>
-      <div class="card" style=${{padding:"16px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div>
-          <div style=${{fontSize:14,fontWeight:500}}>${d.cacheHits} instant answers served, ${d.cacheHitRate}% hit rate</div>
-          <div style=${{fontSize:12.5,color:"var(--ink-3)",marginTop:3}}>Every RAG answer is auto-cached, so repeat questions skip the LLM entirely.</div>
-        </div>
-        <button class="btn danger" onClick=${clearCache}>Clear cache</button>
-      </div>
-    </div>`;
+      <div class="card" style=${{padding:"16px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style=${{fontSize:14,fontWeight:500}}>${d.cacheHits} instant answers, ${d.cacheHitRate}% hit rate</div><button class="btn danger" onClick=${clearCache}>Clear cache</button></div>`;
 }
 
-// ---------- API Keys (URL Generator) ----------
+// ---------- API Keys ----------
 function KeysPanel({ token, projectId, keys, onChange, err }) {
-  const [label, setLabel] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [label, setLabel] = useState(""); const [busy, setBusy] = useState(false);
+  const generate = async () => { setBusy(true); try { await api("/admin/keys",{method:"POST",token,body:{label,project_id:projectId}}); setLabel(""); onChange(); } finally { setBusy(false); } };
+  const toggle = async (k) => { await api(`/admin/keys/${k.id}`,{method:"PATCH",token,body:{active:!k.active}}); onChange(); };
+  const del = async (k) => { if (!confirm(`Delete "${k.label}"?`)) return; await api(`/admin/keys/${k.id}`,{method:"DELETE",token}); onChange(); };
+  const copy = (v, e) => { navigator.clipboard.writeText(v); const t=e.target; const old=t.textContent; t.textContent="copied"; setTimeout(()=>t.textContent=old,1200); };
+  return html`
+    <div class="panel"><h1>URL Generator</h1><p class="lead">One URL, many keys. Each consumer gets its own key so any one can be deactivated without affecting the others.</p>
+      <div class="create"><input placeholder="Label, e.g. browser-extension" value=${label} onInput=${e=>setLabel(e.target.value)} onKeyDown=${e=>e.key==="Enter"&&generate()}/><button class="btn primary" disabled=${busy||!token} onClick=${generate}>Generate key</button></div>
+      <div class="card">${!token?html`<div class="empty-hint">Connect with the admin token.</div>`:err?html`<div class="empty-hint">${err}</div>`:keys.length===0?html`<div class="empty-hint">No keys yet.</div>`:html`<table class="keys"><thead><tr><th>Label</th><th>Key</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>${keys.map(k=>html`<tr key=${k.id}><td>${k.label}</td><td><span class="kv"><code title=${k.key}>${k.key}</code><button class="copy" onClick=${e=>copy(k.key,e)}>copy</button></span></td><td><span class=${"badge "+(k.active?"on":"off")}>${k.active?"Active":"Inactive"}</span></td><td class="muted">${new Date(k.created_at).toLocaleDateString()}</td><td><div class="acts"><button class="btn sm" onClick=${()=>toggle(k)}>${k.active?"Deactivate":"Activate"}</button><button class="btn sm danger" onClick=${()=>del(k)}>Delete</button></div></td></tr>`)}</tbody></table>`}</div>`;
+}
 
-  const generate = async () => {
-    setBusy(true);
-    try { await api("/admin/keys", { method: "POST", token, body: { label, project_id: projectId } }); setLabel(""); onChange(); }
-    finally { setBusy(false); }
-  };
-  const toggle = async (k) => { await api(`/admin/keys/${k.id}`, { method: "PATCH", token, body: { active: !k.active } }); onChange(); };
-  const del = async (k) => {
-    if (!confirm(`Delete "${k.label}"? Anything using it stops working immediately.`)) return;
-    await api(`/admin/keys/${k.id}`, { method: "DELETE", token }); onChange();
-  };
-  const copy = (v, e) => { navigator.clipboard.writeText(v); const t = e.target; const old = t.textContent; t.textContent = "copied"; setTimeout(() => t.textContent = old, 1200); };
-
+// ---------- Extension Settings ----------
+function ExtensionSettingsPanel({ token }) {
+  const [settings, setSettings] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const load = useCallback(async () => { if (!token) return; try { const d = await api("/admin/extension-settings", { token }); setSettings(d); } catch { setMsg("Failed to load."); } }, [token]);
+  useEffect(() => { load(); }, [load]);
+  const save = async () => { setSaving(true); setMsg(""); try { await api("/admin/extension-settings", { method: "PATCH", token, body: settings }); setMsg("Saved."); } catch { setMsg("Save failed."); } finally { setSaving(false); } };
+  const set = (key, val) => setSettings(s => ({ ...s, [key]: val }));
+  if (!token) return html`<div class="panel"><h1>Extension Settings</h1><p class="lead">Connect with the admin token to manage browser extension config.</p></div>`;
+  if (!settings) return html`<div class="panel"><h1>Extension Settings</h1><p class="lead">Loading…</p></div>`;
   return html`
     <div class="panel">
-      <h1>URL Generator</h1>
-      <p class="lead">One URL, many keys. Each consumer — the admission site, the browser extension, any integration — gets its own key against the same endpoint, so any one can be deactivated without affecting the others.</p>
-      <div class="create">
-        <input placeholder="Label, e.g. browser-extension" value=${label} onInput=${(e) => setLabel(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && generate()} />
-        <button class="btn primary" disabled=${busy || !token} onClick=${generate}>Generate key</button>
+      <h1>Extension Settings</h1>
+      <p class="lead">Configure what the browser extension auto-discovers. The extension fetches these on install — no manual setup needed on the user's side.</p>
+      <div class="section-h">Auto-Discovery</div>
+      <div class="card" style=${{padding:"16px 20px"}}>
+        <div class="info-row"><label>Backend URL (public)</label><input value=${settings.backendUrl||""} onInput=${e=>set("backendUrl",e.target.value)} placeholder="https://your-server.com"/></div>
+        <div class="info-row"><label>Drive Catalogue Folder ID</label><input value=${settings.driveFolderId||""} onInput=${e=>set("driveFolderId",e.target.value)} placeholder="Leave blank for AI auto-discovery"/><p class="hint" style=${{margin:"4px 0 0"}}>If blank, the AI scans Drive for folders named "Catalogue", "Brochures", etc.</p></div>
+        <div class="info-row"><label>Match threshold (0–1)</label><input value=${settings.matchThreshold??0.55} type="number" min="0" max="1" step="0.05" onInput=${e=>set("matchThreshold",parseFloat(e.target.value)||0.55)}/></div>
       </div>
-      <div class="card">
-        ${!token ? html`<div class="empty-hint">Connect with the admin token to view and manage keys.</div>`
-        : err ? html`<div class="empty-hint">${err}</div>`
-        : keys.length === 0 ? html`<div class="empty-hint">No keys yet. Generate one above.</div>`
-        : html`<table class="keys">
-            <thead><tr><th>Label</th><th>Key</th><th>Status</th><th>Created</th><th></th></tr></thead>
-            <tbody>
-              ${keys.map((k) => html`
-                <tr key=${k.id}>
-                  <td>${k.label}</td>
-                  <td><span class="kv"><code title=${k.key}>${k.key}</code><button class="copy" onClick=${(e) => copy(k.key, e)}>copy</button></span></td>
-                  <td><span class=${"badge " + (k.active ? "on" : "off")}>${k.active ? "Active" : "Inactive"}</span></td>
-                  <td class="muted">${new Date(k.created_at).toLocaleDateString()}</td>
-                  <td><div class="acts">
-                    <button class="btn sm" onClick=${() => toggle(k)}>${k.active ? "Deactivate" : "Activate"}</button>
-                    <button class="btn sm danger" onClick=${() => del(k)}>Delete</button>
-                  </div></td>
-                </tr>`)}
-            </tbody>
-          </table>`}
+      <div class="section-h">Selectors (optional — extension auto-detects)</div>
+      <div class="card" style=${{padding:"16px 20px"}}>
+        <div class="info-row"><label>Send button CSS</label><input value=${settings.sendButtonSelector||""} onInput=${e=>set("sendButtonSelector",e.target.value)} placeholder=".btn-global.btn-add-roles"/></div>
+        <div class="info-row"><label>Email body CSS</label><input value=${settings.emailBodySelector||""} onInput=${e=>set("emailBodySelector",e.target.value)} placeholder="[contenteditable], .email-body"/></div>
+        <div class="info-row"><label>File input CSS</label><input value=${settings.fileInputSelector||""} onInput=${e=>set("fileInputSelector",e.target.value)} placeholder='input[type="file"]'/></div>
       </div>
+      <div class="actions" style=${{marginTop:16}}><button class="btn primary" disabled=${saving} onClick=${save}>${saving?"Saving…":"Save settings"}</button><span style=${{fontSize:12.5,color:"var(--ink-3)",marginLeft:12}}>${msg}</span></div>
     </div>`;
 }
 
@@ -370,45 +274,6 @@ function TesterPanel({ keys }) {
         <button class="btn primary" disabled=${busy} onClick=${() => send()}>Send</button>
       </div>
       <p class="hint">${hint}</p>
-    </div>`;
-}
-
-// ---------- Extension Controller ----------
-function ExtensionPanel({ keys }) {
-  const active = keys.filter((k) => k.active);
-  const [keyVal, setKeyVal] = useState("");
-  useEffect(() => { if (!keyVal && active.length) setKeyVal(active[0].key); }, [keys]);
-  const key = keyVal || "(your active key)";
-  const origin = window.location.origin;
-  const snippet = `fetch('${origin}/api/chat', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'X-API-Key': '${key}'
-  },
-  body: JSON.stringify({ question: 'What are the eligibility criteria?' })
-})
-  .then(r => r.json())
-  .then(data => console.log(data.answerText, data.pageReferences));`;
-
-  return html`
-    <div class="panel">
-      <h1>Extension Controller</h1>
-      <p class="lead">What another app — the admission WebForms site, or the cross-product browser extension — needs to connect.</p>
-      <div class="grid">
-        <div class="info"><h3>Base URL</h3><code>${origin}</code><p>Same origin serves the chat widget, the API, and this console.</p></div>
-        <div class="info"><h3>Chat endpoint</h3><code>POST /api/chat</code><p>Header <code>X-API-Key: (your key)</code>, body <code>{ "question": "..." }</code></p></div>
-        <div class="info"><h3>Ingest endpoint</h3><code>POST /api/ingest</code><p><code>multipart/form-data</code> with the prospectus PDF. Same key header.</p></div>
-        <div class="info"><h3>Integration options</h3><p>1. Call these URLs over HTTP (extension, any site).<br/>2. Reference <code>AdmissionAssistant.Core.dll</code> in-process (WebForms).</p></div>
-      </div>
-      <div class="snippet">
-        <div class="head"><span>Extension fetch snippet</span>
-          <select class="sel" value=${keyVal} onChange=${(e) => setKeyVal(e.target.value)}>
-            ${active.length === 0 ? html`<option value="">No active keys</option>` : active.map((k) => html`<option key=${k.id} value=${k.key}>${k.label}</option>`)}
-          </select>
-        </div>
-        <pre>${snippet}</pre>
-      </div>
     </div>`;
 }
 
@@ -609,7 +474,7 @@ function App() {
         ${selectedProjectId && tab === "dashboard" && html`<${Dashboard} token=${token} projectId=${selectedProjectId} />`}
         ${selectedProjectId && tab === "keys" && html`<${KeysPanel} token=${token} projectId=${selectedProjectId} keys=${projectKeys} err=${err} onChange=${() => refresh()} />`}
         ${selectedProjectId && tab === "tester" && html`<${TesterPanel} keys=${projectKeys} />`}
-        ${selectedProjectId && tab === "ext" && html`<${ExtensionPanel} keys=${projectKeys} />`}
+        ${selectedProjectId && tab === "ext" && html`<${ExtensionSettingsPanel} token=${token} />`}
         ${selectedProjectId && tab === "cost" && html`<${Cost} token=${token} projectId=${selectedProjectId} onChange=${() => refresh()} />`}
       </div>
     </div>`;

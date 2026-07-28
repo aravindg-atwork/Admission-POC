@@ -135,8 +135,41 @@ _TRANSLATE_SYSTEM = (
     "the translated question - no quotes, no explanation, no commentary."
 )
 
+_LANGUAGE_NAMES = {"hi": "Hindi", "mr": "Marathi", "ta": "Tamil"}
 
-def translate_to_english(text):
+
+def _translate_system(ui_language):
+    """Naming the source language and the domain measurably fixes gemma2:2b.
+
+    The bare prompt above gave it no anchor and it guessed from surface form,
+    which went badly on Marathi specifically: "वर्गांमध्ये किमान किती उपस्थिती
+    आवश्यक आहे?" (minimum attendance required in classes) came back as "How many
+    attendees are required at least in the circle?", and "तात्पुरती गुणवत्ता यादी"
+    (provisional merit list) as "the quality list for the Tatpurti". It also
+    inverted meaning outright once - rendering a minimum-attendance question as
+    "the minimum number of absences allowed". Those translations feed retrieval,
+    so a mistranslation doesn't produce a wrong answer, it produces a confident
+    "the prospectus doesn't specify" for a fact that is plainly in the
+    prospectus - which is what a student sees.
+
+    Naming the domain rather than supplying a glossary was deliberate: a version
+    listing term equivalents bled the glossary into the output ("What is the
+    total admission fee for each class/class category?"). Falls back to the
+    original prompt when the caller has no explicit language to name.
+    """
+    name = _LANGUAGE_NAMES.get(ui_language)
+    if not name:
+        return _TRANSLATE_SYSTEM
+    return (
+        f"Translate this {name} question into English. It was asked by a student "
+        "to a university admissions assistant, so translate it as an admissions "
+        "question about fees, dates, eligibility, documents, attendance or seats. "
+        "Translate literally and preserve the exact intent - do not add, "
+        "generalise or reinterpret. Output ONLY the translated question."
+    )
+
+
+def translate_to_english(text, ui_language=None):
     """Best-effort English translation, used only to make cross-lingual retrieval
     work (nomic-embed-text doesn't align Hindi/Tamil and English closely enough for
     a native-script question to reliably retrieve the right English prospectus
@@ -160,7 +193,8 @@ def translate_to_english(text):
     replace this function's body, leaving every caller untouched.)
     """
     try:
-        reply, _ = generate(_TRANSLATE_SYSTEM, text, "", timeout=30, allow_cloud=False)
+        reply, _ = generate(_translate_system(ui_language), text, "", timeout=30,
+                            allow_cloud=False)
         reply = reply.strip().strip('"')
         return reply or text
     except Exception:  # noqa: BLE001

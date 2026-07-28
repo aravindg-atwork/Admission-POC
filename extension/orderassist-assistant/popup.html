@@ -4,64 +4,118 @@
   <meta charset="utf-8" />
   <title>OrderAssist Catalogue Assistant</title>
   <style>
-    body { width: 320px; font: 13px/1.4 -apple-system, "Segoe UI", Arial, sans-serif; padding: 14px; color: #1a1f27; }
-    h1 { font-size: 18px; margin: 0 0 4px; }
-    p.hint { color: #5b6572; font-size: 10.5px; margin: 0 0 12px; }
-    label { display: block; font-size: 10.5px; font-weight: 600; color: #5b6572; margin: 10px 0 3px; }
-    input { width: 100%; box-sizing: border-box; font-size: 13px; padding: 7px 9px; border: 1px solid #d8dee5; border-radius: 7px; }
-    .row { display: flex; gap: 8px; margin-top: 14px; }
-    button { font-size: 13px; font-weight: 600; padding: 8px 10px; border-radius: 7px; border: 1px solid #d8dee5; background: #f3f4f6; cursor: pointer; flex: 1; }
-    button.primary { background: #1a7f4e; border-color: #1a7f4e; color: #fff; }
-    #status { margin-top: 10px; font-size: 10.5px; min-height: 16px; }
-    #status.ok { color: #1a7f4e; }
-    #status.err { color: #c23a2e; }
-    #diag { margin-top: 8px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.6;
-      background: #f3f4f6; border-radius: 8px; padding: 10px; white-space: pre-wrap; display: none; }
+    body { width: 320px; font: 13px/1.4 -apple-system, "Segoe UI", Arial, sans-serif; padding: 14px; color: #1a1f27; margin: 0; }
+    h1 { font-size: 16px; margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
+    .version { font-size: 10px; font-weight: 400; color: #8b95a3; }
+    p.hint { color: #5b6572; font-size: 10.5px; margin: 0 0 10px; }
+
+    /* Status card */
+    .status-card { background: #f8f9fb; border: 1px solid #e0e4ea; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+    .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .status-row:last-child { margin-bottom: 0; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot.green { background: #1a7f4e; }
+    .dot.yellow { background: #d4a72c; }
+    .dot.red { background: #c23a2e; }
+    .dot.gray { background: #b0b8c4; }
+    .status-label { font-weight: 500; font-size: 12px; }
+    .status-detail { font-size: 11px; color: #5b6572; }
+
+    /* Buttons */
+    .btn { display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; font-weight: 600;
+      padding: 9px 14px; border-radius: 8px; border: 1px solid #d8dee5; background: #fff; cursor: pointer; text-align: center; }
+    .btn.primary { background: #1a7f4e; border-color: #1a7f4e; color: #fff; }
+    .btn.primary:disabled { opacity: 0.5; cursor: default; }
+    .btn.secondary { background: #f3f4f6; }
+    .btn.danger { color: #c23a2e; border-color: #e8c0bc; background: #fef6f5; }
+    .btn + .btn { margin-top: 6px; }
+
+    /* Auth section */
+    #auth-section { margin-bottom: 10px; }
+    .google-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .google-icon { width: 18px; height: 18px; }
+
+    /* Backend URL input (only field the user might need) */
+    .url-input-wrap { display: flex; gap: 6px; margin-bottom: 10px; }
+    .url-input-wrap input { flex: 1; font: inherit; font-size: 12px; padding: 7px 9px; border: 1px solid #d8dee5;
+      border-radius: 7px; min-width: 0; }
+    .url-input-wrap button { font: inherit; font-size: 12px; font-weight: 600; padding: 7px 10px; border-radius: 7px;
+      border: 1px solid #d8dee5; background: #f3f4f6; cursor: pointer; white-space: nowrap; }
+
+    /* Troubleshoot section (collapsible) */
+    .collapsible { margin-top: 10px; }
+    .collapsible-header { font-size: 11px; color: #5b6572; cursor: pointer; user-select: none; padding: 4px 0; }
+    .collapsible-header:hover { color: #1a1f27; }
+    .collapsible-body { display: none; margin-top: 6px; }
+    .collapsible-body.open { display: block; }
+    #diag { font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; line-height: 1.5;
+      background: #f3f4f6; border-radius: 8px; padding: 10px; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+
+    /* Status messages */
+    #status { font-size: 11px; min-height: 16px; margin-top: 8px; padding: 6px 10px; border-radius: 6px; display: none; }
+    #status.ok { display: block; background: #eaf6ef; color: #1a7f4e; }
+    #status.err { display: block; background: #fef2f0; color: #c23a2e; }
+    #status.info { display: block; background: #eef1f5; color: #3b4a5e; }
+
+    /* Spinner */
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #d8dee5;
+      border-top-color: #1a7f4e; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
-  <h1>OrderAssist Catalogue Assistant <span id="version" style="font-size:11px;font-weight:400;color:#5b6572;"></span></h1>
-  <p class="hint">POC settings - these point the extension at your backend, your Drive catalogue folder, and the OrderAssist page elements it should watch.</p>
+  <h1>
+    Catalogue Assistant
+    <span class="version" id="version"></span>
+  </h1>
+  <p class="hint">Sign in with Google to link your Drive. The AI automatically finds your catalogue folder and configures everything.</p>
 
-  <label>Backend URL</label>
-  <input id="backendUrl" placeholder="http://localhost:5050" />
-
-  <label>Backend API key</label>
-  <input id="apiKey" placeholder="aas_... (or generate one below)" />
-  <div class="row" style="margin-top:6px;">
-    <input id="adminToken" placeholder="admin token (one-time, to generate a key)" />
-    <button id="generateKey">Generate</button>
+  <!-- Backend URL (only field user might ever set) -->
+  <div class="url-input-wrap">
+    <input id="backendUrl" placeholder="http://localhost:5050" />
+    <button id="connectBackend">Connect</button>
   </div>
 
-  <label>Drive catalogue folder ID</label>
-  <input id="driveFolderId" placeholder="the ID from the Drive folder's URL" />
-
-  <label>Match threshold (0-1, lower = less strict)</label>
-  <input id="matchThreshold" placeholder="0.55" />
-
-  <label>Test quotation text (optional - for "Test Drive access" below)</label>
-  <input id="testQuotationText" placeholder="e.g. MacBook Pro 14 x2 - try real product names" />
-
-  <label>Quotation text selector (CSS, optional fallback)</label>
-  <input id="quotationTextSelector" placeholder="not needed on the real proposal page - it reads the API response" />
-
-  <label>Send button selector (CSS)</label>
-  <input id="sendButtonSelector" value=".btn-global.btn-add-roles" />
-
-  <label>Attachment file input selector (CSS, optional)</label>
-  <input id="fileInputSelector" value='input[type="file"][accept=".pdf,.jpg,.jpeg"]' />
-
-  <div class="row">
-    <button id="save" class="primary">Save</button>
-    <button id="testDrive">Test Drive access</button>
+  <!-- Status Card -->
+  <div class="status-card" id="status-card">
+    <div class="status-row">
+      <span class="dot gray" id="dot-backend"></span>
+      <span class="status-label">Backend</span>
+      <span class="status-detail" id="detail-backend">Not connected</span>
+    </div>
+    <div class="status-row">
+      <span class="dot gray" id="dot-drive"></span>
+      <span class="status-label">Google Drive</span>
+      <span class="status-detail" id="detail-drive">Not signed in</span>
+    </div>
+    <div class="status-row">
+      <span class="dot gray" id="dot-folder"></span>
+      <span class="status-label">Catalogue folder</span>
+      <span class="status-detail" id="detail-folder">Not found</span>
+    </div>
   </div>
-  <div class="row">
-    <button id="resetAuth">Reset Google sign-in</button>
-    <button id="diagnose">Diagnose current tab</button>
+
+  <!-- Sign-in / Action buttons -->
+  <div id="auth-section">
+    <button class="btn primary google-btn" id="signInBtn">
+      <svg class="google-icon" viewBox="0 0 48 48"><path fill="#4285F4" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#34A853" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.54 14.19L2.56 8.03C.92 11.31 0 15.08 0 19s.92 7.69 2.56 11.03l7.98-6.19C9.54 22.14 9 20.62 9 19s.54-3.14 1.54-4.81z"/><path fill="#EA4335" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Sign in with Google
+    </button>
   </div>
-  <div id="status"></div>
-  <pre id="diag"></pre>
+
+  <!-- Troubleshoot section (collapsible) -->
+  <div class="collapsible">
+    <div class="collapsible-header" id="troubleshootToggle">▼ Troubleshoot</div>
+    <div class="collapsible-body" id="troubleshootBody">
+      <button class="btn secondary" id="diagnoseBtn">Diagnose current tab</button>
+      <button class="btn secondary" id="rescanDriveBtn">Rescan Drive folders</button>
+      <button class="btn danger" id="resetAuthBtn">Reset Google sign-in</button>
+      <div id="status"></div>
+      <pre id="diag">Click "Diagnose" to inspect the current tab.</pre>
+    </div>
+  </div>
 
   <script src="popup.js"></script>
 </body>
 </html>
+

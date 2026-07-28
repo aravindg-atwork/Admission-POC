@@ -1,27 +1,31 @@
 {
   "manifest_version": 3,
-  "name": "OrderAssist Catalogue Assistant (POC)",
-  "version": "0.2.1",
-  "description": "When a quotation is about to be sent in OrderAssist, suggests and attaches the best-matching brochure/template from a Google Drive catalogue.",
+  "name": "OrderAssist Catalogue Assistant",
+  "version": "0.3.11",
+  "description": "When sending a quotation or proposal, automatically finds the matching brochure from your Google Drive catalogue and attaches it — zero config required.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7D50wYPlpeKfqfKzgRNFlGnQQmxyBZOHTRBT3q/7A5gB3XVd3UZdnJWtsi4kOpKhsGz2yKjT5IZuBUS1YOz+ix4UP5ETRH1ETaZhQSJpRGKnwBU5rupIk0Hkh93d2oNVnWO4b+3lIs5wkxdjMK7dTNK6F9kxT1jfCBJjXWkJLQnQ5nUqaVfxdmA016DK8N4/emnn+f2TGh4RawaIk7VdNksEKr54ufwsvW9+rHriCc32AtmciwY6A43m184YqIzDv0zB2+ErY+Bnpkj4I5af1xpKieONDwUiQgIKSg8M0fAmgZwKTbVBJBJMNPfEH+b+WP99cc3kcaegJrqFFO6v8QIDAQAB",
-  "permissions": ["storage", "identity", "scripting", "tabs"],
+  "permissions": [
+    "storage",
+    "identity",
+    "scripting",
+    "tabs",
+    "activeTab"
+  ],
   "host_permissions": [
-    "https://www.googleapis.com/*",
-    "*://*/view_proposal/*",
-    "file:///*"
+    "https://www.googleapis.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["*://*/view_proposal/*", "file:///*"],
+      "matches": ["https://app.orderassist.in/*"],
       "js": ["interceptor.js"],
       "world": "MAIN",
       "run_at": "document_start"
     },
     {
-      "matches": ["*://*/view_proposal/*", "file:///*"],
+      "matches": ["https://app.orderassist.in/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
@@ -29,9 +33,10 @@
   "action": {
     "default_popup": "popup.html"
   },
-  "options_page": "popup.html",
   "oauth2": {
     "client_id": "285946928264-cmk4lsg5n9f6llkj19srokj4cuahmtjb.apps.googleusercontent.com",
-    "scopes": ["https://www.googleapis.com/auth/drive.readonly"]
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.readonly"
+    ]
   }
 }

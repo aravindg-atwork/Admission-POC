@@ -1,162 +1,229 @@
-const FIELDS = [
-  "backendUrl", "apiKey", "driveFolderId",
-  "quotationTextSelector", "sendButtonSelector", "fileInputSelector",
-  "matchThreshold",
-];
+/**
+ * Zero-config popup: status-only, Google sign-in, troubleshooting.
+ *
+ * The user does NOT configure backendUrl, apiKey, driveFolderId, selectors,
+ * or any other settings here. All of that is auto-discovered by the
+ * background worker through /api/extension/register.
+ *
+ * The ONLY field the user may set is the Backend URL (if it's not
+ * localhost:5050), and Google sign-in for Drive access.
+ */
 
-function setStatus(text, cls) {
-  const el = document.getElementById("status");
-  el.textContent = text;
-  el.className = cls || "";
+function $(id) { return document.getElementById(id); }
+
+function setDot(id, state) {
+  const dot = $(id);
+  if (!dot) return;
+  dot.className = "dot " + (state || "gray");
 }
 
-async function load() {
-  const stored = await chrome.storage.local.get(FIELDS);
-  for (const key of FIELDS) {
-    const el = document.getElementById(key);
-    if (el && stored[key]) el.value = stored[key];
+function setDetail(id, text) {
+  const el = $(id);
+  if (el) el.textContent = text;
+}
+
+function setStatus(text, cls) {
+  const el = $("status");
+  if (!el) return;
+  el.textContent = text;
+  el.className = cls || "";
+  if (cls) {
+    el.style.display = "block";
+  } else {
+    el.style.display = "none";
   }
 }
 
-function extractFolderId(raw) {
-  // Accept a pasted Drive URL (.../folders/<id>?usp=sharing) as well as a bare ID.
-  const match = raw.match(/folders\/([a-zA-Z0-9_-]+)/);
-  return match ? match[1] : raw;
+function showDiag(text) {
+  const el = $("diag");
+  if (el) { el.textContent = text; el.style.display = "block"; }
 }
 
-async function save() {
-  const values = {};
-  for (const key of FIELDS) values[key] = document.getElementById(key).value.trim();
-  values.driveFolderId = extractFolderId(values.driveFolderId);
-  document.getElementById("driveFolderId").value = values.driveFolderId;
-  const threshold = parseFloat(values.matchThreshold);
-  values.matchThreshold = Number.isFinite(threshold) ? threshold : 0.55;
-  document.getElementById("matchThreshold").value = values.matchThreshold;
-  await chrome.storage.local.set(values);
-  setStatus("Saved. Reload the OrderAssist tab for it to take effect.", "ok");
-}
-
-async function generateKey() {
-  const backendUrl = document.getElementById("backendUrl").value.trim();
-  const adminToken = document.getElementById("adminToken").value.trim();
-  if (!backendUrl || !adminToken) { setStatus("Set Backend URL and admin token first.", "err"); return; }
-  setStatus("Generating key…", "");
+async function refreshStatus() {
   try {
-    const res = await fetch(`${backendUrl}/admin/keys`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
-      body: JSON.stringify({ label: "orderassist-extension" }),
+    const result = await chrome.runtime.sendMessage({ type: "REGISTRATION_STATUS" });
+    if (!result?.ok) {
+      setDot("dot-backend", "red");
+      setDetail("detail-backend", "Error contacting worker");
+      return;
+    }
+
+    // Backend status
+    if (result.hasApiKey) {
+      setDot("dot-backend", "green");
+      setDetail("detail-backend", "Connected to " + (result.backendUrl || "backend"));
+    } else {
+      setDot("dot-backend", "yellow");
+      setDetail("detail-backend", "Not registered — enter URL and connect");
+    }
+
+    // Drive status
+    if (result.hasDriveFolder) {
+      setDot("dot-drive", "green");
+      setDetail("detail-drive", "Signed in and authorized");
+      setDot("dot-folder", "green");
+      setDetail("detail-folder", result.driveFolderId ? "Folder selected" : "Auto-discovered");
+    } else {
+      // Check if we have any Google Drive OAuth token cached
+      setDot("dot-drive", "yellow");
+      setDetail("detail-drive", "Sign in with Google below");
+      setDot("dot-folder", "gray");
+      const hint = result.driveDiscoveryHint;
+      setDetail("detail-folder", hint || "Sign in to find catalogue folder");
+    }
+  } catch (e) {
+    console.log("[OA-POPUP] refreshStatus error:", e.message);
+  }
+}
+
+async function handleConnectBackend() {
+  const backendUrl = $("backendUrl").value.trim();
+  if (!backendUrl) {
+    setStatus("Enter a backend URL", "err");
+    return;
+  }
+  setStatus("Connecting…", "info");
+  try {
+    const result = await chrome.runtime.sendMessage({
+      type: "REGISTER_EXTENSION",
+      backendUrl,
     });
-    if (!res.ok) throw new Error(`Backend returned ${res.status} - check the admin token.`);
-    const entry = await res.json();
-    document.getElementById("apiKey").value = entry.key;
-    document.getElementById("adminToken").value = "";
-    await save();
-    setStatus(`Generated and saved a real API key: ${entry.key}`, "ok");
+    if (result?.ok) {
+      setStatus("Connected and configured. Checking Drive…", "ok");
+      await refreshStatus();
+    } else {
+      setStatus(result?.error || "Connection failed", "err");
+    }
+  } catch (e) {
+    setStatus("Error: " + e.message, "err");
+  }
+}
+
+async function handleSignIn() {
+  setStatus("Signing in with Google…", "info");
+  try {
+    // Request Drive token interactively — this triggers the OAuth flow
+    const token = await new Promise((resolve, reject) => {
+      chrome.identity.getAuthToken({ interactive: true }, (token) => {
+        if (chrome.runtime.lastError || !token) {
+          reject(new Error(chrome.runtime.lastError?.message || "Sign-in cancelled"));
+          return;
+        }
+        resolve(token);
+      });
+    });
+    if (token) {
+      setStatus("Signed in! Scanning Drive for catalogue folder…", "ok");
+      await refreshStatus();
+      // Trigger folder discovery
+      const result = await chrome.runtime.sendMessage({ type: "DISCOVER_DRIVE_FOLDERS" });
+      if (result?.ok) {
+        setStatus("Found catalogue folder: " + (result.folderName || result.folderId), "ok");
+      } else {
+        setStatus(result?.error || "No catalogue folder found. Create one named 'Catalogue' or 'Brochures' and re-scan.", "err");
+      }
+      await refreshStatus();
+    }
   } catch (e) {
     setStatus(e.message, "err");
   }
 }
 
-async function testDrive() {
-  setStatus("Checking Drive access…", "");
-  const folderId = document.getElementById("driveFolderId").value.trim();
-  if (!folderId) { setStatus("Set a Drive folder ID first.", "err"); return; }
-  await save();
-  const testText = document.getElementById("testQuotationText").value.trim() || "test connection";
-  const result = await chrome.runtime.sendMessage({ type: "FIND_MATCH", quotationText: testText });
-  if (!result?.ok) {
-    setStatus(result?.error || "Could not reach Drive or the backend.", "err");
-    return;
-  }
-  setStatus(`Connected - ${result.matches.length} catalogue item(s) ranked against "${testText}".`, "ok");
-  const diag = document.getElementById("diag");
-  diag.style.display = "block";
-  if (result.matches.length === 0) {
-    diag.textContent = "No files found in that Drive folder.";
-    return;
-  }
-  diag.textContent = `Threshold: ${result.threshold} - a match needs to score at or above this to trigger the banner.\n\n` +
-    result.matches
-      .map((m, i) => `${i + 1}. ${m.name} - score ${m.score}${m.score >= result.threshold ? "  ✓ would trigger" : "  (below threshold)"}`)
-      .join("\n");
-}
-
-// Runs INSIDE the target tab (isolated world, same as content.js) - must be
-// fully self-contained, no references to anything outside its own body.
-function diagnosticProbe(sendButtonSelector, fileInputSelector) {
-  const root = document.documentElement.dataset;
-  let sendCount = null;
-  let sendError = null;
-  try { sendCount = sendButtonSelector ? document.querySelectorAll(sendButtonSelector).length : null; }
-  catch (e) { sendError = e.message; }
-
-  let fileCount = null;
-  let fileError = null;
-  try { fileCount = fileInputSelector ? document.querySelectorAll(fileInputSelector).length : null; }
-  catch (e) { fileError = e.message; }
-
-  return {
-    url: location.href,
-    contentScriptLoaded: root.oaContentLoaded === "1",
-    interceptorLoaded: root.oaInterceptorLoaded === "1",
-    lastCapturedQuotationText: root.oaLastCapturedText || null,
-    lastCapturedRaw: root.oaLastCapturedRaw || null,
-    sendButtonSelector, sendButtonMatchCount: sendCount, sendButtonError: sendError,
-    fileInputSelector, fileInputMatchCount: fileCount, fileInputError: fileError,
-  };
-}
-
-function renderDiag(d) {
-  const el = document.getElementById("diag");
-  el.style.display = "block";
-  if (d.error) { el.textContent = "Could not inspect this tab: " + d.error; return; }
-  const lines = [
-    `Extension version running: ${chrome.runtime.getManifest().version}`,
-    `URL: ${d.url}`,
-    `content.js loaded: ${d.contentScriptLoaded ? "yes" : "NO - extension isn't running here"}`,
-    `interceptor.js loaded: ${d.interceptorLoaded ? "yes" : "NO - extension isn't running here"}`,
-    `Last quotation text captured from API: ${d.lastCapturedQuotationText || "(none yet - did the page finish loading?)"}`,
-    `Send button selector "${d.sendButtonSelector || "(not set)"}" matches: ${d.sendButtonError ? "ERROR: " + d.sendButtonError : d.sendButtonMatchCount}`,
-    `File input selector "${d.fileInputSelector || "(not set)"}" matches: ${d.fileInputError ? "ERROR: " + d.fileInputError : (d.fileInputMatchCount ?? "(not set)")}`,
-  ];
-  if (d.lastCapturedRaw && !d.lastCapturedQuotationText) {
-    lines.push(`Raw API response seen (first 300 chars): ${d.lastCapturedRaw}`);
-  }
-  el.textContent = lines.join("\n");
-}
-
-async function diagnose() {
-  setStatus("Inspecting current tab…", "");
-  await save(); // whatever's currently typed in the boxes, not whatever was last saved
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) { renderDiag({ error: "No active tab found." }); return; }
-
-  const cfg = await chrome.storage.local.get(["sendButtonSelector", "fileInputSelector"]);
+async function handleRescanDrive() {
+  setStatus("Re-scanning Drive…", "info");
   try {
+    const result = await chrome.runtime.sendMessage({ type: "DISCOVER_DRIVE_FOLDERS" });
+    if (result?.ok) {
+      setStatus("Found: " + (result.folderName || result.folderId), "ok");
+    } else {
+      setStatus(result?.error || "No catalogue folder found", "err");
+    }
+    await refreshStatus();
+  } catch (e) {
+    setStatus("Error: " + e.message, "err");
+  }
+}
+
+async function handleResetAuth() {
+  setStatus("Clearing Google sign-in…", "info");
+  try {
+    await chrome.runtime.sendMessage({ type: "RESET_AUTH" });
+    setStatus("Signed out. Click 'Sign in with Google' to re-authenticate.", "ok");
+    await refreshStatus();
+  } catch (e) {
+    setStatus("Error: " + e.message, "err");
+  }
+}
+
+async function handleDiagnose() {
+  setStatus("Inspecting current tab…", "info");
+  showDiag("Probing…");
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      showDiag("No active tab found.");
+      setStatus("", "");
+      return;
+    }
+
     const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: diagnosticProbe,
-      args: [cfg.sendButtonSelector || "", cfg.fileInputSelector || ""],
+      func: () => {
+        const root = document.documentElement.dataset;
+        return {
+          url: location.href,
+          contentLoaded: root.oaContentLoaded === "1",
+          interceptorLoaded: root.oaInterceptorLoaded === "1",
+          lastCapturedText: root.oaLastCapturedText || "(none)",
+        };
+      },
     });
-    renderDiag({ ...result, url: result.url || tab.url });
+
+    const lines = [
+      `URL: ${result.url}`,
+      `content.js loaded: ${result.contentLoaded ? "yes" : "NO"}`,
+      `interceptor.js loaded: ${result.interceptorLoaded ? "yes" : "NO"}`,
+      `Last quotation text: ${result.lastCapturedText}`,
+    ];
+    showDiag(lines.join("\n"));
     setStatus("", "");
   } catch (e) {
-    renderDiag({ error: `${e.message} (are you on the OrderAssist page? this can't inspect chrome:// or other extension pages)` });
+    showDiag("Diagnose error: " + e.message);
     setStatus("", "");
   }
 }
 
-async function resetAuth() {
-  setStatus("Clearing cached Google sign-in…", "");
-  await chrome.runtime.sendMessage({ type: "RESET_AUTH" });
-  setStatus("Cleared. Click \"Test Drive access\" now for a fully fresh sign-in.", "ok");
-}
+// ---------- Init ----------
+document.addEventListener("DOMContentLoaded", async () => {
+  // Version
+  const ver = $("version");
+  if (ver) ver.textContent = "v" + (chrome.runtime.getManifest().version || "?");
 
-document.getElementById("save").addEventListener("click", save);
-document.getElementById("testDrive").addEventListener("click", testDrive);
-document.getElementById("diagnose").addEventListener("click", diagnose);
-document.getElementById("generateKey").addEventListener("click", generateKey);
-document.getElementById("resetAuth").addEventListener("click", resetAuth);
-document.getElementById("version").textContent = "v" + chrome.runtime.getManifest().version;
-load();
+  // Load stored backend URL
+  const stored = await chrome.storage.local.get(["backendUrl"]);
+  if (stored.backendUrl) {
+    $("backendUrl").value = stored.backendUrl;
+  }
+
+  // Refresh status display
+  await refreshStatus();
+
+  // Wire up buttons
+  $("connectBackend").addEventListener("click", handleConnectBackend);
+  $("backendUrl").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") handleConnectBackend();
+  });
+  $("signInBtn").addEventListener("click", handleSignIn);
+  $("diagnoseBtn").addEventListener("click", handleDiagnose);
+  $("rescanDriveBtn").addEventListener("click", handleRescanDrive);
+  $("resetAuthBtn").addEventListener("click", handleResetAuth);
+
+  // Troubleshoot collapsible
+  const toggle = $("troubleshootToggle");
+  const body = $("troubleshootBody");
+  toggle.addEventListener("click", () => {
+    body.classList.toggle("open");
+    toggle.textContent = body.classList.contains("open") ? "▼ Troubleshoot" : "▶ Troubleshoot";
+  });
+});
+

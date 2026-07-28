@@ -31,6 +31,7 @@ import atexit
 import json
 import threading
 import time
+import unicodedata
 from pathlib import Path
 
 from . import config
@@ -56,28 +57,102 @@ def _norm(vec):
 # "first year hostel fee" and "2nd year hostel fee" are near-identical vectors
 # but different answers - and a cache that returns the wrong one states a wrong
 # number with total confidence, which is worse than a slow correct answer.
-_ORDINALS = {
-    "first": "1", "1st": "1", "one": "1",
-    "second": "2", "2nd": "2", "two": "2",
-    "third": "3", "3rd": "3", "three": "3",
-    "fourth": "4", "4th": "4", "four": "4",
+#
+# These lists were English-only, which silently disabled the entire safeguard for
+# Hindi and Marathi: every Devanagari question produced an EMPTY discriminator
+# set, so nothing was ever blocked and the 0.88 threshold ran unguarded in the
+# lane it was never measured on. Verified by direct probe - "आरक्षित वर्ग के लिए
+# प्रवेश शुल्क" (reserved category) was served the cached answer for "अनारक्षित"
+# (UNreserved), i.e. Rs.62635 instead of Rs.26135, and an exam-fee question was
+# answered with the tuition figure. Both are exactly the confident-wrong-number
+# failure this mechanism exists to prevent, and both scored as a cache "hit".
+#
+# Surface forms are grouped under a canonical key so that Hindi and Marathi words
+# for the same concept (अनारक्षित / खुल्या) compare equal instead of looking like
+# two different constraints.
+_ORDINAL_FORMS = {
+    "1": ["first", "1st", "one", "pehla", "pehle", "pehli", "pahila", "pahile",
+          "pahilya", "pratham", "पहल", "पहिल", "प्रथम"],
+    "2": ["second", "2nd", "two", "dusra", "dusre", "dusri", "dusrya", "dusara",
+          "दूसर", "दुसर", "दुसऱ", "द्वितीय"],
+    "3": ["third", "3rd", "three", "tisra", "tisre", "tisrya",
+          "तीसर", "तिसर", "तिसऱ", "तृतीय"],
+    "4": ["fourth", "4th", "four", "chautha", "chauthe", "chouth",
+          "चौथ", "चतुर्थ"],
 }
 # Mutually exclusive alternatives within a topic. Grouped rather than kept as a
 # flat list so that *omitting* a word is treated as vagueness, not disagreement:
 # "fee for reserved category" should still match a cached "application fee for
 # reserved category", while "admission fee ..." must not.
-_CONTRAST_GROUPS = {
-    "feetype": {"application", "admission", "tuition", "mess", "hostel", "exam", "examination"},
-    "when": {"before", "after"},
-    "category": {"reserved", "unreserved", "open", "nri", "ews", "obc"},
-    "bound": {"minimum", "maximum", "least", "most"},
+_CONTRAST_FORMS = {
+    "feetype": {
+        "application": ["application", "आवेदन", "अर्ज", "aavedan", "arj"],
+        "admission": ["admission", "प्रवेश", "एडमिशन", "pravesh"],
+        "tuition": ["tuition", "ट्यूशन", "शिक्षणशुल्क", "शिक्षणफी"],
+        "mess": ["mess", "मेस", "भोजन", "जेवण"],
+        "hostel": ["hostel", "हॉस्टेल", "वसतिगृह", "छात्रावास"],
+        "exam": ["exam", "examination", "परीक्षा", "pariksha"],
+        "registration": ["registration", "नोंदणी", "पंजीकरण", "रजिस्ट्रेशन"],
+    },
+    "when": {
+        "before": ["before", "पहले", "आधी", "पूर्वी", "अगोदर"],
+        "after": ["after", "बाद", "नंतर"],
+    },
+    "category": {
+        "reserved": ["reserved", "आरक्षित", "राखीव", "arakshit"],
+        "unreserved": ["unreserved", "open", "अनारक्षित", "खुल्या", "खुला", "खुले"],
+        "nri": ["nri", "एनआरआय", "एनआरआई"],
+        "ews": ["ews", "ईडब्ल्यूएस"],
+        "obc": ["obc", "ओबीसी"],
+    },
+    "bound": {
+        "minimum": ["minimum", "least", "न्यूनतम", "किमान"],
+        "maximum": ["maximum", "most", "अधिकतम", "कमाल"],
+    },
+    # What KIND of figure is being asked for. Two questions about the same
+    # reserved category can want completely different numbers - a rupee amount
+    # or a seat percentage - and their embeddings sit close enough to collide:
+    # "आर्थिक रूप से कमजोर वर्ग के लिए कितने प्रतिशत सीटें आरक्षित हैं?" (what % of seats
+    # are EWS-reserved) was served the cached answer to "आरक्षित वर्ग के लिए प्रवेश
+    # शुल्क कितना है?", i.e. "Rs. 26135". Both name a category, so the category
+    # group agreed and nothing else separated them until this group existed.
+    "asks_about": {
+        "money": ["fee", "fees", "cost", "amount", "शुल्क", "फीस", "फी",
+                  "भुगतान", "रक्कम"],
+        "seats": ["seat", "seats", "percentage", "percent", "quota",
+                  "सीट", "जागा", "प्रतिशत", "टक्के", "टक्का"],
+    },
 }
+
+
+# Devanagari digits: "१ लाख" and "1 लाख" are the same claim, and students type
+# both. Normalized here so a number discriminator compares equal either way
+# rather than looking like two different figures.
+_DEVA_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
+
+
+def _is_word_char(ch):
+    """Whether this character continues a word.
+
+    `isalnum()` alone is wrong for Indic scripts and was the deeper reason the
+    Devanagari lane had no discriminators at all: vowel signs (matras), the
+    virama and the nukta are Unicode combining marks, which are NOT alnum, so an
+    alnum-only split shatters every word at its vowel signs - "आरक्षित" came out
+    as ['आरक', 'ष', 'त'] and "दुसऱ्या" as ['द', 'सऱ', 'य']. No stem or member
+    list can match fragments like that, so nothing downstream could ever fire.
+
+    Tested by category rather than by codepoint range so this holds for Tamil and
+    any other Indic script the project adds later, and so that the danda "।" - a
+    sentence-ending punctuation mark that happens to sit inside the Devanagari
+    block - still correctly splits words instead of gluing sentences together.
+    """
+    return ch.isalnum() or unicodedata.category(ch) in ("Mn", "Mc")
 
 
 def _words(text):
     out, current = [], []
-    for ch in text.lower():
-        if ch.isalnum():
+    for ch in text.lower().translate(_DEVA_DIGITS):
+        if _is_word_char(ch):
             current.append(ch)
         elif current:
             out.append("".join(current))
@@ -87,6 +162,26 @@ def _words(text):
     return out
 
 
+def _is_devanagari(word):
+    return any(0x0900 <= ord(ch) <= 0x097F for ch in word)
+
+
+def _matches_form(word, form):
+    """Whether `word` expresses `form`.
+
+    Devanagari forms are matched as STEMS, not whole tokens: Hindi and Marathi
+    agglutinate case endings onto the noun, so the question "आरक्षित प्रवर्गासाठी
+    प्रवेश शुल्क किती आहे?" contains "प्रवेशासाठी"/"प्रवर्गासाठी" as single tokens and
+    exact membership would match none of them - which is precisely why the
+    Devanagari lane scored zero discriminators. Latin forms stay exact: English
+    barely inflects, and prefix matching there would have "one" match "online"
+    and "exam" match "example", inventing constraints out of ordinary words.
+    """
+    if word == form:
+        return True
+    return _is_devanagari(form) and len(form) >= 3 and word.startswith(form)
+
+
 def _discriminators(question):
     """(numbers, {group: alternatives}) - what must agree for two questions to mean
     the same thing. Everything else may vary freely; that is the paraphrasing the
@@ -94,19 +189,36 @@ def _discriminators(question):
     """
     numbers, groups = set(), {}
     for w in _words(question):
-        if w in _ORDINALS:
-            numbers.add(_ORDINALS[w])
-        elif w.isdigit():
+        if w.isdigit():
             numbers.add(w.lstrip("0") or "0")
-        else:
-            for group, members in _CONTRAST_GROUPS.items():
-                if w in members:
-                    groups.setdefault(group, set()).add(w)
+            continue
+        matched_ordinal = False
+        for value, forms in _ORDINAL_FORMS.items():
+            if any(_matches_form(w, f) for f in forms):
+                numbers.add(value)
+                matched_ordinal = True
+                break
+        if matched_ordinal:
+            continue
+        for group, alternatives in _CONTRAST_FORMS.items():
+            for canonical, forms in alternatives.items():
+                if any(_matches_form(w, f) for f in forms):
+                    groups.setdefault(group, set()).add(canonical)
+                    break
     return numbers, groups
 
 
 def _compatible(a, b):
-    """True when two questions agree on every dimension both of them specify."""
+    """True when two questions agree on every dimension both of them specify.
+
+    Groups are compared as whole sets, so a question naming two members of one
+    group ("reserved EWS seats" -> category {reserved, ews}) will not match one
+    naming a single member ("reserved seats" -> {reserved}) even when they mean
+    the same thing. That is a deliberate asymmetry: the cost is a cache miss and
+    a slower correct answer, whereas loosening it to a subset test would let a
+    genuinely narrower question be answered from a broader cached one - a
+    confidently wrong number, which is the failure this whole module prevents.
+    """
     a_nums, a_groups = a
     b_nums, b_groups = b
     if a_nums != b_nums:
@@ -115,6 +227,18 @@ def _compatible(a, b):
         if a_groups[group] != b_groups[group]:
             return False  # both name a fee type / direction, but different ones
     return True
+
+
+def compatible_questions(a, b):
+    """Whether two texts agree on every discriminating dimension both specify.
+
+    Public wrapper over the same check the cache uses internally. Exposed
+    because rag.py needs it for a different purpose - vetoing a table reading
+    whose descriptor contradicts the student's question - and that vocabulary
+    (fee types, ordinals, categories, in three languages) should have exactly
+    one definition rather than a second copy that drifts.
+    """
+    return _compatible(_discriminators(a), _discriminators(b))
 
 
 def _load(faq_path):

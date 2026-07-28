@@ -24,24 +24,32 @@
   // DOM itself is shared across worlds even though JS variables aren't.
   document.documentElement.dataset.oaInterceptorLoaded = "1";
 
-  function extractQuotationText(data) {
-    const items = data?.proposal_items || [];
-    const productLine = items
+  function extractProductLines(items) {
+    return items
       .map((item) => (item.quantity ? `${item.product_name} x${item.quantity}` : item.product_name))
-      .filter(Boolean)
-      .join(", ");
+      .filter(Boolean);
+  }
+
+  function extractQuotationText(data, productLines) {
     const customerName = data?.proposal?.customer_name || "";
-    return [customerName, productLine].filter(Boolean).join(" - ");
+    return [customerName, productLines.join(", ")].filter(Boolean).join(" - ");
   }
 
   function publish(data) {
-    const quotationText = extractQuotationText(data);
+    const items = data?.proposal_items || [];
+    const productLines = extractProductLines(items);
+    const quotationText = extractQuotationText(data, productLines);
     document.documentElement.dataset.oaLastCapturedRaw = JSON.stringify(data).slice(0, 300);
     if (!quotationText) return;
     // A DOM attribute, not window.postMessage: content.js runs later
     // (document_idle vs. this script's document_start) and reads this
     // directly whenever it needs it, so there's no race to miss.
     document.documentElement.dataset.oaLastCapturedText = quotationText;
+    // Per-product-line strings, kept separately from the blended text above so
+    // a quotation with several distinct products can be matched against the
+    // catalogue line-by-line instead of as one merged blob (which would only
+    // ever surface a single "best overall" brochure).
+    document.documentElement.dataset.oaLastCapturedLines = JSON.stringify(productLines);
   }
 
   // fetch()

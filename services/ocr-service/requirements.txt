@@ -1,0 +1,12 @@
+fastapi==0.111.0
+uvicorn[standard]==0.30.0
+transformers>=4.40.0
+torch>=2.2.0
+pillow>=10.0.0
+pypdf>=4.0.0
+pypdfium2>=4.0.0
+accelerate>=0.30.0
+einops
+sentencepiece
+protobuf
+

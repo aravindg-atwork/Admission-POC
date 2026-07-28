@@ -29,10 +29,22 @@ This was built against OrderAssist's actual source
   feature OrderAssist already built for this exact purpose. Only caveat:
   that input enforces PDF/JPEG under 2MB client-side, so catalogue brochures
   need to meet that.
-- **Where it activates**: the manifest matches by *path*
-  (`*://*/view_proposal/*`), not a specific domain — so it works the same on
-  localhost, staging, or production without editing anything, which was the
-  actual goal behind "make it work without knowing where it lives."
+- **Where it activates**: the manifest matches the OrderAssist origin
+  (`https://app.orderassist.in/*`), not just the `/view_proposal/*` path.
+  This has to be the whole origin, not the proposal path alone: OrderAssist
+  is a SPA, so Chrome only ever injects a manifest-declared content script on
+  a real top-level page load, never on the in-app `history.pushState`
+  navigation that happens when a rep clicks into a quotation from a list. If
+  `matches` were scoped to `/view_proposal/*` only, the script would stay
+  uninjected for the rest of the tab's life whenever the session's first real
+  page load landed somewhere else (a dashboard, a login page) - which is the
+  common case. Matching the whole origin means it loads on whichever page the
+  session actually starts on, then keeps running (via the fetch patch and a
+  MutationObserver) across every subsequent in-app route change without
+  needing to be re-injected. The tradeoff: pointing this at a different
+  OrderAssist deployment (staging, a different customer's subdomain,
+  localhost) now means editing this one pattern in `manifest.json` - it's no
+  longer domain-agnostic the way path-only matching was intended to be.
 - **Still needs you**: a real Google Cloud OAuth client for Drive access
   (`manifest.json`'s `oauth2.client_id` placeholder), and a real Drive folder
   ID of brochures. There's no way around that setup existing somewhere - it's

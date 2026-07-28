@@ -90,6 +90,7 @@ class SarvamProvider:
 
     def chat(self, system_prompt, user_prompt, timeout, **_):
         payload = {"model": config.SARVAM_MODEL, "max_tokens": self.max_tokens,
+                   "temperature": config.CHAT_TEMPERATURE,
                    "messages": _messages(system_prompt, user_prompt)}
         headers = {"api-subscription-key": config.SARVAM_API_KEY}
         result = _post(config.SARVAM_URL, payload, headers, timeout)
@@ -102,6 +103,17 @@ class SarvamProvider:
             # questions (exactly the fee-table ones) to the weaker local model.
             raise ValueError("Sarvam returned no answer content (reasoning hit the token cap)")
         return answer, "sarvam:" + config.SARVAM_MODEL
+
+
+def _ollama_options():
+    """Sampling options for Ollama, which nests them under "options" rather than
+    accepting them at the top level like the OpenAI-shaped API - a top-level
+    temperature here is silently ignored, not rejected.
+    """
+    options = {"temperature": config.CHAT_TEMPERATURE}
+    if config.OLLAMA_SEED:
+        options["seed"] = config.OLLAMA_SEED
+    return options
 
 
 class OllamaProvider:
@@ -120,6 +132,11 @@ class OllamaProvider:
             "model": model,
             "stream": False,
             "keep_alive": config.OLLAMA_KEEP_ALIVE,
+            # Ollama nests sampling settings under "options", unlike the
+            # OpenAI-shaped payload Sarvam takes - a top-level "temperature" is
+            # silently ignored here rather than rejected, so it would look set
+            # while the model kept running at its 0.8 default.
+            "options": _ollama_options(),
             "messages": _messages(system_prompt, user_prompt),
         }
         url = config.OLLAMA_URL.rstrip("/") + "/api/chat"

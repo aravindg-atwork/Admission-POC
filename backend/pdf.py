@@ -149,6 +149,114 @@ def _fields(line):
     return [f for f in re.split(r" {2,}", line.strip()) if f]
 
 
+# Column headings of a single-level fee grid: "1st Year", "2 nd year",
+# "Internship (1 year)", "Total". Deliberately narrow - this decides whether a
+# line is a header row at all, and a loose pattern matched ordinary justified
+# prose ("covered from 1st to 4th") on a page that holds no such table.
+_YEAR_COLUMN = re.compile(r"^(?:\d\s*(?:st|nd|rd|th)|internship|total)\b|\byear\b", re.I)
+_MAX_COLUMN_HEADING = 22
+
+
+def _row_cells(fields):
+    """(fields, values) with a leading serial number dropped.
+
+    The college fee rows start with the "Sr. No." column ("2  Tuition Fee  27500
+    ..."), which is numeric and would otherwise be counted as a data value -
+    making a 5-column row look like 6 and knocking the column count off by one
+    for the entire table.
+    """
+    values = [f for f in fields if _NUMERIC_FIELD.match(f)]
+    if values and re.fullmatch(r"[0-9]{1,3}", fields[0]) and fields[0] == values[0]:
+        return fields[1:], values[1:]
+    return fields, values
+
+
+def _linearize_column_table(text):
+    """Readings for a fee grid with ONE header row of year columns.
+
+    linearize_table's two-level path keys off short column CODES (N, M, S/P/U)
+    under a group header, which is the hostel table's shape (Annexure III-B).
+    The college fee table (III-A) and the NRI table (III-C) are laid out
+    differently - a single header row naming the years directly - so that path
+    never fired for them and they produced no readings at all. That left the
+    single most-asked figures in the prospectus (tuition, registration,
+    examination and internship fees) with no verified reading, so tablelookup
+    returned None and the model was back to eyeballing the grid. Measured
+    consequence: the Marathi answer to "what is the first year tuition fee"
+    quoted Rs.62635, the total admission fee, and a plain internship-fee
+    question was answered Rs.34400 - the NRI row - because nothing labelled
+    which table that number came from.
+
+    Same conservatism as the two-level path: the column count is taken as the
+    modal count across candidate rows, the header must sit above the first data
+    row and actually read like year columns, and any row whose value count
+    disagrees is skipped rather than guessed at.
+    """
+    lines = text.split("\n")
+    candidates = []
+    for i, line in enumerate(lines):
+        fields, values = _row_cells(_fields(line))
+        if len(values) >= 3 and len(fields) > len(values):
+            candidates.append((i, fields, values))
+    if not candidates:
+        return []
+
+    width = Counter(len(v) for _, _, v in candidates).most_common(1)[0][0]
+
+    header = None
+    for i in range(candidates[0][0] - 1, -1, -1):
+        fields = _fields(lines[i])
+        if len(fields) < width:
+            continue
+        columns = fields[-width:]
+        if all(len(c) <= _MAX_COLUMN_HEADING for c in columns) and \
+                sum(bool(_YEAR_COLUMN.search(c)) for c in columns) >= max(2, width // 2):
+            header = (i, columns)
+            break
+    if not header:
+        return []
+    header_idx, columns = header
+
+    # Start the body at the first real data row. The header wraps across several
+    # lines in the source ("2nd" on the header line, "year" and "(1 1/2 year)"
+    # below it), and those remnants are label-only lines, so _label_context
+    # happily glued them onto the first row - producing "year) Registration Fee".
+    body = lines[header_idx + 1:]
+    first_data = next((n for n, l in enumerate(body)
+                       if len(_row_cells(_fields(l))[1]) == width), None)
+    if first_data is None:
+        return []
+    body = body[first_data:]
+
+    caption = _find_caption(lines[:header_idx])
+    readings = []
+    for n, line in enumerate(body):
+        fields, values = _row_cells(_fields(line))
+        if len(values) != width or len(fields) == len(values):
+            continue
+        own = " ".join(f for f in fields if not _NUMERIC_FIELD.match(f))
+        label = " ".join(_label_context(body, n) + [own]).strip(" :*#")
+        label = _dedupe_tokens(re.sub(r"\s+", " ", label))
+        if not label:
+            continue
+        for column, value in zip(columns, values):
+            reading = (f"{caption} - " if caption else "") + f"{label} for {column}: {value}"
+            readings.append(re.sub(r"\s{2,}", " ", reading))
+    return readings
+
+
+def _dedupe_tokens(label):
+    """Collapse runs of the same token: a currency unit repeated once per column
+    ("Special Fees U.S. U.S. U.S. U.S. U.S.") is an artifact of the row's text
+    cells, and the repetition dilutes tablelookup's term-overlap scoring.
+    """
+    out = []
+    for token in label.split():
+        if not out or out[-1].lower() != token.lower():
+            out.append(token)
+    return " ".join(out)
+
+
 def linearize_table(text):
     """Append an explicit, unambiguous reading of each numeric table row.
 
@@ -173,14 +281,14 @@ def linearize_table(text):
         None,
     )
     if sub_idx is None:
-        return text
+        return _append_readings(text, _linearize_column_table(text))
 
     # Only true column codes (N, M, S/P/U) - not the row-label header ("Sr.",
     # "No.", "Particulars of Fees"), which names the label column, not a data one.
     subs = [s for s in _fields(lines[sub_idx]) if _COLUMN_CODE.match(s)]
     groups = _find_group_header(lines[:sub_idx])
     if not subs or not groups or len(subs) % len(groups):
-        return text
+        return _append_readings(text, _linearize_column_table(text))
     span = len(subs) // len(groups)
 
     # A row's label is often wrapped across lines in the source ("a)Hostel" on
@@ -218,6 +326,11 @@ def linearize_table(text):
                 else f"{label} for {group} at {where}: {val}"
             readings.append(re.sub(r"\s{2,}", " ", line))
 
+    return _append_readings(text, readings)
+
+
+def _append_readings(text, readings):
+    """Attach the linearized readings block, or return the text untouched."""
     if not readings:
         return text
     return text + "\n\nExplicit readings of the table above:\n" + "\n".join(readings)

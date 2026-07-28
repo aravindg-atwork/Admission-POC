@@ -1,0 +1,129 @@
+{
+  "trustScore": 80.0,
+  "perBlock": {
+    "romanized": {
+      "passed": 16,
+      "total": 20
+    }
+  },
+  "records": [
+    {
+      "block": "romanized",
+      "id": "tuition_1y_roman",
+      "lang": "hi",
+      "question": "pehle saal ki tuition fees kitni hai bhai?",
+      "expected": "27500",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "in_devanagari": false,
+        "no_english_fallback": true
+      },
+      "status": 200,
+      "text": "Pehle saal ki tuition fees Rs. 27,500 hai.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        12,
+        19,
+        25,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 37961
+    },
+    {
+      "block": "romanized",
+      "id": "last_date_roman",
+      "lang": "hi",
+      "question": "online form bharne ki last date kya hai?",
+      "expected": "12/07/2025",
+      "checks": {
+        "correct_value": false,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "in_devanagari": true,
+        "no_english_fallback": true
+      },
+      "status": 200,
+      "text": "आवेदनों की अंतिम तिथि 12 जुलाई, 2025 है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        21,
+        25,
+        26,
+        51,
+        52,
+        53
+      ],
+      "error": null,
+      "latencyMs": 6971
+    },
+    {
+      "block": "romanized",
+      "id": "min_marks_roman",
+      "lang": "mr",
+      "question": "patratesathi barawit kiti marks pahije?",
+      "expected": "50%",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "in_devanagari": false,
+        "no_english_fallback": true
+      },
+      "status": 200,
+      "text": "B.V.Sc. & A.H. admission-sathi candidates-la NEET-UG-2025 qualifying score/marks milavne garjeche aahe. Goa quota seats-sathi, candidates-na qualifying examination-madhye (XII Std. or equivalent) Physics, Chemistry, Biology kinva Biotechnology aani English-madhye minimum 50% marks milavave lagtil.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        8,
+        9,
+        11,
+        12,
+        21,
+        24,
+        27
+      ],
+      "error": null,
+      "latencyMs": 10462
+    },
+    {
+      "block": "romanized",
+      "id": "attendance_roman",
+      "lang": "mr",
+      "question": "college madhe kiti attendance lagto?",
+      "expected": "75%",
+      "checks": {
+        "correct_value": false,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "in_devanagari": true,
+        "no_english_fallback": true
+      },
+      "status": 200,
+      "text": "दिलेल्या माहितीमध्ये B.V.Sc. & A.H. अभ्यासक्रमासाठी उपस्थितीची अट दिलेली नाही. या माहितीसाठी तुम्ही प्रवेश कार्यालयाशी संपर्क साधू शकता.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        11,
+        27,
+        28,
+        29,
+        30,
+        33,
+        52
+      ],
+      "error": null,
+      "latencyMs": 15631
+    }
+  ]
+}
