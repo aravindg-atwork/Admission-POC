@@ -8,6 +8,8 @@ frontend (static files) and the JSON API:
   POST /api/ingest                       X-API-Key gated - upload a prospectus PDF (multipart)
   POST /api/tts                          X-API-Key gated - proxy to the Indic TTS service
   POST /api/catalogue/match              X-API-Key gated - rank catalogue items against quotation text
+  POST /api/catalogue/complementary      X-API-Key gated - LLM cross-sell suggestions (non-blocking follow-up)
+  POST /api/catalogue/note               X-API-Key gated - generate an email note for matched item(s)
   GET/POST        /admin/projects[/id]   X-Admin-Token gated - manage projects
   PATCH           /admin/projects/id     X-Admin-Token gated - update project settings (e.g. allow_cloud)
   DELETE          /admin/projects/id     X-Admin-Token gated - delete a project
@@ -22,15 +24,14 @@ which project's pipeline to run from the key, so different projects never
 share a prospectus, vector store, or cost numbers.
 """
 
-import concurrent.futures
 import json
 import re
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import (apikeys, catalogue, config, embeddings, extension_settings, faq,
-               llm, projects, rag, stats, textclean)
+from . import (apikeys, audiocache, catalogue, config, embeddings,
+               extension_settings, faq, llm, projects, rag, stats, textclean)
 
 # Injected into index.html so the first-party chat widget authenticates without the
 # key being hard-coded in client files.
@@ -209,13 +210,18 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_ingest(project_id)
 
         elif self.path == "/api/tts":
-            if not apikeys.is_active(self.headers.get("X-API-Key")):
+            # resolve_active (not just is_active): the audio cache is per-
+            # project, same as the FAQ/vector stores, so the project_id is
+            # needed here now, not just an active/inactive check.
+            project_id = apikeys.resolve_active(self.headers.get("X-API-Key"))
+            if not project_id:
                 self._json(401, {"error": "Missing or inactive API key."})
                 return
-            self._proxy_tts()
+            self._proxy_tts(project_id)
 
         elif self.path == "/api/catalogue/match":
-            if not apikeys.is_active(self.headers.get("X-API-Key")):
+            project_id = apikeys.resolve_active(self.headers.get("X-API-Key"))
+            if not project_id:
                 self._json(401, {"error": "Missing or inactive API key."})
                 return
             body = self._read_json()
@@ -230,32 +236,49 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": "quotationText and items are required."})
                 return
             try:
-                # The semantic match (embedding call) and the complementary
-                # suggestion (LLM call) are independent - the latter no longer
-                # waits on the former's result to know what to exclude, it
-                # dedupes against it afterwards instead. That lets both I/O-bound
-                # calls run concurrently instead of back-to-back, since a rep is
-                # sitting there waiting on this response before Send goes through.
-                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-                    if quotation_lines:
-                        match_future = pool.submit(
-                            catalogue.match_lines, quotation_lines, items, threshold=threshold)
-                    else:
-                        match_future = pool.submit(catalogue.match, quotation_text, items)
-                    complementary_future = pool.submit(
-                        catalogue.suggest_complementary, quotation_text, items, set())
-
-                    matches = match_future.result()
-                    complementary = complementary_future.result()
-
-                existing_ids = {m["id"] for m in matches}
-                matches += [c for c in complementary if c["id"] not in existing_ids]
+                # Semantic match only (embedding call, ~100ms) - the complementary
+                # suggestion used to run here too (an LLM call, several seconds,
+                # worse on a Sarvam retry), but a rep is sitting there waiting on
+                # this response before Send goes through, so it can't share the
+                # blocking path. See /api/catalogue/complementary - it runs the
+                # same suggestion after the banner is already showing instead.
+                if quotation_lines:
+                    matches = catalogue.match_lines(quotation_lines, items, threshold=threshold)
+                else:
+                    matches = catalogue.match(quotation_text, items)
+                stats.record_catalogue(projects.stats_path(project_id), "match", True)
                 self._json(200, {"matches": matches})
             except Exception as exc:
+                stats.record_catalogue(projects.stats_path(project_id), "match", False, exc)
+                self._json(500, {"error": str(exc)})
+
+        elif self.path == "/api/catalogue/complementary":
+            # Fired by the extension right after the match banner is already
+            # showing (see content.js) - never on the blocking path a rep is
+            # staring at. An LLM call, so failing closed (empty list) here is
+            # fine; the rep already has their real matches either way.
+            project_id = apikeys.resolve_active(self.headers.get("X-API-Key"))
+            if not project_id:
+                self._json(401, {"error": "Missing or inactive API key."})
+                return
+            body = self._read_json()
+            quotation_text = (body.get("quotationText") or "").strip()
+            items = body.get("items") or []
+            existing_ids = set(body.get("existingIds") or [])
+            if not quotation_text or not items:
+                self._json(400, {"error": "quotationText and items are required."})
+                return
+            try:
+                suggestions = catalogue.suggest_complementary(quotation_text, items, existing_ids)
+                stats.record_catalogue(projects.stats_path(project_id), "complementary", True)
+                self._json(200, {"matches": suggestions})
+            except Exception as exc:
+                stats.record_catalogue(projects.stats_path(project_id), "complementary", False, exc)
                 self._json(500, {"error": str(exc)})
 
         elif self.path == "/api/catalogue/note":
-            if not apikeys.is_active(self.headers.get("X-API-Key")):
+            project_id = apikeys.resolve_active(self.headers.get("X-API-Key"))
+            if not project_id:
                 self._json(401, {"error": "Missing or inactive API key."})
                 return
             body = self._read_json()
@@ -269,8 +292,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 note, model = catalogue.generate_note(quotation_text, matched_items)
+                stats.record_catalogue(projects.stats_path(project_id), "note", True)
                 self._json(200, {"note": note, "model": model})
             except Exception as exc:
+                stats.record_catalogue(projects.stats_path(project_id), "note", False, exc)
                 self._json(500, {"error": str(exc)})
 
         # --- Extension endpoints ---
@@ -510,16 +535,39 @@ class Handler(BaseHTTPRequestHandler):
         health["sarvam"] = "configured" if config.SARVAM_API_KEY else "not configured"
         return health
 
-    def _proxy_tts(self):
+    def _proxy_tts(self, project_id):
         try:
             payload = self._read_json()
-            payload["text"] = textclean.clean_for_speech(payload.get("text") or "")
+            text = textclean.clean_for_speech(payload.get("text") or "")
+            language = payload.get("language") or ""
+            cache_dir = projects.tts_cache_dir(project_id)
+
+            # The generation call is what takes 166-252s on this host - a cache
+            # hit skips it entirely and returns in the time it takes to read a
+            # small file off disk. Same (language, text) always means the same
+            # audio (the TTS call has no sampling step), so this is exact reuse,
+            # not an approximation.
+            cached = audiocache.get(cache_dir, language, text)
+            if cached is not None:
+                self._send(200, cached, "audio/wav")
+                return
+
+            payload["text"] = text
             body = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(config.TTS_URL, data=body,
                 headers={"Content-Type": "application/json"}, method="POST")
             with urllib.request.urlopen(req, timeout=config.TTS_TIMEOUT) as resp:
                 audio = resp.read()
-                self._send(200, audio, resp.headers.get("Content-Type", "audio/wav"))
+                content_type = resp.headers.get("Content-Type", "audio/wav")
+            try:
+                audiocache.put(cache_dir, language, text, audio)
+            except OSError as exc:
+                # A cache-write failure (disk full, permissions) must not turn a
+                # successful generation into an error response - the audio is
+                # already in hand and the student should still get it. Next
+                # request just regenerates instead of finding a cache hit.
+                print(f"[tts] cache write failed (serving anyway): {exc!r}")
+            self._send(200, audio, content_type)
         except Exception as exc:
             # Logged, not swallowed: this returned a bare 503 for every cause,
             # and the UI treats 503 as "fall back to the device voice" - so a

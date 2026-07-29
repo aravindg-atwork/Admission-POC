@@ -114,8 +114,27 @@ def numbers_in(text):
     return {int(m) for m in re.findall(r"\d+", t)}
 
 
+# Numerals spelled out as words. Sarvam writes these naturally in Indic prose -
+# the Marathi refund answer said "पंधरा दिवस" (fifteen days), which is exactly
+# right, and was scored as a wrong figure because only the digit "15" was
+# checked. Restricted to the values this suite actually asserts, so an unrelated
+# number word in a sentence can't accidentally satisfy a check.
+_SPELLED_NUMBERS = {
+    1: ["एक"],
+    2: ["दो", "दोन"],
+    6: ["छह", "सहा"],
+    10: ["दस", "दहा"],
+    12: ["बारह", "बारा"],
+    15: ["पंद्रह", "पंधरा"],
+    50: ["पचास", "पन्नास"],
+    75: ["पचहत्तर", "पंचाहत्तर", "पंच्याहत्तर"],
+}
+
+
 def has_number(text, value):
-    return value in numbers_in(text)
+    if value in numbers_in(text):
+        return True
+    return any(word in text for word in _SPELLED_NUMBERS.get(value, []))
 
 
 # Month names per language, indexed by month number. A correct answer routinely
@@ -168,6 +187,7 @@ _REFUSAL_MARKERS = [
     # Hindi (Devanagari)
     "नहीं दी गई", "नहीं दिया गया", "उल्लेख नहीं", "जानकारी नहीं", "स्पष्ट नहीं",
     "नहीं बताया", "विवरण नहीं", "नहीं मिलती", "नहीं मिला", "शामिल नहीं",
+    "उपलब्ध नहीं", "नहीं दी गई है", "कोई जानकारी नहीं",
     "प्रॉस्पेक्टस में नहीं", "प्रवेश कार्यालय से संपर्क", "कार्यालय से संपर्क",
     # Marathi (Devanagari). Marathi negates with a trailing "नाही" separated from
     # the verb ("स्पष्ट केलेले नाही", "नमूद केलेली नाही"), so the participle forms are
@@ -195,6 +215,12 @@ _REFUSAL_MARKERS = [
 def is_refusal(text):
     low = norm_digits(text).lower()
     return any(m.lower() in low for m in _REFUSAL_MARKERS)
+
+
+def mentions_neet(text):
+    """NEET named in Latin or transliterated into Devanagari/Marathi."""
+    low = text.lower()
+    return "neet" in low or "एनईईटी" in text or "नीट" in text
 
 
 # Agreeing with a false premise. Bare "yes" in each language - checked only at
@@ -305,10 +331,13 @@ FACT_PROBES = [
     ("cvc_deadline", "mr", "जात वैधता प्रमाणपत्र (CVC) सादर करण्याची शेवटची तारीख काय आहे?",
      lambda t: has_date(t, 13, 8), "13/08/2025"),
 
+    # "NEET" is correct written either in Latin or transliterated into Devanagari
+    # ("एनईईटी-यूजी-2025"), and Sarvam does both depending on the run. Checking
+    # only the Latin spelling scored a correct Marathi answer as wrong.
     ("entrance_exam", "hi", "प्रवेश के लिए कौन सी प्रवेश परीक्षा आवश्यक है?",
-     lambda t: "neet" in t.lower(), "NEET-UG-2025"),
+     lambda t: mentions_neet(t), "NEET-UG-2025"),
     ("entrance_exam", "mr", "प्रवेशासाठी कोणती प्रवेश परीक्षा आवश्यक आहे?",
-     lambda t: "neet" in t.lower(), "NEET-UG-2025"),
+     lambda t: mentions_neet(t), "NEET-UG-2025"),
 
     ("internship_dur", "hi", "इंटर्नशिप कितने महीने की होती है?",
      lambda t: has_number(t, 12) or has_number(t, 1), "12 months / 1 year"),
@@ -343,7 +372,23 @@ FABRICATE_PROBES = [
     ("library_hours", "hi", "लाइब्रेरी सुबह कितने बजे खुलती है?"),
     ("bus", "mr", "कॉलेजची बस सेवा कोणत्या भागातून येते?"),
     ("faculty_count", "hi", "नागपुर कॉलेज में कितने प्रोफेसर हैं?"),
-    ("laptop", "mr", "प्रवेशासाठी लॅपटॉप घेणे बंधनकारक आहे का?"),
+]
+
+# Facts the prospectus states as ADVICE, where the failure mode is promoting it
+# into a requirement. The laptop question was originally a fabricate probe, but
+# that was wrong: the prospectus does address it (candidates are "advised to use
+# desktop, laptop only" and advised not to use mobile phones), so "the
+# prospectus doesn't say" is not the correct answer either. The real failure -
+# observed in the baseline - was answering "प्रवेशासाठी लॅपटॉप असणे अनिवार्य आहे"
+# ("a laptop is mandatory for admission"), which would send a student out to buy
+# hardware they don't need.
+_NOT_MANDATORY = ("अनिवार्य नाही", "बंधनकारक नाही", "आवश्यक नाही", "गरजेचे नाही",
+                  "सक्ती नाही", "अनिवार्य नहीं", "जरूरी नहीं", "आवश्यक नहीं")
+
+NUANCE_PROBES = [
+    ("laptop_not_mandatory", "mr", "प्रवेशासाठी लॅपटॉप घेणे बंधनकारक आहे का?",
+     lambda t: any(p in t for p in _NOT_MANDATORY),
+     "advised, NOT mandatory - must not promote advice into a requirement"),
 ]
 
 # The student states something false. Correct behaviour: contradict it AND give
@@ -578,6 +623,7 @@ def run_cache(run):
 BLOCKS = {
     "fact": lambda r: run_fact(r, FACT_PROBES, "fact"),
     "romanized": lambda r: run_fact(r, ROMANIZED_PROBES, "romanized"),
+    "nuance": lambda r: run_fact(r, NUANCE_PROBES, "nuance"),
     "fabricate": run_fabricate,
     "premise": run_premise,
     "consistency": run_consistency,
@@ -592,7 +638,7 @@ def score(records):
     false premise (PREMISE) is what actually misleads a student into a wrong
     decision, so those carry more than a formatting slip.
     """
-    weights = {"fact": 1.0, "romanized": 1.0, "fabricate": 1.5,
+    weights = {"fact": 1.0, "romanized": 1.0, "nuance": 1.5, "fabricate": 1.5,
                "premise": 1.5, "consistency_summary": 1.25, "cache": 0.5,
                "consistency": 0.5}
     per_block = {}
@@ -625,6 +671,7 @@ def main():
     if args.dry_run:
         counts = {"fact": len(FACT_PROBES), "romanized": len(ROMANIZED_PROBES),
                   "fabricate": len(FABRICATE_PROBES), "premise": len(PREMISE_PROBES),
+                  "nuance": len(NUANCE_PROBES),
                   "consistency": sum(len(v) for _, v in CONSISTENCY_PROBES), "cache": 3}
         total = sum(counts[b] for b in chosen)
         print(json.dumps(counts, indent=2))

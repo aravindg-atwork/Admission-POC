@@ -102,37 +102,50 @@ function showLoadingBanner() {
   `;
 }
 
+// Complementary suggestions (see catalogue.suggest_complementary on the
+// backend) carry a synthetic score, not a real similarity percentage - label
+// them by what they are instead of a misleading "50% match".
+function renderMatchRow(m, i) {
+  const label = m.matchType === "complementary"
+    ? "often paired with this order"
+    : `${Math.round(m.score * 100)}% match`;
+  const previewLink = m.webViewLink
+    ? `<a href="${escapeHtml(m.webViewLink)}" target="_blank" rel="noopener noreferrer">Preview</a>`
+    : "";
+  return `
+    <div class="match">
+      <input type="checkbox" class="match-check" id="oa-check-${i}" data-idx="${i}" checked />
+      <label for="oa-check-${i}"><b>${escapeHtml(m.name)}</b>${label}</label>
+      ${previewLink}
+    </div>`;
+}
+
+// Returns a handle with addMatch(match) so a complementary suggestion that
+// resolves after the banner is already showing (see the FIND_COMPLEMENTARY
+// call in handleSendClick) can be appended as an extra row instead of making
+// the rep wait for it before seeing the banner at all.
 function showBanner({ matches, onAttach, onSkip, onCancel }) {
   removeBanner();
   const host = document.createElement("div");
   host.id = "oa-assistant-host";
-  host.style.cssText = "position:fixed;top:20px;right:20px;z-index:2147483647;";
   document.body.appendChild(host);
+  host.style.cssText = "position:fixed;top:20px;right:20px;z-index:2147483647;";
   const root = host.attachShadow({ mode: "open" });
 
-  const many = matches.length > 1;
+  const state = { matches: matches.slice(), closed: false };
   // All start selected (matches prior "attach everything" behavior by
   // default) - unchecking lets the rep leave one out before attaching.
-  const selected = new Set(matches.map((_, i) => i));
-  const matchRows = matches
-    .map((m, i) => {
-      // Complementary suggestions (see catalogue.suggest_complementary on the
-      // backend) carry a synthetic score, not a real similarity percentage -
-      // label them by what they are instead of a misleading "50% match".
-      const label = m.matchType === "complementary"
-        ? "often paired with this order"
-        : `${Math.round(m.score * 100)}% match`;
-      const previewLink = m.webViewLink
-        ? `<a href="${escapeHtml(m.webViewLink)}" target="_blank" rel="noopener noreferrer">Preview</a>`
-        : "";
-      return `
-        <div class="match">
-          <input type="checkbox" class="match-check" id="oa-check-${i}" data-idx="${i}" checked />
-          <label for="oa-check-${i}"><b>${escapeHtml(m.name)}</b>${label}</label>
-          ${previewLink}
-        </div>`;
-    })
-    .join("");
+  const selected = new Set(state.matches.map((_, i) => i));
+
+  const titleText = () => `Matching brochure${state.matches.length > 1 ? "s" : ""} found`;
+  const subText = () => {
+    const many = state.matches.length > 1;
+    return `This quotation looks like it matches ${many ? "these catalogue items" : "a catalogue item"}${many ? " - pick which to attach" : ""}.`;
+  };
+  const skipText = () => `Send without ${state.matches.length > 1 ? "them" : "it"}`;
+  const attachText = () => `Attach ${state.matches.length > 1 ? "selected " : ""}& send`;
+
+  const matchRows = state.matches.map(renderMatchRow).join("");
 
   root.innerHTML = `
     <style>
@@ -160,13 +173,13 @@ function showBanner({ matches, onAttach, onSkip, onCancel }) {
       @keyframes spin { to { transform:rotate(360deg); } }
     </style>
     <div class="card">
-      <div class="title">Matching brochure${many ? "s" : ""} found</div>
-      <div class="sub">This quotation looks like it matches ${many ? "these catalogue items" : "a catalogue item"}${many ? " - pick which to attach" : ""}.</div>
-      ${matchRows}
+      <div class="title" id="oa-title">${titleText()}</div>
+      <div class="sub" id="oa-sub">${subText()}</div>
+      <div id="oa-match-rows">${matchRows}</div>
       <div class="row">
         <button class="text" id="oa-cancel">Cancel</button>
-        <button id="oa-skip">Send without ${many ? "them" : "it"}</button>
-        <button class="primary" id="oa-attach">Attach ${many ? "selected" : ""} &amp; send</button>
+        <button id="oa-skip">${skipText()}</button>
+        <button class="primary" id="oa-attach">${attachText()}</button>
       </div>
     </div>
   `;
@@ -179,12 +192,41 @@ function showBanner({ matches, onAttach, onSkip, onCancel }) {
   });
 
   root.getElementById("oa-attach").addEventListener("click", () => {
-    const chosen = matches.filter((_, i) => selected.has(i));
+    state.closed = true;
+    const chosen = state.matches.filter((_, i) => selected.has(i));
     removeBanner();
     onAttach(chosen);
   });
-  root.getElementById("oa-skip").addEventListener("click", () => { removeBanner(); onSkip(); });
-  root.getElementById("oa-cancel").addEventListener("click", () => { removeBanner(); onCancel(); });
+  root.getElementById("oa-skip").addEventListener("click", () => {
+    state.closed = true;
+    removeBanner();
+    onSkip();
+  });
+  root.getElementById("oa-cancel").addEventListener("click", () => {
+    state.closed = true;
+    removeBanner();
+    onCancel();
+  });
+
+  return {
+    addMatch(match) {
+      // Banner already closed (rep already acted) or navigated away - the
+      // complementary suggestion arrived too late to matter, drop it.
+      if (state.closed || !findBanner()) return;
+      const idx = state.matches.length;
+      state.matches.push(match);
+      selected.add(idx);
+      root.getElementById("oa-match-rows")?.insertAdjacentHTML("beforeend", renderMatchRow(match, idx));
+      const titleEl = root.getElementById("oa-title");
+      if (titleEl) titleEl.textContent = titleText();
+      const subEl = root.getElementById("oa-sub");
+      if (subEl) subEl.textContent = subText();
+      const skipEl = root.getElementById("oa-skip");
+      if (skipEl) skipEl.textContent = skipText();
+      const attachEl = root.getElementById("oa-attach");
+      if (attachEl) attachEl.textContent = attachText();
+    },
+  };
 }
 
 // `button` is the node captured at the original click - if OrderAssist's SPA
@@ -417,7 +459,7 @@ async function handleSendClick(event, cfg) {
   }
   console.log("[OA] confident match(es) found, showing banner:", confidentMatches);
 
-  showBanner({
+  const bannerHandle = showBanner({
     matches: confidentMatches,
     onCancel: () => { pendingButtons.delete(button); }, // user cancelled - do nothing, don't send
     onSkip: async () => {
@@ -502,6 +544,31 @@ async function handleSendClick(event, cfg) {
       verifyNoteStuck(noteText);
     },
   });
+
+  // Fire-and-forget: the "often paired with this order" suggestion is an LLM
+  // call (several seconds) and used to block the banner itself. Now it runs
+  // after the banner is already up, and just adds a row if/when it resolves -
+  // the rep isn't kept waiting for it, and never sees it at all if they've
+  // already acted (bannerHandle.addMatch no-ops once the banner is closed).
+  if (result.items && result.items.length) {
+    const existingIds = confidentMatches.map((m) => m.id);
+    chrome.runtime.sendMessage({
+      type: "FIND_COMPLEMENTARY",
+      quotationText,
+      items: result.items,
+      existingIds,
+    }).then((compResult) => {
+      if (!compResult?.ok) return;
+      const seen = new Set(existingIds);
+      for (const m of compResult.matches || []) {
+        if (seen.has(m.id)) continue;
+        seen.add(m.id);
+        bannerHandle.addMatch(m);
+      }
+    }).catch((e) => {
+      console.log("[OA] complementary suggestion failed, ignoring:", e.message);
+    });
+  }
 }
 
 const SEND_TEXT_RE = /\bsend\b/i;

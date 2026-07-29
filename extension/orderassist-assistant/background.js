@@ -203,7 +203,22 @@ async function findBestMatch(quotationText, quotationLines) {
   // backend match each product independently and return several brochures
   // instead of only ever the single best match for the whole quotation.
   const matches = await matchCatalogue(cfg, quotationText, quotationLines, items);
-  return { matches, threshold: cfg.matchThreshold };
+  // `items` is returned too so a follow-up complementary-suggestion call
+  // (see findComplementary) can reuse it instead of re-listing and re-OCRing
+  // the whole Drive folder a second time just to ask a slower question about
+  // the same catalogue.
+  return { matches, threshold: cfg.matchThreshold, items };
+}
+
+async function findComplementary(cfg, quotationText, items, existingIds) {
+  const res = await fetch(`${cfg.backendUrl}/api/catalogue/complementary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": cfg.apiKey },
+    body: JSON.stringify({ quotationText, items, existingIds }),
+  });
+  if (!res.ok) throw new Error(`Complementary suggestion failed: ${res.status}`);
+  const data = await res.json();
+  return data.matches || [];
 }
 
 async function generateNote(cfg, quotationText, matchedItems) {
@@ -393,6 +408,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     getDriveToken(false)
       .then((token) => downloadDriveFile(msg.fileId, token))
       .then((file) => sendResponse({ ok: true, ...file }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+  if (msg.type === "FIND_COMPLEMENTARY") {
+    getConfig()
+      .then((cfg) => findComplementary(cfg, msg.quotationText, msg.items, msg.existingIds))
+      .then((matches) => sendResponse({ ok: true, matches }))
       .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }

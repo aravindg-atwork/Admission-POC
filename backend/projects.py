@@ -54,6 +54,10 @@ def manifest_path(project_id):
     return _dir(project_id) / "manifest.json"
 
 
+def tts_cache_dir(project_id):
+    return _dir(project_id) / "tts-cache"
+
+
 def list_projects():
     with _lock:
         return _load()

@@ -98,17 +98,25 @@ function Dashboard({ token, projectId }) {
         <div class="health-item"><span class=${"status-dot "+(d.health.embedding==="up"?"ok":"err")}></span>Embeddings ${d.health.embedding}</div>
         <div class="health-item"><span class=${"status-dot "+(d.health.ollama==="up"?"ok":"err")}></span>Ollama ${d.health.ollama}</div>
         <div class="health-item"><span class=${"status-dot "+(d.health.sarvam==="configured"?"ok":"idle")}></span>Sarvam ${d.health.sarvam}</div>
+      </div>
       <div class="stat-grid">
-        <div class="stat-card"><div class="num">${d.totalQuestions}</div><div class="lbl">Questions answered</div>
-        <div class="stat-card"><div class="num">${d.cacheHitRate}%</div><div class="lbl">Cache hit rate</div><div class="sub">${d.cacheHits} instant</div>
-        <div class="stat-card"><div class="num">${d.avgLatencyMs?(d.avgLatencyMs/1000).toFixed(1)+"s":"—"}</div><div class="lbl">Avg response time</div>
-        <div class="stat-card"><div class="num">${d.activeKeys}<span style=${{fontSize:"1rem",color:"var(--ink-3)"}}>/${d.totalKeys}</span></div><div class="lbl">Active keys</div>
+        <div class="stat-card"><div class="num">${d.totalQuestions}</div><div class="lbl">Questions answered</div></div>
+        <div class="stat-card"><div class="num">${d.cacheHitRate}%</div><div class="lbl">Cache hit rate</div><div class="sub">${d.cacheHits} instant</div></div>
+        <div class="stat-card"><div class="num">${d.avgLatencyMs?(d.avgLatencyMs/1000).toFixed(1)+"s":"—"}</div><div class="lbl">Avg response time</div></div>
+        <div class="stat-card"><div class="num">${d.activeKeys}<span style=${{fontSize:"1rem",color:"var(--ink-3)"}}>/${d.totalKeys}</span></div><div class="lbl">Active keys</div></div>
       </div>
       <div class="section-h">Language mix</div>
       <div class="card" style=${{padding:"18px 20px"}}>
-        <div class="lang-bars">${Object.entries(d.languages).map(([k,v])=>html`<div class="lang-bar-row" key=${k}><span class="lbl">${LANG_LABELS[k]||k}</span><div class="lang-bar-track"><div class="lang-bar-fill" style=${{width:Math.round(v/langTotal*100)+"%"}}></div><span class="cnt">${v}</span></div>`)}</div>
+        <div class="lang-bars">${Object.entries(d.languages).map(([k,v])=>html`<div class="lang-bar-row" key=${k}><span class="lbl">${LANG_LABELS[k]||k}</span><div class="lang-bar-track"><div class="lang-bar-fill" style=${{width:Math.round(v/langTotal*100)+"%"}}></div><span class="cnt">${v}</span></div></div>`)}</div>
+      </div>
       <div class="section-h">Recent activity</div>
-      <div class="card activity">${d.recent.length===0?html`<div class="empty-hint">No questions answered yet.</div>`:d.recent.map((r,i)=>html`<div class="activity-row" key=${i}><span class="t">${timeAgo(r.ts)}</span><span class=${"pill "+(r.source==="faq-cache"?"cache":"src")}>${r.source==="faq-cache"?"⚡ cache":(r.model||"").replace("sarvam:","")}</span><span class="muted">${LANG_LABELS[r.language]||r.language}</span><span class="muted" style=${{marginLeft:"auto"}}>${(r.latencyMs/1000).toFixed(1)}s</span></div>`)}</div>`;
+      <div class="card activity">${d.recent.length===0?html`<div class="empty-hint">No questions answered yet.</div>`:d.recent.map((r,i)=>html`<div class="activity-row" key=${i}><span class="t">${timeAgo(r.ts)}</span><span class=${"pill "+(r.source==="faq-cache"?"cache":"src")}>${r.source==="faq-cache"?"⚡ cache":(r.model||"").replace("sarvam:","")}</span><span class="muted">${LANG_LABELS[r.language]||r.language}</span><span class="muted" style=${{marginLeft:"auto"}}>${(r.latencyMs/1000).toFixed(1)}s</span></div>`)}</div>
+      ${d.catalogueCalls>0?html`<div class="section-h">Catalogue matching (order-assist extension)</div>`:""}
+      ${d.catalogueCalls>0?html`<div class="card activity">
+        <div class="activity-row"><span class="muted">${d.catalogueCalls} calls</span><span class="muted">${d.catalogueFailures} failed</span><span class="muted" style=${{marginLeft:"auto"}}>${d.catalogueFailureRate}% failure rate</span></div>
+        ${d.catalogueRecentFailures.map((f,i)=>html`<div class="activity-row" key=${i}><span class="t">${timeAgo(f.ts)}</span><span class=${"pill src"}>${f.endpoint}</span><span class="muted">${f.error}</span></div>`)}
+      </div>`:""}
+    </div>`;
 }
 
 // ---------- Cost ----------
@@ -123,15 +131,19 @@ function Cost({ token, projectId, onChange }) {
   const pct = Math.min(100, Math.round(d.sarvam.count/d.sarvam.limit*100)); const warn = pct >= 80;
   return html`
     <div class="panel"><h1>Cost</h1><p class="lead">What this project's answers cost, and which model is allowed to answer them.</p>
-      <div class="cap-bar-wrap"><div class="cap-bar-head"><span>Sarvam cloud calls today</span><span class="n">${d.sarvam.count} / ${d.sarvam.limit}</span></div><div class="cap-track"><div class=${"cap-fill"+(warn?" warn":"")} style=${{width:pct+"%"}}></div></div>
+      <div class="cap-bar-wrap">
+        <div class="cap-bar-head"><span>Sarvam cloud calls today</span><span class="n">${d.sarvam.count} / ${d.sarvam.limit}</span></div>
+        <div class="cap-track"><div class=${"cap-fill"+(warn?" warn":"")} style=${{width:pct+"%"}}></div></div>
+      </div>
       <div class="section-h">This project's model policy</div>
       <div class="card">
-        <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:d.allowCloud?"var(--amber)":"var(--ink-3)"}}></span>Sarvam AI (cloud)</span><div class="agent-meta"><span class="agent-cost cloud">${d.allowCloud?"allowed":"disabled"}</span><span class="agent-count">${d.sarvamCalls}</span><button class=${"switch"+(d.allowCloud?" on":"")} onClick=${toggleCloud}></button></div>
-        <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:"var(--ink-3)"}}></span>Local model (Ollama)</span><div class="agent-meta"><span class="agent-cost free">$0</span><span class="agent-count">${d.localCalls}</span></div>
-        <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:"var(--accent)"}}></span>FAQ cache</span><div class="agent-meta"><span class="agent-cost free">$0</span><span class="agent-count">${d.cacheHits}</span></div>
+        <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:d.allowCloud?"var(--amber)":"var(--ink-3)"}}></span>Sarvam AI (cloud)</span><div class="agent-meta"><span class="agent-cost cloud">${d.allowCloud?"allowed":"disabled"}</span><span class="agent-count">${d.sarvamCalls}</span><button class=${"switch"+(d.allowCloud?" on":"")} onClick=${toggleCloud}></button></div></div>
+        <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:"var(--ink-3)"}}></span>Local model (Ollama)</span><div class="agent-meta"><span class="agent-cost free">$0</span><span class="agent-count">${d.localCalls}</span></div></div>
+        <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:"var(--accent)"}}></span>FAQ cache</span><div class="agent-meta"><span class="agent-cost free">$0</span><span class="agent-count">${d.cacheHits}</span></div></div>
       </div>
       <div class="section-h">Cache</div>
-      <div class="card" style=${{padding:"16px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style=${{fontSize:14,fontWeight:500}}>${d.cacheHits} instant answers, ${d.cacheHitRate}% hit rate</div><button class="btn danger" onClick=${clearCache}>Clear cache</button></div>`;
+      <div class="card" style=${{padding:"16px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style=${{fontSize:14,fontWeight:500}}>${d.cacheHits} instant answers, ${d.cacheHitRate}% hit rate</div></div><button class="btn danger" onClick=${clearCache}>Clear cache</button></div>
+    </div>`;
 }
 
 // ---------- API Keys ----------

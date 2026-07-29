@@ -29,6 +29,9 @@ def _empty():
         "lang_counts": {"latin": 0, "devanagari": 0, "tamil": 0},
         "latencies_ms": [],
         "recent": [],  # [{ts, language, source, model, latencyMs}] - no question/answer text
+        "catalogue_calls": 0,
+        "catalogue_failures": 0,
+        "catalogue_recent_failures": [],  # [{ts, endpoint, error}] - no quotation/catalogue content
     }
 
 
@@ -77,6 +80,23 @@ def record(stats_path, source, model, language, latency_ms):
         _save(stats_path, d)
 
 
+def record_catalogue(stats_path, endpoint, ok, error=None):
+    """Track a catalogue-matching call (/api/catalogue/match, /note,
+    /complementary) so a failure (embedding service down, LLM pipeline down,
+    etc.) shows up on the dashboard instead of only ever being visible as a
+    silent fail-open in the rep's browser console.
+    """
+    with _lock:
+        d = _load(stats_path)
+        d["catalogue_calls"] = d.get("catalogue_calls", 0) + 1
+        if not ok:
+            d["catalogue_failures"] = d.get("catalogue_failures", 0) + 1
+            d["catalogue_recent_failures"] = (d.get("catalogue_recent_failures", []) + [
+                {"ts": time.time(), "endpoint": endpoint, "error": str(error)[:300]},
+            ])[-_RECENT_CAP:]
+        _save(stats_path, d)
+
+
 def snapshot(stats_path):
     d = _load(stats_path)
     lat = d.get("latencies_ms", [])
@@ -92,4 +112,9 @@ def snapshot(stats_path):
         "avgLatencyMs": round(sum(lat) / len(lat)) if lat else 0,
         "languages": d["lang_counts"],
         "recent": list(reversed(d.get("recent", []))),
+        "catalogueCalls": d.get("catalogue_calls", 0),
+        "catalogueFailures": d.get("catalogue_failures", 0),
+        "catalogueFailureRate": round(
+            d.get("catalogue_failures", 0) / (d.get("catalogue_calls", 0) or 1) * 100, 1),
+        "catalogueRecentFailures": list(reversed(d.get("catalogue_recent_failures", []))),
     }

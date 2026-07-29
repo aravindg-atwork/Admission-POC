@@ -1,0 +1,1973 @@
+{
+  "trustScore": 97.7,
+  "perBlock": {
+    "fact": {
+      "passed": 128,
+      "total": 130
+    },
+    "romanized": {
+      "passed": 14,
+      "total": 16
+    },
+    "nuance": {
+      "passed": 5,
+      "total": 5
+    },
+    "fabricate": {
+      "passed": 34,
+      "total": 35
+    },
+    "premise": {
+      "passed": 47,
+      "total": 48
+    },
+    "consistency": {
+      "passed": 40,
+      "total": 40
+    },
+    "consistency_summary": {
+      "passed": 8,
+      "total": 8
+    },
+    "cache": {
+      "passed": 3,
+      "total": 3
+    }
+  },
+  "records": [
+    {
+      "block": "fact",
+      "id": "tuition_1y",
+      "lang": "hi",
+      "question": "पहले वर्ष की ट्यूशन फीस कितनी है?",
+      "expected": "27500",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "पहले वर्ष की ट्यूशन फीस 27,500 रुपये है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        12,
+        25,
+        34,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 10845,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "tuition_1y",
+      "lang": "mr",
+      "question": "पहिल्या वर्षाची ट्यूशन फी किती आहे?",
+      "expected": "27500",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "पहिल्या वर्षाची ट्यूशन फी 27500 रुपये आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        25,
+        32,
+        34,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 14114,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "admission_unreserved",
+      "lang": "hi",
+      "question": "अनारक्षित वर्ग के लिए कुल प्रवेश शुल्क कितना है?",
+      "expected": "62635",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "अनारक्षित वर्ग के लिए प्रवेश शुल्क 62635 रुपये है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        9,
+        12,
+        13,
+        14,
+        25,
+        28,
+        39,
+        40
+      ],
+      "error": null,
+      "latencyMs": 17545,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "admission_unreserved",
+      "lang": "mr",
+      "question": "खुल्या प्रवर्गासाठी एकूण प्रवेश शुल्क किती आहे?",
+      "expected": "62635",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "खुल्या प्रवर्गासाठी एकूण प्रवेश शुल्क Rs. 62635/- आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        6,
+        12,
+        25,
+        26,
+        39,
+        40,
+        41,
+        52
+      ],
+      "error": null,
+      "latencyMs": 17439,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "admission_reserved",
+      "lang": "hi",
+      "question": "आरक्षित वर्ग के लिए प्रवेश शुल्क कितना है?",
+      "expected": "26135",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "आरक्षित श्रेणी के लिए प्रवेश शुल्क 26135/- रुपये है, लेकिन यह शुल्क तभी लागू होगा जब ट्यूशन, परीक्षा और लाइब्रेरी शुल्क सरकार से प्राप्त कर लिए जाएं।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        9,
+        12,
+        13,
+        14,
+        15,
+        25,
+        29,
+        40
+      ],
+      "error": null,
+      "latencyMs": 16218,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "admission_reserved",
+      "lang": "mr",
+      "question": "आरक्षित प्रवर्गासाठी प्रवेश शुल्क किती आहे?",
+      "expected": "26135",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "आरक्षित प्रवर्गासाठी प्रवेश शुल्क Rs. 26,135/- आहे, परंतु जर सरकारी शुल्काची अट पूर्ण झाली तरच.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        12,
+        14,
+        15,
+        25,
+        26,
+        40
+      ],
+      "error": null,
+      "latencyMs": 17979,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "exam_fee_1y",
+      "lang": "hi",
+      "question": "पहले वर्ष की परीक्षा शुल्क कितनी है?",
+      "expected": "6000",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "पहले वर्ष की परीक्षा शुल्क 6000 रुपये है। यह शुल्क कॉलेज शुल्क के हिस्से के रूप में शामिल है। विश्वविद्यालय किसी भी समय शुल्क संरचना बढ़ाने का अधिकार सुरक्षित रखता है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        25,
+        32,
+        34,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 16788,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "internship_fee",
+      "lang": "mr",
+      "question": "इंटर्नशिप फी किती आहे?",
+      "expected": "24000",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "इंटर्नशिप फी 24000 रुपये आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        12,
+        25,
+        31,
+        32,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 10513,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "min_marks",
+      "lang": "hi",
+      "question": "पात्रता के लिए बारहवीं में कम से कम कितने प्रतिशत अंक चाहिए?",
+      "expected": "50%",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "Unreserved category के लिए बारहवीं में Physics, Chemistry, Biology या Biotechnology और English मिलाकर कम से कम 50% अंक चाहिए, जबकि Reserved category के लिए यह 47.50% है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        8,
+        9,
+        11,
+        12,
+        20,
+        22,
+        27
+      ],
+      "error": null,
+      "latencyMs": 17555,
+      "script_returned": "latin"
+    },
+    {
+      "block": "fact",
+      "id": "min_marks",
+      "lang": "mr",
+      "question": "पात्रतेसाठी बारावीत किमान किती टक्के गुण आवश्यक आहेत?",
+      "expected": "50%",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "बारावीत Physics, Chemistry, Biology किंवा Biotechnology आणि English या विषयांत एकत्रितपणे किमान 50% गुण मिळवणे आवश्यक आहे. मात्र, प्रवेश केवळ National Eligibility Cum Entrance Test (NEET-UG-2025) च्या गुणांवर आधारित दिला जातो.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        8,
+        9,
+        11,
+        12,
+        20,
+        22,
+        27
+      ],
+      "error": null,
+      "latencyMs": 17210,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "attendance",
+      "lang": "hi",
+      "question": "कक्षाओं में न्यूनतम कितनी उपस्थिति अनिवार्य है?",
+      "expected": "75%",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "कक्षाओं में न्यूनतम 75% उपस्थिति अनिवार्य है, जो सिद्धांत और व्यावहारिक कक्षाओं के लिए अलग-अलग है। इस उपस्थिति के बिना छात्र वार्षिक परीक्षा में शामिल नहीं हो सकते।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        6,
+        8,
+        12,
+        13,
+        20,
+        21,
+        22,
+        32,
+        34
+      ],
+      "error": null,
+      "latencyMs": 12224,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "attendance",
+      "lang": "mr",
+      "question": "वर्गांमध्ये किमान किती उपस्थिती आवश्यक आहे?",
+      "expected": "75%",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "वर्गांमध्ये किमान 75% उपस्थिती आवश्यक आहे, जी सिद्धांत आणि प्रात्यक्षिक विषयांसाठी स्वतंत्रपणे अनिवार्य आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        5,
+        8,
+        9,
+        12,
+        20,
+        21,
+        22,
+        29,
+        32,
+        55
+      ],
+      "error": null,
+      "latencyMs": 15073,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "ews_pct",
+      "lang": "hi",
+      "question": "आर्थिक रूप से कमजोर वर्ग के लिए कितने प्रतिशत सीटें आरक्षित हैं?",
+      "expected": "10%",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "आर्थिक रूप से कमजोर वर्ग (EWS) के लिए कुल इंटेक क्षमता की 10% सीटें आरक्षित हैं।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        5,
+        6,
+        13,
+        18,
+        36,
+        38,
+        45
+      ],
+      "error": null,
+      "latencyMs": 14363,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "agri_pct",
+      "lang": "mr",
+      "question": "शेतकरी (Agriculturist) प्रवर्गासाठी किती टक्के जागा राखीव आहेत?",
+      "expected": "6%",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "शेतीकरी (एजी) प्रवर्गासाठी 6% जागा राखीव आहेत.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        5,
+        9,
+        10,
+        12,
+        13,
+        15,
+        18
+      ],
+      "error": null,
+      "latencyMs": 13570,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "last_date_app",
+      "lang": "hi",
+      "question": "ऑनलाइन आवेदन पत्र जमा करने की अंतिम तिथि क्या है?",
+      "expected": "12/07/2025",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "ऑनलाइन आवेदन पत्र जमा करने की अंतिम तिथि 12/07/2025 है। इस तिथि के बाद प्राप्त आवेदन पत्र स्वीकार नहीं किए जाएंगे।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        25,
+        26,
+        51,
+        52,
+        53
+      ],
+      "error": null,
+      "latencyMs": 14194,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "last_date_app",
+      "lang": "mr",
+      "question": "ऑनलाइन अर्ज सादर करण्याची अंतिम तारीख काय आहे?",
+      "expected": "12/07/2025",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "प्रवेशासाठी ऑनलाइन अर्ज सादर करण्याची अंतिम तारीख 12/07/2025 आहे. या तारखेला किंवा त्यापूर्वी प्राप्त झालेला अर्जच प्रवेशासाठी विचारात घेतला जाईल.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        21,
+        25,
+        26,
+        51,
+        52,
+        53
+      ],
+      "error": null,
+      "latencyMs": 19238,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "final_merit",
+      "lang": "hi",
+      "question": "अंतिम मेरिट सूची कब प्रदर्शित होगी?",
+      "expected": "31/07/2025",
+      "checks": {
+        "correct_value": false,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "प्रवेश नियमावली में अंतिम मेरिट सूची प्रदर्शित करने की कोई विशिष्ट तिथि नहीं दी गई है। यह सूची वेबसाइट www.mafsu.ac.in पर प्रदर्शित की जाएगी और उम्मीदवारों को ईमेल या एसएमएस के माध्यम से सूचित किया जाएगा।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        25,
+        26,
+        27,
+        28,
+        52,
+        53
+      ],
+      "error": null,
+      "latencyMs": 36415,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "prov_merit",
+      "lang": "mr",
+      "question": "तात्पुरती गुणवत्ता यादी कधी जाहीर होणार आहे?",
+      "expected": "23/07/2025",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "तात्पुरती गुणवत्ता यादी 23/07/2025 रोजी जाहीर होणार आहे. ही यादी www.mafsu.ac.in या संकेतस्थळावर प्रदर्शित केली जाईल आणि उमेदवारांना ईमेल किंवा एसएमएसद्वारे माहिती दिली जाईल.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        26,
+        27,
+        28,
+        52,
+        53
+      ],
+      "error": null,
+      "latencyMs": 13845,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "grievance_last",
+      "lang": "hi",
+      "question": "शिकायत (grievance) आवेदन की अंतिम तिथि क्या है?",
+      "expected": "25/07/2025",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "शिकायत आवेदन की अंतिम तिथि 25/07/2025 है। यह तिथि प्रवेश कार्यक्रम के अनुसार है, जैसा कि परिशिष्ट-XIV में उल्लेखित है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        25,
+        26,
+        27,
+        52,
+        53,
+        57
+      ],
+      "error": null,
+      "latencyMs": 13894,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "cvc_deadline",
+      "lang": "mr",
+      "question": "जात वैधता प्रमाणपत्र (CVC) सादर करण्याची शेवटची तारीख काय आहे?",
+      "expected": "13/08/2025",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "जात वैधता प्रमाणपत्र (CVC) सादर करण्याची शेवटची तारीख 13/08/2025 आहे. उमेदवारांना या तारखेपर्यंत CVC सादर करणे आवश्यक आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        14,
+        18,
+        22,
+        23,
+        25,
+        53,
+        55
+      ],
+      "error": null,
+      "latencyMs": 16003,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "entrance_exam",
+      "lang": "hi",
+      "question": "प्रवेश के लिए कौन सी प्रवेश परीक्षा आवश्यक है?",
+      "expected": "NEET-UG-2025",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "B.V.Sc. & A.H. में प्रवेश के लिए National Eligibility Cum Entrance Test (NEET-UG-2025) परीक्षा आवश्यक है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        9,
+        11,
+        12,
+        20,
+        21,
+        25,
+        27,
+        29,
+        40,
+        52
+      ],
+      "error": null,
+      "latencyMs": 13412,
+      "script_returned": "latin"
+    },
+    {
+      "block": "fact",
+      "id": "entrance_exam",
+      "lang": "mr",
+      "question": "प्रवेशासाठी कोणती प्रवेश परीक्षा आवश्यक आहे?",
+      "expected": "NEET-UG-2025",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "प्रवेशासाठी National Eligibility Cum Entrance Test (NEET-UG-2025) आवश्यक आहे. प्रवेशाचा निर्णय या परीक्षेत मिळालेल्या गुणांच्या आधारावर घेतला जातो.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        9,
+        11,
+        12,
+        20,
+        21,
+        25,
+        27,
+        40,
+        51,
+        52
+      ],
+      "error": null,
+      "latencyMs": 14600,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "internship_dur",
+      "lang": "hi",
+      "question": "इंटर्नशिप कितने महीने की होती है?",
+      "expected": "12 months / 1 year",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "प्रवेश पत्र के अनुसार, इंटर्नशिप 12 महीने की होती है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        8,
+        31,
+        32,
+        34,
+        39,
+        41
+      ],
+      "error": null,
+      "latencyMs": 17559,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "refund_100",
+      "lang": "mr",
+      "question": "प्रवेश रद्द केल्यास १००% फी परतावा कधी मिळतो?",
+      "expected": "15 days or more before last date",
+      "checks": {
+        "correct_value": false,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "१००% शुल्क परतावा तेव्हाच मिळतो, जेव्हा प्रवेशासाठी औपचारिकपणे सूचित केलेल्या शेवटच्या तारखेपूर्वी पंधरा दिवस किंवा त्यापूर्वी प्रवेश रद्द केला जातो.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        5,
+        12,
+        19,
+        25,
+        26,
+        29,
+        30,
+        34,
+        40,
+        52
+      ],
+      "error": null,
+      "latencyMs": 13472,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "nri_special",
+      "lang": "hi",
+      "question": "NRI उम्मीदवारों के लिए विशेष शुल्क कितना है?",
+      "expected": "$12,000 per professional year",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "NRI/FN/PIO/OCI उम्मीदवारों के लिए विशेष शुल्क 12,000 डॉलर (U.S. dollar) प्रति प्रोफेशनल वर्ष है, जो नियमित शुल्क के अतिरिक्त है। यह शुल्क डिग्री कोर्स के दौरान लागू होता है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        12,
+        25,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 23360,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fact",
+      "id": "medium",
+      "lang": "mr",
+      "question": "शिक्षणाचे माध्यम कोणते आहे?",
+      "expected": "English",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "शिक्षणाचे माध्यम English only आहे. याचा अर्थ असा की सर्व अभ्यासक्रम आणि परीक्षा English मध्येच घेतल्या जातात.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        3,
+        6,
+        8,
+        9,
+        24,
+        25,
+        31,
+        48
+      ],
+      "error": null,
+      "latencyMs": 17103,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "romanized",
+      "id": "tuition_1y_roman",
+      "lang": "hi",
+      "question": "pehle saal ki tuition fees kitni hai bhai?",
+      "expected": "27500",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true
+      },
+      "status": 200,
+      "text": "Pehle saal ki tuition fees Rs. 27,500 hai.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        12,
+        25,
+        34,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 10133,
+      "script_returned": "latin"
+    },
+    {
+      "block": "romanized",
+      "id": "last_date_roman",
+      "lang": "hi",
+      "question": "online form bharne ki last date kya hai?",
+      "expected": "12/07/2025",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true
+      },
+      "status": 200,
+      "text": "Online application form bharne ki last date 12/07/2025 hai. J&K ke liye hard copy ki last date 14/07/2025 hai.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        21,
+        25,
+        26,
+        51,
+        53,
+        55,
+        57
+      ],
+      "error": null,
+      "latencyMs": 13465,
+      "script_returned": "latin"
+    },
+    {
+      "block": "romanized",
+      "id": "min_marks_roman",
+      "lang": "mr",
+      "question": "patratesathi barawit kiti marks pahije?",
+      "expected": "50%",
+      "checks": {
+        "correct_value": false,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true
+      },
+      "status": 200,
+      "text": "प्रस्तावनेत अर्जासाठी आवश्यक असलेल्या अचूक गुणांची माहिती दिलेली नाही, म्हणून तुम्ही प्रवेश कार्यालयाशी संपर्क साधू शकता.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        5,
+        6,
+        7,
+        9,
+        21,
+        25,
+        29,
+        51
+      ],
+      "error": null,
+      "latencyMs": 17883,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "romanized",
+      "id": "attendance_roman",
+      "lang": "mr",
+      "question": "college madhe kiti attendance lagto?",
+      "expected": "75%",
+      "checks": {
+        "correct_value": false,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true
+      },
+      "status": 200,
+      "text": "Dnyanpurvak saangayche ki, dilelya prospectus madhe college madhil attendance baddal kontihi mahiti nahi. Tyaasathi tumhi admission office shi sampark karu shakta.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        21,
+        25,
+        28,
+        29,
+        30,
+        33,
+        34,
+        52
+      ],
+      "error": null,
+      "latencyMs": 14141,
+      "script_returned": "latin"
+    },
+    {
+      "block": "nuance",
+      "id": "laptop_not_mandatory",
+      "lang": "mr",
+      "question": "प्रवेशासाठी लॅपटॉप घेणे बंधनकारक आहे का?",
+      "expected": "advised, NOT mandatory - must not promote advice into a requirement",
+      "checks": {
+        "correct_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "प्रवेशासाठी लॅपटॉप असणे अनिवार्य नाही, परंतु अर्ज भरताना डेस्कटॉप किंवा लॅपटॉप वापरण्याचा सल्ला दिला आहे. मोबाईल फोन वापरण्यास मनाई आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        7,
+        20,
+        21,
+        25,
+        28,
+        29,
+        52
+      ],
+      "error": null,
+      "latencyMs": 32446,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fabricate",
+      "id": "canteen",
+      "lang": "hi",
+      "question": "कॉलेज की कैंटीन में खाने का मासिक खर्च कितना है?",
+      "expected": "should say the prospectus doesn't specify",
+      "checks": {
+        "admits_unknown": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "प्रॉस्पेक्टस में कॉलेज की कैंटीन में खाने के मासिक खर्च का उल्लेख नहीं है। इसमें hostel fees में एक बार का mess deposit शामिल है, लेकिन अलग से मासिक mess fee का विवरण नहीं है। आपको admission office से संपर्क करना चाहिए।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        11,
+        25,
+        30,
+        33,
+        39,
+        40,
+        52,
+        53
+      ],
+      "error": null,
+      "latencyMs": 15919,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fabricate",
+      "id": "gym",
+      "lang": "mr",
+      "question": "कॉलेजमध्ये जिम आणि स्विमिंग पूल आहे का?",
+      "expected": "should say the prospectus doesn't specify",
+      "checks": {
+        "admits_unknown": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": false
+      },
+      "status": 200,
+      "text": "Dilelya praveshpatra madhye college madhye gym ani swimming pool aahe ki nahi, ya baddal kontihi mahiti nahi. Admission office shi sampark kelyas tumhi ya baddal adhik mahiti milavu shakta.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        4,
+        7,
+        27,
+        33,
+        34,
+        48,
+        52
+      ],
+      "error": null,
+      "latencyMs": 13507,
+      "script_returned": "latin"
+    },
+    {
+      "block": "fabricate",
+      "id": "placement",
+      "lang": "hi",
+      "question": "इस कोर्स के बाद औसत सैलरी पैकेज कितना मिलता है?",
+      "expected": "should say the prospectus doesn't specify",
+      "checks": {
+        "admits_unknown": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "प्रस्तावना में इस कोर्स के बाद औसत वेतन पैकेज के बारे में कोई जानकारी नहीं दी गई है। आपको प्रवेश कार्यालय से संपर्क करना चाहिए।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        8,
+        12,
+        25,
+        31,
+        32,
+        39,
+        41
+      ],
+      "error": null,
+      "latencyMs": 17842,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fabricate",
+      "id": "wifi",
+      "lang": "mr",
+      "question": "हॉस्टेलमध्ये वायफाय आणि एसी रूम आहे का?",
+      "expected": "should say the prospectus doesn't specify",
+      "checks": {
+        "admits_unknown": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "दिलेल्या माहितीमध्ये हॉस्टेलमधील वायफाय आणि एसी रूमबद्दल स्पष्ट उल्लेख नाही. प्रस्ताविकेत हॉस्टेल सुविधा आणि शुल्काची सविस्तर माहिती दिली आहे, परंतु खोलीत वायफाय किंवा वातानुकूलन (एसी) आहे की नाही, हे स्पष्ट केलेले नाही. या माहितीसाठी तुम्ही प्रवेश कार्यालयाशी संपर्क साधू शकता.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        6,
+        12,
+        19,
+        25,
+        30,
+        32,
+        40,
+        51
+      ],
+      "error": null,
+      "latencyMs": 18070,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fabricate",
+      "id": "library_hours",
+      "lang": "hi",
+      "question": "लाइब्रेरी सुबह कितने बजे खुलती है?",
+      "expected": "should say the prospectus doesn't specify",
+      "checks": {
+        "admits_unknown": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "प्रॉस्पेक्टस में लाइब्रेरी के खुलने के समय की जानकारी नहीं दी गई है। आप एडमिशन ऑफिस से संपर्क करके यह जानकारी प्राप्त कर सकते हैं।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        9,
+        13,
+        22,
+        26,
+        28,
+        29,
+        40,
+        52,
+        55
+      ],
+      "error": null,
+      "latencyMs": 12877,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fabricate",
+      "id": "bus",
+      "lang": "mr",
+      "question": "कॉलेजची बस सेवा कोणत्या भागातून येते?",
+      "expected": "should say the prospectus doesn't specify",
+      "checks": {
+        "admits_unknown": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "दिलेल्या प्रॉस्पेक्टसच्या उताऱ्यांमध्ये कॉलेज बस सेवेबद्दल, तिच्या सुरुवातीच्या ठिकाणासह कोणतीही माहिती दिलेली नाही. बस सेवेच्या तपशिलांसाठी, कृपया कॉलेजच्या प्रवेश कार्यालयाशी संपर्क साधावा.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        7,
+        25,
+        28,
+        30,
+        32,
+        33,
+        52,
+        53
+      ],
+      "error": null,
+      "latencyMs": 14997,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "fabricate",
+      "id": "faculty_count",
+      "lang": "hi",
+      "question": "नागपुर कॉलेज में कितने प्रोफेसर हैं?",
+      "expected": "should say the prospectus doesn't specify",
+      "checks": {
+        "admits_unknown": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "नागपुर कॉलेज में प्रोफेसरों की संख्या प्रॉस्पेक्टस में नहीं बताई गई है। सटीक जानकारी के लिए आप एडमिशन ऑफिस से संपर्क कर सकते हैं।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        2,
+        7,
+        9,
+        10,
+        25,
+        33,
+        35,
+        37,
+        40
+      ],
+      "error": null,
+      "latencyMs": 15697,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "premise",
+      "id": "fee_1lakh",
+      "lang": "hi",
+      "question": "मैंने सुना है कि पहले साल की ट्यूशन फीस 1 लाख रुपये है, सही है ना?",
+      "expected": "tuition is 27500, not 1 lakh",
+      "checks": {
+        "does_not_lead_with_yes": true,
+        "states_true_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "सही है। पहला साल की ट्यूशन फीस 27500 रुपये है।",
+      "model": "gemma2:2b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        12,
+        19,
+        25,
+        34,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 97778,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "premise",
+      "id": "fee_1lakh",
+      "lang": "mr",
+      "question": "मी ऐकलं की पहिल्या वर्षाची ट्यूशन फी १ लाख रुपये आहे, बरोबर ना?",
+      "expected": "tuition is 27500, not 1 lakh",
+      "checks": {
+        "does_not_lead_with_yes": true,
+        "states_true_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "पहिल्या वर्षाची ट्यूशन फी १ लाख रुपये नाही. पहिल्या वर्षाची ट्यूशन फी २७,५०० रुपये आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        12,
+        25,
+        32,
+        34,
+        39,
+        40,
+        41,
+        55
+      ],
+      "error": null,
+      "latencyMs": 11839,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "premise",
+      "id": "marks_40",
+      "lang": "hi",
+      "question": "बारहवीं में 40% अंक होने पर भी एडमिशन मिल जाता है ना?",
+      "expected": "minimum is 50%, so 40% is not enough",
+      "checks": {
+        "does_not_lead_with_yes": true,
+        "states_true_value": false,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "प्रवेश 12वीं में 40% अंकों के आधार पर मिलता है या नहीं, यह प्रॉस्पेक्टस में स्पष्ट रूप से नहीं बताया गया है। प्रवेश योग्यता के आधार पर होता है, जो 'मेरिट' पर निर्भर करती है। यह मेरिट 12वीं की मेरिट या NEET-UG-2025 के स्कोर से तय की जाती है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        11,
+        20,
+        21,
+        23,
+        27,
+        28,
+        30,
+        55
+      ],
+      "error": null,
+      "latencyMs": 17571,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "premise",
+      "id": "marks_40",
+      "lang": "mr",
+      "question": "बारावीत ४०% गुण असले तरी प्रवेश मिळतो ना?",
+      "expected": "minimum is 50%, so 40% is not enough",
+      "checks": {
+        "does_not_lead_with_yes": true,
+        "states_true_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "नाही, बारावीत ४०% गुण असूनही प्रवेश मिळणे शक्य नाही. प्रवेशासाठी भौतिकशास्त्र, रसायनशास्त्र, जीवशास्त्र किंवा जैवतंत्रज्ञान आणि इंग्रजी या विषयांत एकत्रितपणे किमान ५०% गुण असणे आवश्यक आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        9,
+        12,
+        20,
+        21,
+        24,
+        25,
+        50,
+        55
+      ],
+      "error": null,
+      "latencyMs": 16769,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "premise",
+      "id": "date_aug30",
+      "lang": "hi",
+      "question": "ऑनलाइन आवेदन की अंतिम तिथि 30 अगस्त 2025 है ना?",
+      "expected": "last date is 12/07/2025, not 30 August",
+      "checks": {
+        "does_not_lead_with_yes": true,
+        "states_true_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "नहीं, ऑनलाइन आवेदन की अंतिम तिथि 12 जुलाई 2025 है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        21,
+        25,
+        26,
+        27,
+        51,
+        52,
+        53
+      ],
+      "error": null,
+      "latencyMs": 18239,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "premise",
+      "id": "attendance_50",
+      "lang": "mr",
+      "question": "उपस्थिती फक्त ५०% असली तरी चालते ना?",
+      "expected": "75% attendance is mandatory",
+      "checks": {
+        "does_not_lead_with_yes": true,
+        "states_true_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "नाही, ५०% उपस्थिती पुरेशी नाही. अभ्यासक्रमासाठी किमान ७५% उपस्थिती असणे आवश्यक आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        6,
+        11,
+        12,
+        17,
+        20,
+        25,
+        26,
+        32,
+        52,
+        55
+      ],
+      "error": null,
+      "latencyMs": 14725,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "premise",
+      "id": "no_neet",
+      "lang": "hi",
+      "question": "इस कोर्स के लिए NEET की जरूरत नहीं है, है ना?",
+      "expected": "NEET-UG-2025 IS required",
+      "checks": {
+        "does_not_lead_with_yes": true,
+        "states_true_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "नहीं, NEET-UG-2025 की आवश्यकता है। सभी अंशों में स्पष्ट रूप से कहा गया है कि B.V.Sc. & A.H. डिग्री कोर्स में प्रवेश नेशनल एलिजिबिलिटी क्युम एन्ट्रेन्स टेस्ट (NEET-UG-2025) के आधार पर ही होगा।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        8,
+        9,
+        11,
+        12,
+        21,
+        23,
+        24,
+        54,
+        55
+      ],
+      "error": null,
+      "latencyMs": 10289,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "premise",
+      "id": "refund_full",
+      "lang": "mr",
+      "question": "प्रवेश रद्द केल्यावर कधीही १००% फी परत मिळते ना?",
+      "expected": "100% refund only 15+ days before the last date",
+      "checks": {
+        "does_not_lead_with_yes": true,
+        "states_true_value": true,
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "नाही, प्रवेश रद्द केल्यावर कधीही 100% फी परत मिळत नाही. 100% रिफंड फक्त तेव्हाच मिळतो जेव्हा प्रवेशाची शेवटची तारीख 15 दिवस किंवा त्यापूर्वी रद्द केला जातो, आणि या वेळी 5% पर्यंत प्रोसेसिंग चार्ज कापला जातो. प्रवेश सुरू झाल्यानंतर किंवा डिग्री कोर्स पूर्ण झाल्यानंतर कोणताही रिफंड (केवळ Caution Money सोडून) दिला जात नाही.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        5,
+        12,
+        23,
+        25,
+        26,
+        28,
+        29,
+        30,
+        40
+      ],
+      "error": null,
+      "latencyMs": 12528,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "consistency",
+      "id": "c_tuition",
+      "lang": "en",
+      "question": "What is the tuition fee for the first year?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true
+      },
+      "status": 200,
+      "text": "The tuition fee for the first year is Rs. 27500.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "latin",
+      "pages": [
+        25,
+        32,
+        34,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 11201,
+      "script_returned": "latin"
+    },
+    {
+      "block": "consistency",
+      "id": "c_tuition",
+      "lang": "hi",
+      "question": "पहले वर्ष की ट्यूशन फीस कितनी है?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "पहले वर्ष की ट्यूशन फीस 27,500 रुपये है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        12,
+        25,
+        34,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 9375,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "consistency",
+      "id": "c_tuition",
+      "lang": "mr",
+      "question": "पहिल्या वर्षाची ट्यूशन फी किती आहे?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "पहिल्या वर्षाची ट्यूशन फी 27,500 रुपये आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        25,
+        32,
+        34,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 13343,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "consistency_summary",
+      "id": "c_tuition",
+      "numbers": {
+        "en": [
+          27500
+        ],
+        "hi": [
+          27500
+        ],
+        "mr": [
+          27500
+        ]
+      },
+      "checks": {
+        "en_matches_hi": true,
+        "en_matches_mr": true
+      }
+    },
+    {
+      "block": "consistency",
+      "id": "c_lastdate",
+      "lang": "en",
+      "question": "What is the last date to submit the online application form?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true
+      },
+      "status": 200,
+      "text": "The last date to submit the online application form is 12/07/2025.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "latin",
+      "pages": [
+        21,
+        25,
+        26,
+        51,
+        53,
+        55,
+        57
+      ],
+      "error": null,
+      "latencyMs": 27740,
+      "script_returned": "latin"
+    },
+    {
+      "block": "consistency",
+      "id": "c_lastdate",
+      "lang": "hi",
+      "question": "ऑनलाइन आवेदन पत्र जमा करने की अंतिम तिथि क्या है?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "प्रॉस्पेक्टस के अनुसार, ऑनलाइन आवेदन पत्र जमा करने की अंतिम तिथि 12/07/2025 है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        25,
+        26,
+        51,
+        52,
+        53
+      ],
+      "error": null,
+      "latencyMs": 37707,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "consistency",
+      "id": "c_lastdate",
+      "lang": "mr",
+      "question": "ऑनलाइन अर्ज सादर करण्याची अंतिम तारीख काय आहे?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "ऑनलाइन अर्ज सादर करण्याची अंतिम तारीख 12/07/2025 आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        21,
+        25,
+        26,
+        51,
+        52,
+        53
+      ],
+      "error": null,
+      "latencyMs": 14979,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "consistency_summary",
+      "id": "c_lastdate",
+      "numbers": {
+        "en": [
+          12
+        ],
+        "hi": [
+          12
+        ],
+        "mr": [
+          12
+        ]
+      },
+      "checks": {
+        "en_matches_hi": true,
+        "en_matches_mr": true
+      }
+    },
+    {
+      "block": "consistency",
+      "id": "c_minmarks",
+      "lang": "en",
+      "question": "What is the minimum percentage required in 12th standard?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true
+      },
+      "status": 200,
+      "text": "Candidates must secure a minimum of 50% marks in Physics, Chemistry, Biology or Biotechnology and English taken together at the qualifying examination i.e. XII Std. or equivalent. This requirement is specified for candidates applying under the Goa Quota and J & K and Ladakh UT Quota.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "latin",
+      "pages": [
+        8,
+        9,
+        11,
+        12,
+        20,
+        22,
+        27,
+        32
+      ],
+      "error": null,
+      "latencyMs": 28009,
+      "script_returned": "latin"
+    },
+    {
+      "block": "consistency",
+      "id": "c_minmarks",
+      "lang": "hi",
+      "question": "बारहवीं में न्यूनतम कितने प्रतिशत अंक आवश्यक हैं?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "बारहवीं में न्यूनतम 50% अंक चाहिए।",
+      "model": "gemma2:2b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        9,
+        11,
+        12,
+        20,
+        21,
+        27,
+        30
+      ],
+      "error": null,
+      "latencyMs": 142243,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "consistency",
+      "id": "c_minmarks",
+      "lang": "mr",
+      "question": "बारावीत किमान किती टक्के गुण आवश्यक आहेत?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "दिलेल्या माहितीमध्ये सर्वसाधारणपणे बारावीत किमान टक्केवारीची अट दिलेली नाही. मात्र, गोवा कोटामध्ये भौतिकशास्त्र, रसायनशास्त्र, जीवशास्त्र आणि इंग्रजी या विषयांत 50% गुण आवश्यक आहेत.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        9,
+        12,
+        18,
+        20,
+        21,
+        22,
+        25,
+        27,
+        51,
+        55
+      ],
+      "error": null,
+      "latencyMs": 17328,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "consistency_summary",
+      "id": "c_minmarks",
+      "numbers": {
+        "en": [
+          50
+        ],
+        "hi": [
+          50
+        ],
+        "mr": [
+          50
+        ]
+      },
+      "checks": {
+        "en_matches_hi": true,
+        "en_matches_mr": true
+      }
+    },
+    {
+      "block": "consistency",
+      "id": "c_admissionfee",
+      "lang": "en",
+      "question": "What is the total admission fee for an open category candidate?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true
+      },
+      "status": 200,
+      "text": "The total admission fee for an open category candidate is Rs. 62635/-. This is the fee for the unreserved category as specified in the prospectus.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "latin",
+      "pages": [
+        12,
+        13,
+        22,
+        25,
+        26,
+        28,
+        29,
+        40
+      ],
+      "error": null,
+      "latencyMs": 32708,
+      "script_returned": "latin"
+    },
+    {
+      "block": "consistency",
+      "id": "c_admissionfee",
+      "lang": "hi",
+      "question": "अनारक्षित वर्ग के लिए कुल प्रवेश शुल्क कितना है?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "अनारक्षित वर्ग के लिए कुल प्रवेश शुल्क 62635/- है।",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        9,
+        12,
+        13,
+        14,
+        25,
+        28,
+        39,
+        40
+      ],
+      "error": null,
+      "latencyMs": 14002,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "consistency",
+      "id": "c_admissionfee",
+      "lang": "mr",
+      "question": "खुल्या प्रवर्गासाठी एकूण प्रवेश शुल्क किती आहे?",
+      "expected": "",
+      "checks": {
+        "no_page_handoff": true,
+        "no_markdown": true,
+        "no_english_fallback": true,
+        "in_devanagari": true
+      },
+      "status": 200,
+      "text": "खुल्या प्रवर्गासाठी एकूण प्रवेश शुल्क Rs. 62635/- आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        6,
+        12,
+        25,
+        26,
+        39,
+        40,
+        41,
+        52
+      ],
+      "error": null,
+      "latencyMs": 17476,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "consistency_summary",
+      "id": "c_admissionfee",
+      "numbers": {
+        "en": [
+          62635
+        ],
+        "hi": [
+          62635
+        ],
+        "mr": [
+          62635
+        ]
+      },
+      "checks": {
+        "en_matches_hi": true,
+        "en_matches_mr": true
+      }
+    },
+    {
+      "block": "cache",
+      "id": "repeat_hits_cache",
+      "lang": "hi",
+      "question": "पहले वर्ष की ट्यूशन फीस कितनी है?",
+      "expected": "source=faq-cache",
+      "checks": {
+        "is_cache_hit": true
+      },
+      "status": 200,
+      "text": "पहले वर्ष की ट्यूशन फीस 27,500 रुपये है।",
+      "model": "faq-cache",
+      "source": "faq-cache",
+      "language": "devanagari",
+      "pages": [
+        12,
+        25,
+        34,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 2181,
+      "script_returned": "devanagari"
+    },
+    {
+      "block": "cache",
+      "id": "no_cross_language_collision",
+      "lang": "mr",
+      "question": "पहिल्या वर्षाची ट्यूशन फी किती आहे?",
+      "expected": "Marathi must not be served the Hindi cache entry",
+      "checks": {
+        "answered_in_marathi": true,
+        "not_hindi_cache_text": true
+      },
+      "status": 200,
+      "text": "पहिल्या वर्षाची ट्यूशन फी Rs. 27500 आहे.",
+      "model": "sarvam:sarvam-30b",
+      "source": "rag",
+      "language": "devanagari",
+      "pages": [
+        25,
+        32,
+        34,
+        39,
+        40,
+        41
+      ],
+      "error": null,
+      "latencyMs": 15356,
+      "script_returned": "devanagari"
+    }
+  ]
+}
