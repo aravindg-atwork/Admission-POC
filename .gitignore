@@ -48,3 +48,6 @@ client_secret_*.json
 # scans it - Chrome warns (rightly) if a private key sits inside a loaded extension. ---
 extension/.keys/
 .venv-backend/
+
+# --- Demo transfer bundle (contains .env and live API keys - never commit) ---
+demo-bundle*.zip

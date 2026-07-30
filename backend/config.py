@@ -92,7 +92,7 @@ CHAT_FALLBACK = os.environ.get("CHAT_FALLBACK", "ollama")
 #
 # This is an extraction task against supplied excerpts, not a generative one, so
 # a low temperature is the correct default: quoting the right figure has one
-# right answer. Not 0 - sarvam-30b is a reasoning model and fully greedy
+# right answer. Not 0 - the Sarvam model is a reasoning model and fully greedy
 # decoding tends to make such models loop on hard prompts - but low enough that
 # repeated asks agree.
 CHAT_TEMPERATURE = float(os.environ.get("CHAT_TEMPERATURE", "0.2"))
@@ -113,7 +113,17 @@ OLLAMA_SEED = int(os.environ.get("OLLAMA_SEED", "42"))
 
 SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
 SARVAM_URL = os.environ.get("SARVAM_URL", "https://api.sarvam.ai/v1/chat/completions")
-SARVAM_MODEL = os.environ.get("SARVAM_MODEL", "sarvam-30b")
+# sarvam-30b was retired by Sarvam and now returns HTTP 400 on every request
+# ("Model 'sarvam-30b' has been deprecated. Please use one of the available
+# models instead: sarvam-105b."). Nothing about that failure is visible from the
+# app: llm.generate catches it and falls back to gemma2:2b, so the entire system
+# silently served a 2B local model instead of the cloud one - which is where the
+# garbled Hindi/Marathi answers were coming from, not from any of the retrieval
+# or prompting work. Verified on 2026-07-30 by calling the API directly.
+#
+# If Indic answer quality ever regresses for no apparent reason, check this line
+# and the backend's startup "Models :" line before looking anywhere else.
+SARVAM_MODEL = os.environ.get("SARVAM_MODEL", "sarvam-105b")
 # Charge safety: hard cap on Sarvam cloud calls per day. Once exceeded, the backend
 # silently falls back to the local model so it can never drift into paid usage. The
 # FAQ cache means repeated questions don't count against this at all.

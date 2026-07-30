@@ -33,14 +33,19 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-BASE = "http://localhost:5050"
-ADMIN = "poc-admin-dev-token"
+BASE = os.environ.get("BACKEND_URL", "http://localhost:5050")
+# Read from the environment like tools/test_matrix.py does. Hardcoding the
+# default meant this script 401'd on any machine whose ADMIN_TOKEN had been
+# changed in .env - and the failure comes after it prints "80 entries", so it
+# reads like the seeding worked.
+ADMIN = os.environ.get("ADMIN_TOKEN", "poc-admin-dev-token")
 PROJECT = "default"
 
 # Each row: (fact_id, pages, {"en": (question, answer), "hi": (...), "mr": (...)})

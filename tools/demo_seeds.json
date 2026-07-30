@@ -1,0 +1,111 @@
+{
+  "_comment": "Curated FAQ seeds for the admission-rounds question, verified against prospectus clauses xviii/xxiv/xxv/xxvi (pages 27-29) and the schedule on page 53. The prospectus defines exactly FOUR rounds - First, Second, Third and Special. The First and Second are each run for Region Quota and then State Quota, which is why the page-53 schedule lists six First/Second-round date blocks; a model reading only that table counts five or six rounds. Seeding the verified answer keeps English, Hindi and Marathi stating the same number. Load with tools/seed_demo.sh; re-running replaces rather than duplicates.",
+  "_paraphrases": "Each language carries a second, differently-worded entry. The cache matches on embedding similarity at FAQ_THRESHOLD (0.88), and a natural rewording can fall below that against a single seeded phrasing - 'एडमिशन के कितने राउंड होते हैं?' missed the 'प्रवेश प्रक्रिया में...' seed, fell through to RAG, answered 'दो राउंड', and then FAQ_AUTOCACHE stored that wrong answer, which thereafter beat the seed on every later ask. Seeding both phrasings closes the window that lets a wrong answer get cached in the first place.",
+  "items": [
+    {
+      "question": "How many rounds are there in the admission process?",
+      "tags": {
+        "ui_language": "en"
+      },
+      "pages": [
+        27,
+        28,
+        29,
+        53
+      ],
+      "answer": "There are four rounds: the First Round, the Second Round, the Third Round and a Special Round. The First and Second Rounds are each conducted for the Region Quota first and then for the State Quota, so you will see separate option-form and allotment dates for each of those. In the Third Round the seats left vacant in the Regional and State quotas are combined and filled together. Any seats still vacant after the third round are filled in the Special Round, and those dates are announced separately."
+    },
+    {
+      "question": "प्रवेश प्रक्रिया में कितने राउंड होते हैं?",
+      "tags": {
+        "ui_language": "hi"
+      },
+      "pages": [
+        27,
+        28,
+        29,
+        53
+      ],
+      "answer": "प्रवेश प्रक्रिया में चार राउंड होते हैं: पहला राउंड, दूसरा राउंड, तीसरा राउंड और विशेष राउंड। पहला और दूसरा राउंड पहले रीजन कोटा के लिए और उसके बाद स्टेट कोटा के लिए आयोजित किया जाता है, इसलिए दोनों के लिए ऑप्शन फॉर्म और आवंटन की अलग-अलग तारीखें होती हैं। तीसरे राउंड में रीजनल और स्टेट कोटा की बची हुई सीटों को मिलाकर एक साथ भरा जाता है। तीसरे राउंड के बाद भी जो सीटें खाली रह जाती हैं, उन्हें विशेष राउंड में भरा जाता है, जिसकी तारीखें बाद में घोषित की जाती हैं।"
+    },
+    {
+      "question": "प्रवेश प्रक्रियेत किती फेऱ्या असतात?",
+      "tags": {
+        "ui_language": "mr"
+      },
+      "pages": [
+        27,
+        28,
+        29,
+        53
+      ],
+      "answer": "प्रवेश प्रक्रियेत चार फेऱ्या असतात: पहिली फेरी, दुसरी फेरी, तिसरी फेरी आणि विशेष फेरी. पहिली आणि दुसरी फेरी आधी प्रादेशिक कोट्यासाठी आणि नंतर राज्य कोट्यासाठी घेतली जाते, त्यामुळे दोन्हींसाठी ऑप्शन फॉर्म आणि जागावाटपाच्या वेगवेगळ्या तारखा असतात. तिसऱ्या फेरीत प्रादेशिक आणि राज्य कोट्यातील शिल्लक राहिलेल्या जागा एकत्र करून भरल्या जातात. तिसऱ्या फेरीनंतरही रिक्त राहिलेल्या जागा विशेष फेरीत भरल्या जातात आणि तिच्या तारखा नंतर कळवल्या जातात."
+    },
+    {
+      "question": "How many admission rounds do you conduct?",
+      "tags": {
+        "ui_language": "en"
+      },
+      "pages": [
+        27,
+        28,
+        29,
+        53
+      ],
+      "answer": "There are four rounds: the First Round, the Second Round, the Third Round and a Special Round. The First and Second Rounds are each conducted for the Region Quota first and then for the State Quota, so you will see separate option-form and allotment dates for each of those. In the Third Round the seats left vacant in the Regional and State quotas are combined and filled together. Any seats still vacant after the third round are filled in the Special Round, and those dates are announced separately."
+    },
+    {
+      "question": "एडमिशन के कितने राउंड होते हैं?",
+      "tags": {
+        "ui_language": "hi"
+      },
+      "pages": [
+        27,
+        28,
+        29,
+        53
+      ],
+      "answer": "प्रवेश प्रक्रिया में चार राउंड होते हैं: पहला राउंड, दूसरा राउंड, तीसरा राउंड और विशेष राउंड। पहला और दूसरा राउंड पहले रीजन कोटा के लिए और उसके बाद स्टेट कोटा के लिए आयोजित किया जाता है, इसलिए दोनों के लिए ऑप्शन फॉर्म और आवंटन की अलग-अलग तारीखें होती हैं। तीसरे राउंड में रीजनल और स्टेट कोटा की बची हुई सीटों को मिलाकर एक साथ भरा जाता है। तीसरे राउंड के बाद भी जो सीटें खाली रह जाती हैं, उन्हें विशेष राउंड में भरा जाता है, जिसकी तारीखें बाद में घोषित की जाती हैं।"
+    },
+    {
+      "question": "प्रवेशाच्या किती फेऱ्या घेतल्या जातात?",
+      "tags": {
+        "ui_language": "mr"
+      },
+      "pages": [
+        27,
+        28,
+        29,
+        53
+      ],
+      "answer": "प्रवेश प्रक्रियेत चार फेऱ्या असतात: पहिली फेरी, दुसरी फेरी, तिसरी फेरी आणि विशेष फेरी. पहिली आणि दुसरी फेरी आधी प्रादेशिक कोट्यासाठी आणि नंतर राज्य कोट्यासाठी घेतली जाते, त्यामुळे दोन्हींसाठी ऑप्शन फॉर्म आणि जागावाटपाच्या वेगवेगळ्या तारखा असतात. तिसऱ्या फेरीत प्रादेशिक आणि राज्य कोट्यातील शिल्लक राहिलेल्या जागा एकत्र करून भरल्या जातात. तिसऱ्या फेरीनंतरही रिक्त राहिलेल्या जागा विशेष फेरीत भरल्या जातात आणि तिच्या तारखा नंतर कळवल्या जातात."
+    },
+    {
+      "question": "admission process me kitne round hote hain?",
+      "tags": {
+        "ui_language": "hi"
+      },
+      "pages": [
+        27,
+        28,
+        29,
+        53
+      ],
+      "answer": "Admission process mein chaar round hote hain: pehla round, doosra round, teesra round aur special round. Pehla aur doosra round pehle Region Quota ke liye aur uske baad State Quota ke liye hota hai, isliye dono ke liye option form aur allotment ki alag-alag dates hoti hain. Teesre round mein Regional aur State quota ki bachi hui seats milakar bhari jaati hain. Teesre round ke baad bhi jo seats khaali reh jaati hain, unhein special round mein bhara jaata hai, jiski dates baad mein announce hoti hain."
+    },
+    {
+      "question": "pravesh prakriyet kiti feriya astat?",
+      "tags": {
+        "ui_language": "mr"
+      },
+      "pages": [
+        27,
+        28,
+        29,
+        53
+      ],
+      "answer": "Pravesh prakriyet chaar ferya astat: pahili feri, dusri feri, tisri feri ani vishesh feri. Pahili ani dusri feri aadhi Pradeshik Quota sathi ani nantar Rajya Quota sathi ghetli jate, tyamule donhi sathi option form ani jaga vatapachya vegvegalya tarkha astat. Tisrya ferit Pradeshik ani Rajya quota madhil shillak jaga ekatra karun bharlya jatat. Tisrya ferinantarhi rikt rahilelya jaga vishesh ferit bharlya jatat ani tichya tarkha nantar kalavlya jatat."
+    }
+  ],
+  "_romanized": "The last two entries are the romanized ('Hinglish'/'Marathinglish') phrasings, and their answers are hand-written in Roman script rather than Devanagari. Two reasons: a romanized question embeds far enough from the Devanagari one to miss it at the 0.88 threshold (measured - it fell through to RAG and answered 'paanch round', five, over-counting the Region/State sub-rounds), and a Devanagari answer served to a romanized asker gets mechanically transliterated for display by transliterate.py, which is correct but reads poorly. Writing the answer in Roman script means to_romanized leaves it untouched."
+}

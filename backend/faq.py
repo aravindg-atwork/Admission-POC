@@ -18,10 +18,21 @@ failed" question are topically close enough to also collide, even though they
 need completely different answers (a number vs. a triage response).
 
 `tags` (e.g. {"ui_language": "hi", "intent": "payment_issue"}) is how rag.py
-guards against both: stored per entry and checked on match, filtering out only
-entries with a *different, explicitly known* value for a shared tag key. A tag
-missing on either side (older entries, or an axis that just doesn't apply) stays
-eligible - this only ever narrows a match, never requires one.
+guards against both: stored per entry and checked on match. An entry carrying an
+explicit value for a tag key is only eligible for a query carrying that same
+value. An entry with no value for the key (older entries from before tagging, or
+an axis that doesn't apply) stays eligible for anything, so this never requires a
+tag that isn't there.
+
+The asymmetry is deliberate, and it is the *entry's* tag that gates. Treating a
+missing query-side tag as "no opinion, match anything" looked equivalent but
+silently served wrong answers whenever a caller omitted the tag: a Marathi
+question with no ui_language matched the Hindi-tagged entry for the same question
+- identical topic, near-identical Devanagari embedding - and answered a Marathi
+student in Hindi. Reproduced with tools/test_matrix.py, which doesn't send
+uiLanguage. The same hole let an entry tagged intent="payment_issue" surface for
+a plain "what is the fee" question, which is the collision tagging it was
+introduced to prevent.
 
 One cache per project - every function takes that project's own faq_path
 (see projects.py) rather than a single global file.
@@ -334,7 +345,7 @@ def match(faq_path, query_vector, tags=None, question=""):
     best, best_score = None, 0.0
     for entry in _load(faq_path):
         entry_tags = entry.get("tags") or {}
-        if any(v and entry_tags.get(k) and entry_tags[k] != v for k, v in tags.items()):
+        if any(entry_tags.get(k) and entry_tags[k] != v for k, v in tags.items()):
             continue
         # Embedding similarity alone cannot separate "1st year" from "2nd year"
         # or "before" from "after" - measured: with a 0.88 threshold the cache

@@ -16,11 +16,58 @@ const LANGS = [
   { code: "ta-IN", label: "தமிழ்" },
 ];
 
-const SUGGESTIONS = [
-  "What are the eligibility criteria for admission?",
-  "When is the last date to apply?",
-  "What documents are required at admission?",
-];
+// Empty-state introduction, in the language currently selected. This is the
+// first thing a prospective student sees, and it's the only place the assistant
+// gets to say what it actually is before being asked something. Keeping it in
+// English while the selector says मराठी asks the student to take the language
+// support on trust; showing the invitation, the explanation and the starter
+// questions in their own script demonstrates it instead.
+//
+// The three starters double as the opening move in a walkthrough - each one is
+// answerable from the prospectus and shows a different shape of answer (a
+// criteria list, a single date, a document list).
+const WELCOME = {
+  en: {
+    title: "Ask anything about admissions",
+    body: "I'm an AI assistant for B.V.Sc. & A.H. admissions. I answer from the official prospectus - in English, Hindi, Marathi or Tamil - and show the page each answer came from.",
+    chips: [
+      "What are the eligibility criteria for admission?",
+      "When is the last date to apply?",
+      "What documents are required at admission?",
+    ],
+    placeholder: "Ask about admissions…",
+  },
+  hi: {
+    title: "प्रवेश से जुड़ा कुछ भी पूछिए",
+    body: "मैं B.V.Sc. & A.H. प्रवेश के लिए एक AI सहायक हूँ। मैं आधिकारिक प्रॉस्पेक्टस से जवाब देता हूँ - हिंदी, मराठी, तमिल या अंग्रेज़ी में - और हर जवाब के साथ प्रॉस्पेक्टस का पेज नंबर भी दिखाता हूँ।",
+    chips: [
+      "प्रवेश के लिए पात्रता मानदंड क्या हैं?",
+      "आवेदन की अंतिम तिथि क्या है?",
+      "प्रवेश के समय कौन से दस्तावेज़ चाहिए?",
+    ],
+    placeholder: "प्रवेश के बारे में पूछिए…",
+  },
+  mr: {
+    title: "प्रवेशाबद्दल काहीही विचारा",
+    body: "मी B.V.Sc. & A.H. प्रवेशासाठी एक AI सहाय्यक आहे. मी अधिकृत प्रॉस्पेक्टसमधून उत्तरे देतो - मराठी, हिंदी, तमिळ किंवा इंग्रजीत - आणि प्रत्येक उत्तरासोबत प्रॉस्पेक्टसचा पान क्रमांक दाखवतो.",
+    chips: [
+      "प्रवेशासाठी पात्रता निकष काय आहेत?",
+      "अर्ज करण्याची शेवटची तारीख कधी आहे?",
+      "प्रवेशासाठी कोणती कागदपत्रे लागतात?",
+    ],
+    placeholder: "प्रवेशाबद्दल विचारा…",
+  },
+  ta: {
+    title: "சேர்க்கை குறித்து எதையும் கேளுங்கள்",
+    body: "நான் B.V.Sc. & A.H. சேர்க்கைக்கான AI உதவியாளர். அதிகாரப்பூர்வ ப்ராஸ்பெக்டஸிலிருந்து - தமிழ், ஹிந்தி, மராத்தி அல்லது ஆங்கிலத்தில் - பதிலளிக்கிறேன், ஒவ்வொரு பதிலுக்கும் பக்க எண்ணையும் காட்டுகிறேன்.",
+    chips: [
+      "சேர்க்கைக்கான தகுதி நிபந்தனைகள் என்ன?",
+      "விண்ணப்பிக்க கடைசி தேதி எப்போது?",
+      "சேர்க்கைக்கு என்ன ஆவணங்கள் தேவை?",
+    ],
+    placeholder: "சேர்க்கை பற்றி கேளுங்கள்…",
+  }
+};
 
 // Demo/copy-paste library for showing the assistant off - grouped so a demo can
 // jump straight to "here's Hindi", "here's Hinglish", "here's a payment issue",
@@ -317,13 +364,18 @@ function App() {
   const [sending, setSending] = useState(false);
   const [lang, setLang] = useState("en-IN");
   const [speakOn, setSpeakOn] = useState(true);
-  // Romanized (Hinglish/Tanglish) is the default for Hindi/Marathi/Tamil - most
-  // students type and read code-mixed Roman script day to day. Native script is
-  // an explicit opt-in via this toggle.
+  // Off means "auto", which mirrors whatever script the student typed in: type in
+  // Devanagari and the reply comes back in Devanagari, type "fee kiti ahe" and it
+  // comes back romanized (see rag._apply_script_pref). On forces native script,
+  // which is what someone typing romanized wants when they'd rather read
+  // Devanagari/Tamil - and what makes the answer speakable, since the TTS voice
+  // can't pronounce romanized text.
   const [nativeScript, setNativeScript] = useState(false);
   const [recording, setRecording] = useState(false);
   const [hint, setHint] = useState("");
   const [showDemo, setShowDemo] = useState(false);
+
+  const welcome = WELCOME[TTS_LANG_MAP[lang]] || WELCOME.en;
 
   const patchMessage = (id, patch) =>
     setMessages((m) => m.map((msg) => (msg.id === id ? { ...msg, ...patch } : msg)));
@@ -450,10 +502,10 @@ function App() {
       <main class="thread" ref=${threadRef}>
         ${messages.length === 0 && html`
           <div class="empty">
-            <h1>Ask anything about admissions</h1>
-            <p>Answers come straight from the prospectus, in your language, with page references.</p>
+            <h1>${welcome.title}</h1>
+            <p>${welcome.body}</p>
             <div class="chips">
-              ${SUGGESTIONS.map((s) => html`<button class="chip" key=${s} onClick=${() => send(s)}>${s}</button>`)}
+              ${welcome.chips.map((s) => html`<button class="chip" key=${s} onClick=${() => send(s)}>${s}</button>`)}
             </div>
           </div>`}
         ${messages.map((m, i) => html`<${Message} key=${m.id || i} m=${m} lang=${lang} onReplayBrowser=${(t) => speakBrowserNow(t, lang)} />`)}
@@ -462,7 +514,7 @@ function App() {
       <footer class="composer">
         <div class="bar">
           ${micSupported && html`<button class=${"mic" + (recording ? " rec" : "")} title="Speak your question" onClick=${toggleMic}>${Icon.mic}</button>`}
-          <textarea ref=${taRef} rows="1" placeholder="Ask about admissions…" value=${input}
+          <textarea ref=${taRef} rows="1" placeholder=${welcome.placeholder} value=${input}
                     onInput=${onInput} onKeyDown=${onKey}></textarea>
           <button class="send" disabled=${sending} onClick=${() => send(input)} aria-label="Send">${Icon.send}</button>
         </div>
