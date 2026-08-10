@@ -54,6 +54,10 @@ def manifest_path(project_id):
     return _dir(project_id) / "manifest.json"
 
 
+def watch_state_path(project_id):
+    return _dir(project_id) / "watch-state.json"
+
+
 def tts_cache_dir(project_id):
     return _dir(project_id) / "tts-cache"
 
@@ -78,6 +82,8 @@ def create(name, project_id=None):
             "name": name or "Untitled project",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "allow_cloud": True,
+            "prospectus_url": "",
+            "watch_enabled": False,
         }
         projects.append(entry)
         _save(projects)
@@ -102,6 +108,26 @@ def set_allow_cloud(project_id, value):
         for entry in projects:
             if entry["id"] == project_id:
                 entry["allow_cloud"] = bool(value)
+                _save(projects)
+                return entry
+        return None
+
+
+def set_prospectus_watch(project_id, url=None, enabled=None):
+    """Update the source URL and/or on-off switch for auto-refresh.
+
+    `url`/`enabled` of None means "leave unchanged" (as opposed to False/""),
+    so a PATCH toggling just one of the two never clobbers the other - same
+    partial-update shape as the rest of this module's setters.
+    """
+    with _lock:
+        projects = _load()
+        for entry in projects:
+            if entry["id"] == project_id:
+                if url is not None:
+                    entry["prospectus_url"] = url.strip()
+                if enabled is not None:
+                    entry["watch_enabled"] = bool(enabled)
                 _save(projects)
                 return entry
         return None

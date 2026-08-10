@@ -11,12 +11,13 @@ frontend (static files) and the JSON API:
   POST /api/catalogue/complementary      X-API-Key gated - LLM cross-sell suggestions (non-blocking follow-up)
   POST /api/catalogue/note               X-API-Key gated - generate an email note for matched item(s)
   GET/POST        /admin/projects[/id]   X-Admin-Token gated - manage projects
-  PATCH           /admin/projects/id     X-Admin-Token gated - update project settings (e.g. allow_cloud)
+  PATCH           /admin/projects/id     X-Admin-Token gated - update project settings (allow_cloud, prospectus_url, watch_enabled)
   DELETE          /admin/projects/id     X-Admin-Token gated - delete a project
   GET             /admin/projects/id/stats   X-Admin-Token gated - dashboard/cost metrics + health
   POST            /admin/projects/id/ingest  X-Admin-Token gated - upload a prospectus PDF (multipart)
   POST            /admin/projects/id/cache/clear  X-Admin-Token gated - clear that project's FAQ cache
   POST            /admin/projects/id/cache/seed   X-Admin-Token gated - bulk-load curated Q&A into that cache
+  POST            /admin/projects/id/watch/check  X-Admin-Token gated - check the configured source URL now, re-ingest if changed
   GET/POST/PATCH/DELETE /admin/keys[/id] X-Admin-Token gated - manage keys
 
 Every key belongs to exactly one project; /api/chat and /api/ingest resolve
@@ -26,12 +27,15 @@ share a prospectus, vector store, or cost numbers.
 
 import json
 import re
+import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import (apikeys, audiocache, catalogue, config, embeddings,
-               extension_settings, faq, llm, projects, rag, stats, textclean)
+               extension_settings, faq, llm, projects, prospectus_watch, rag,
+               stats, textclean)
 
 # Injected into index.html so the first-party chat widget authenticates without the
 # key being hard-coded in client files.
@@ -176,6 +180,7 @@ class Handler(BaseHTTPRequestHandler):
         m_ingest = re.match(r"^/admin/projects/([^/]+)/ingest$", self.path)
         m_clear = re.match(r"^/admin/projects/([^/]+)/cache/clear$", self.path)
         m_seed = re.match(r"^/admin/projects/([^/]+)/cache/seed$", self.path)
+        m_watch_check = re.match(r"^/admin/projects/([^/]+)/watch/check$", self.path)
 
         if self.path == "/api/chat":
             project_id = apikeys.resolve_active(self.headers.get("X-API-Key"))
@@ -418,6 +423,16 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json(500, {"error": str(exc)})
 
+        elif m_watch_check:
+            if not self._admin_ok():
+                self._json(401, {"error": "Invalid admin token."})
+                return
+            project_id = m_watch_check.group(1)
+            if not projects.get(project_id):
+                self._json(404, {"error": "Project not found."})
+                return
+            self._json(200, prospectus_watch.check_and_refresh(project_id))
+
         else:
             self._send(404, "Not found", "text/plain")
 
@@ -453,6 +468,12 @@ class Handler(BaseHTTPRequestHandler):
             body = self._read_json()
             if "allow_cloud" in body:
                 projects.set_allow_cloud(project_id, bool(body["allow_cloud"]))
+            if "prospectus_url" in body or "watch_enabled" in body:
+                projects.set_prospectus_watch(
+                    project_id,
+                    url=body["prospectus_url"] if "prospectus_url" in body else None,
+                    enabled=body["watch_enabled"] if "watch_enabled" in body else None,
+                )
             self._json(200, self._project_summary(projects.get(project_id)))
         else:
             self._send(404, "Not found", "text/plain")
@@ -508,16 +529,35 @@ class Handler(BaseHTTPRequestHandler):
                 "embedded": bool(manifest), "chunksIndexed": manifest.get("chunksIndexed"),
                 "pagesProcessed": manifest.get("pagesProcessed"), "embeddedAt": manifest.get("embeddedAt"),
             },
+            "prospectusWatch": self._prospectus_watch_summary(p),
             "totalQuestions": snap["totalQuestions"], "sarvamCalls": snap["sarvamCalls"],
             "localCalls": snap["localCalls"], "cacheHits": snap["cacheHits"],
             "activeKeys": sum(1 for k in keys if k["active"]), "totalKeys": len(keys),
         }
 
+    @staticmethod
+    def _prospectus_watch_summary(p):
+        project_id = p["id"]
+        state = {}
+        spath = projects.watch_state_path(project_id)
+        if spath.exists():
+            try:
+                state = json.loads(spath.read_text(encoding="utf-8"))
+            except ValueError:
+                state = {}
+        return {
+            "url": p.get("prospectus_url", ""), "enabled": bool(p.get("watch_enabled")),
+            "lastCheckedAt": state.get("lastCheckedAt"), "lastStatus": state.get("lastStatus"),
+            "lastError": state.get("lastError"), "lastRefreshedAt": state.get("lastRefreshedAt"),
+        }
+
     def _build_stats(self, project_id):
         snap = stats.snapshot(projects.stats_path(project_id))
         keys = apikeys.list_keys(project_id)
+        p = projects.get(project_id) or {"id": project_id}
         return {**snap, "sarvam": llm.sarvam_usage(), "allowCloud": projects.allow_cloud(project_id),
-                "activeKeys": sum(1 for k in keys if k["active"]), "totalKeys": len(keys), "health": self._check_health()}
+                "activeKeys": sum(1 for k in keys if k["active"]), "totalKeys": len(keys),
+                "health": self._check_health(), "prospectusWatch": self._prospectus_watch_summary(p)}
 
     @staticmethod
     def _check_health():
@@ -580,11 +620,31 @@ class Handler(BaseHTTPRequestHandler):
         print("[backend]", fmt % args)
 
 
+def _prospectus_watch_loop():
+    """Background poll: re-check every watch-enabled project's source URL.
+
+    Runs once immediately on startup (so a change that landed while the
+    server was down is caught right away, not after a full interval), then
+    on PROSPECTUS_WATCH_INTERVAL_HOURS. A daemon thread so it never blocks
+    process shutdown; check_all() already isolates one project's failure
+    from the rest, and this loop isolates one bad run from the next.
+    """
+    interval = max(1.0, config.PROSPECTUS_WATCH_INTERVAL_HOURS) * 3600
+    while True:
+        try:
+            prospectus_watch.check_all()
+        except Exception as exc:  # noqa: BLE001 - must not kill the loop
+            print(f"[prospectus_watch] background loop error: {exc!r}")
+        time.sleep(interval)
+
+
 def serve():
     projects.migrate_legacy_if_needed()
     if not projects.list_projects():
         projects.create("Admission Assistant", config.DEFAULT_PROJECT_ID)
     apikeys.get_or_create_default(config.DEFAULT_PROJECT_ID)
+
+    threading.Thread(target=_prospectus_watch_loop, daemon=True).start()
 
     httpd = ThreadingHTTPServer(("0.0.0.0", config.PORT), Handler)
     print("Admission Assistant backend running:")

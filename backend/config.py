@@ -218,6 +218,23 @@ TOP_K = int(os.environ.get("TOP_K", "10"))
 CHUNK_CHARS = int(os.environ.get("CHUNK_CHARS", "1200"))
 CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "200"))
 
+# --- Prospectus auto-refresh (Firecrawl) ---
+# Detects when a project's live source page/PDF changes (new academic year, a
+# mid-year fee revision) and re-runs the extract/chunk/embed pipeline without
+# anyone manually re-downloading and re-uploading a PDF. Firecrawl only does the
+# "did this change" detection and hands back the current bytes - the actual
+# extraction still goes through pdf.py's tuned pipeline unchanged (see
+# prospectus_watch.py). Works against the hosted API or a self-hosted Firecrawl
+# instance (point FIRECRAWL_URL at it) the same way the other services here run
+# in Docker on this host.
+FIRECRAWL_API_KEY = os.environ.get("FIRECRAWL_API_KEY", "")
+FIRECRAWL_URL = os.environ.get("FIRECRAWL_URL", "https://api.firecrawl.dev").rstrip("/")
+# Hours, not minutes - a prospectus changes at most a handful of times a year,
+# so there is no benefit to polling faster and it would only burn Firecrawl
+# calls. 0 or unset watch_enabled per-project both mean "never" regardless.
+PROSPECTUS_WATCH_INTERVAL_HOURS = float(os.environ.get("PROSPECTUS_WATCH_INTERVAL_HOURS", "6"))
+PROSPECTUS_WATCH_TIMEOUT = int(os.environ.get("PROSPECTUS_WATCH_TIMEOUT", "60"))
+
 # --- Admin / keys ---
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "poc-admin-dev-token")
 DEFAULT_KEY_LABEL = "admission-site"

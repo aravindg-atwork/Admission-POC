@@ -122,13 +122,29 @@ function Dashboard({ token, projectId }) {
 // ---------- Cost ----------
 function Cost({ token, projectId, onChange }) {
   const [d, setD] = useState(null);
-  const load = useCallback(() => { if (token && projectId) api(`/admin/projects/${projectId}/stats`,{token}).then(setD).catch(()=>{}); }, [token, projectId]);
-  useEffect(() => { setD(null); load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
+  const [watchUrl, setWatchUrl] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [checkMsg, setCheckMsg] = useState("");
+  const load = useCallback(() => { if (token && projectId) api(`/admin/projects/${projectId}/stats`,{token}).then(x=>{setD(x); setWatchUrl(x.prospectusWatch.url||"");}).catch(()=>{}); }, [token, projectId]);
+  useEffect(() => { setD(null); setCheckMsg(""); load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
   const clearCache = async () => { if (!confirm("Clear the FAQ cache? Future questions will re-run the full pipeline until re-cached.")) return; await api(`/admin/projects/${projectId}/cache/clear`,{method:"POST",token}); load(); };
   const toggleCloud = async () => { await api(`/admin/projects/${projectId}`,{method:"PATCH",token,body:{allow_cloud:!d.allowCloud}}); load(); onChange && onChange(); };
+  const saveWatchUrl = async () => { if (watchUrl === d.prospectusWatch.url) return; await api(`/admin/projects/${projectId}`,{method:"PATCH",token,body:{prospectus_url:watchUrl}}); load(); };
+  const toggleWatch = async () => { await api(`/admin/projects/${projectId}`,{method:"PATCH",token,body:{watch_enabled:!d.prospectusWatch.enabled}}); load(); };
+  const checkNow = async () => {
+    setChecking(true); setCheckMsg("");
+    try {
+      const r = await api(`/admin/projects/${projectId}/watch/check`,{method:"POST",token});
+      setCheckMsg(r.changed ? `Source changed — re-ingested (${r.status}).`
+        : r.checked ? `No change (${r.status||"same"}).`
+        : (r.reason || "Not configured."));
+      load(); onChange && onChange();
+    } catch { setCheckMsg("Check failed."); } finally { setChecking(false); }
+  };
   if (!token) return html`<div class="panel"><h1>Cost</h1><p class="lead">Connect with the admin token to view usage and cost exposure.</p></div>`;
   if (!d) return html`<div class="panel"><h1>Cost</h1><p class="lead">Loading…</p></div>`;
   const pct = Math.min(100, Math.round(d.sarvam.count/d.sarvam.limit*100)); const warn = pct >= 80;
+  const w = d.prospectusWatch;
   return html`
     <div class="panel"><h1>Cost</h1><p class="lead">What this project's answers cost, and which model is allowed to answer them.</p>
       <div class="cap-bar-wrap">
@@ -140,6 +156,15 @@ function Cost({ token, projectId, onChange }) {
         <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:d.allowCloud?"var(--amber)":"var(--ink-3)"}}></span>Sarvam AI (cloud)</span><div class="agent-meta"><span class="agent-cost cloud">${d.allowCloud?"allowed":"disabled"}</span><span class="agent-count">${d.sarvamCalls}</span><button class=${"switch"+(d.allowCloud?" on":"")} onClick=${toggleCloud}></button></div></div>
         <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:"var(--ink-3)"}}></span>Local model (Ollama)</span><div class="agent-meta"><span class="agent-cost free">$0</span><span class="agent-count">${d.localCalls}</span></div></div>
         <div class="agent-row"><span class="agent-name"><span class="agent-dot" style=${{background:"var(--accent)"}}></span>FAQ cache</span><div class="agent-meta"><span class="agent-cost free">$0</span><span class="agent-count">${d.cacheHits}</span></div></div>
+      </div>
+      <div class="section-h">Prospectus auto-refresh</div>
+      <div class="card" style=${{padding:"16px 20px"}}>
+        <div class="info-row"><label>Source URL (direct link to the live prospectus PDF)</label><input value=${watchUrl} onInput=${e=>setWatchUrl(e.target.value)} onBlur=${saveWatchUrl} placeholder="https://college.edu/prospectus.pdf"/></div>
+        <div class="agent-row"><span class="agent-name">Watch for changes</span><div class="agent-meta"><span class="agent-cost">${w.enabled?"on":"off"}</span><button class=${"switch"+(w.enabled?" on":"")} onClick=${toggleWatch}></button></div></div>
+        <div class="agent-row"><span class="agent-name">Last checked</span><div class="agent-meta"><span class="muted">${w.lastCheckedAt?timeAgo(new Date(w.lastCheckedAt).getTime()/1000)+(w.lastStatus?` · ${w.lastStatus}`:""):"never"}</span></div></div>
+        ${w.lastRefreshedAt?html`<div class="agent-row"><span class="agent-name">Last re-ingested</span><div class="agent-meta"><span class="muted">${timeAgo(new Date(w.lastRefreshedAt).getTime()/1000)}</span></div></div>`:""}
+        ${w.lastError?html`<p class="hint" style=${{margin:"8px 0 0",color:"var(--danger)"}}>${w.lastError}</p>`:""}
+        <div class="actions" style=${{marginTop:12}}><button class="btn sm" disabled=${checking} onClick=${checkNow}>${checking?"Checking…":"Check now"}</button><span style=${{fontSize:12.5,color:"var(--ink-3)",marginLeft:12}}>${checkMsg}</span></div>
       </div>
       <div class="section-h">Cache</div>
       <div class="card" style=${{padding:"16px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style=${{fontSize:14,fontWeight:500}}>${d.cacheHits} instant answers, ${d.cacheHitRate}% hit rate</div></div><button class="btn danger" onClick=${clearCache}>Clear cache</button></div>
