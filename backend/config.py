@@ -70,6 +70,27 @@ OLLAMA_KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
 MODEL_LOCAL = os.environ.get("MODEL_LOCAL", "gemma2:2b")
 MODEL_FALLBACK = os.environ.get("MODEL_FALLBACK", "llama3.1")
 
+# --- Self-hosted LLM API (OpenAI-shaped, custom endpoint path) ---
+# A team-run server exposing several models over an OpenAI-compatible
+# body/response shape - except completions are POSTed to /v1/chat, not the
+# standard /v1/chat/completions. Intended to replace the on-box Ollama
+# fallback (see CHAT_FALLBACK) now that this laptop is the only active dev
+# machine and running a local model on it is not the goal; Sarvam stays
+# primary since these models are rated below sarvam-105b on quality.
+#
+# SELFHOSTED_MODEL is a plain string so switching which of the server's
+# models answers is a config change, not a code change - same pattern as
+# MODEL_LOCAL above. Verified against GET {SELFHOSTED_URL}/v1/models on
+# 2026-08-10, the server listed: sarvam-1-gguf-Q4_K_M, llama3.1-8b,
+# gemma2-2b, qwen2.5-7b-lora-test-base, qwen2.5-7b-lora-test-deepthink. Note
+# this is a live, mutable list on someone else's infrastructure - it did NOT
+# include qwen2.5-coder:1.5b or llama3.2-3b, both mentioned when this was set
+# up, so re-check that endpoint before assuming a model name here still
+# exists.
+SELFHOSTED_URL = os.environ.get("SELFHOSTED_URL", "")
+SELFHOSTED_API_KEY = os.environ.get("SELFHOSTED_API_KEY", "")
+SELFHOSTED_MODEL = os.environ.get("SELFHOSTED_MODEL", "sarvam-1-gguf-Q4_K_M")
+
 # --- Chat provider selection (see providers.py) ---
 # Which backend answers questions, and what to fall back to when it fails or is
 # unavailable. Config rather than code because the choice is genuinely open:

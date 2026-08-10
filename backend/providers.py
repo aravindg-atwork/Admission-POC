@@ -153,7 +153,45 @@ class OllamaProvider:
         return clean(result["message"]["content"]), model
 
 
-_REGISTRY = {p.name: p for p in (SarvamProvider(), OllamaProvider())}
+class SelfHostedProvider:
+    """Team-run OpenAI-shaped server exposing several small/mid models.
+
+    is_cloud = False deliberately: _usable() in llm.py gates any is_cloud
+    provider behind the per-project allow_cloud switch AND Sarvam's own daily
+    call cap (_sarvam_under_cap), which is Sarvam-specific bookkeeping that
+    has nothing to do with this server. Treating it as "local" policy-wise -
+    same as Ollama - is correct even though the call itself goes out over the
+    network: there is no spend cap here to enforce.
+    """
+
+    name = "selfhosted"
+    is_cloud = False
+
+    def configured(self):
+        return bool(config.SELFHOSTED_URL and config.SELFHOSTED_API_KEY)
+
+    def chat(self, system_prompt, user_prompt, timeout, question="", model=None, **_):
+        model = model or config.SELFHOSTED_MODEL
+        # Same reminder Ollama needs (see OllamaProvider.chat): a smaller
+        # model is more likely to drop the system-prompt language rule for
+        # Indic questions than sarvam-105b was.
+        user_prompt += _SCRIPT_REMINDER.get(detect_script(question), "")
+        payload = {
+            "model": model, "stream": False,
+            "temperature": config.CHAT_TEMPERATURE,
+            "messages": _messages(system_prompt, user_prompt),
+        }
+        # The server accepts both; Bearer matches the standard OpenAI shape
+        # its request/response bodies otherwise follow.
+        headers = {"Authorization": f"Bearer {config.SELFHOSTED_API_KEY}"}
+        # Confirmed against this server: POST /v1/chat, not the standard
+        # OpenAI /v1/chat/completions path.
+        url = config.SELFHOSTED_URL.rstrip("/") + "/v1/chat"
+        result = _post(url, payload, headers, timeout)
+        return clean(result["choices"][0]["message"]["content"]), "selfhosted:" + model
+
+
+_REGISTRY = {p.name: p for p in (SarvamProvider(), OllamaProvider(), SelfHostedProvider())}
 
 
 def get(name):
