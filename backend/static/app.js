@@ -6,15 +6,46 @@ const html = htm.bind(React.createElement);
 
 // The admission site's own widget key is injected by the server; fall back to a
 // meta tag or empty (the console's "Try It" sets its own).
-const API_KEY = window.ADMISSION_API_KEY ||
+const DEFAULT_API_KEY = window.ADMISSION_API_KEY ||
   (document.querySelector('meta[name="api-key"]') || {}).content || "";
 
-const LANGS = [
-  { code: "en-IN", label: "English" },
-  { code: "hi-IN", label: "हिंदी" },
-  { code: "mr-IN", label: "मराठी" },
-  { code: "ta-IN", label: "தமிழ்" },
+// Every degree program's own widget key (see server.py's _serve_index) - used
+// when the student resolves a program-clarification prompt by clicking an
+// option, so the rest of the session switches to that program's own project
+// instead of continuing to ask the default (B.V.Sc.) project about it. Empty
+// on any page that doesn't inject it (e.g. the admin console's "Try It" tester).
+const PROGRAMS = window.MAFSU_PROGRAMS || [];
+
+// Start-screen language picker. English has no script step (Latin is its only
+// script); Hindi/Marathi/Tamil each show a short example so the student can see
+// what "native script" vs "Latin/romanized" actually looks like before picking,
+// rather than guessing what the words mean.
+const LANGUAGE_OPTIONS = [
+  { code: "en", label: "English", sub: "English" },
+  { code: "hi", label: "हिंदी", sub: "Hindi" },
+  { code: "mr", label: "मराठी", sub: "Marathi" },
+  { code: "ta", label: "தமிழ்", sub: "Tamil" },
 ];
+const SCRIPT_EXAMPLES = {
+  hi: { native: "प्रवेश की फ़ीस कितनी है?", latin: "Pravesh ki fees kitni hai?" },
+  mr: { native: "प्रवेशासाठी फी किती आहे?", latin: "Praveshasathi fee kiti ahe?" },
+  ta: { native: "சேர்க்கைக் கட்டணம் எவ்வளவு?", latin: "Serkkai kattanam evvalavu?" },
+};
+const LANG_TO_CODE = { en: "en-IN", hi: "hi-IN", mr: "mr-IN", ta: "ta-IN" };
+const LANG_PREF_KEY = "admission-lang-pref";
+
+function loadLangPref() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LANG_PREF_KEY));
+    if (raw && LANG_TO_CODE[raw.lang] && (raw.lang === "en" || raw.script === "native" || raw.script === "latin")) {
+      return raw;
+    }
+  } catch {}
+  return null;
+}
+function saveLangPref(pref) {
+  try { localStorage.setItem(LANG_PREF_KEY, JSON.stringify(pref)); } catch {}
+}
 
 // Empty-state introduction, in the language currently selected. This is the
 // first thing a prospective student sees, and it's the only place the assistant
@@ -179,6 +210,8 @@ const Icon = {
   copy: html`<svg viewBox="0 0 20 20" width="14" height="14" fill="none"><rect x="7" y="7" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M13 7V5.5A1.5 1.5 0 0011.5 4h-7A1.5 1.5 0 003 5.5v7A1.5 1.5 0 004.5 14H6" stroke="currentColor" stroke-width="1.4"/></svg>`,
   check: html`<svg viewBox="0 0 20 20" width="14" height="14" fill="none"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   close: html`<svg viewBox="0 0 20 20" width="16" height="16" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+  thumbUp: html`<svg viewBox="0 0 20 20" width="14" height="14" fill="none"><path d="M7 8.5V16h7.2c.7 0 1.3-.5 1.4-1.2l.9-5A1.5 1.5 0 0015 8H11.5l.6-3.2c.15-.8-.5-1.5-1.3-1.5-.4 0-.8.25-1 .6L7 8.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M4 8.5h3V16H4z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>`,
+  thumbDown: html`<svg viewBox="0 0 20 20" width="14" height="14" fill="none"><path d="M13 11.5V4H5.8c-.7 0-1.3.5-1.4 1.2l-.9 5A1.5 1.5 0 005 12h3.5l-.6 3.2c-.15.8.5 1.5 1.3 1.5.4 0 .8-.25 1-.6L13 11.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M16 11.5h-3V4h3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>`,
 };
 
 function useSpeech() {
@@ -247,10 +280,10 @@ function playUrl(url) {
   currentAudio.play().catch(() => {});
 }
 
-async function fetchIndicAudio(text, shortLang) {
+async function fetchIndicAudio(text, shortLang, apiKey) {
   const res = await fetch("/api/tts", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(API_KEY ? { "X-API-Key": API_KEY } : {}) },
+    headers: { "Content-Type": "application/json", ...(apiKey ? { "X-API-Key": apiKey } : {}) },
     body: JSON.stringify({ text, language: shortLang }),
   });
   if (!res.ok) throw new Error(String(res.status));
@@ -258,7 +291,42 @@ async function fetchIndicAudio(text, shortLang) {
   return URL.createObjectURL(blob);
 }
 
-function Message({ m, lang, onReplayBrowser }) {
+// Display-only formatting - never touches the underlying answer text used
+// for TTS (onReplayBrowser/fetchIndicAudio both read m.text directly,
+// unaffected by anything here). The backend prompt (rag.py's
+// SYSTEM_PROMPT_BASE) deliberately still bans markdown SYNTAX in the
+// model's own output - asterisks, bullet markers, numbered markers -
+// because those read as literal noise to TTS ("star star", "dash"). What
+// changed 2026-08-12 is the model is now allowed to put genuinely
+// multi-item content on separate lines (a plain line break, TTS-safe -
+// clean_for_speech already converts it to a natural pause, not a spoken
+// word) instead of forcing everything into one run-on sentence - this
+// formatter is what turns that line structure into properly spaced
+// paragraphs, and adds bold emphasis on currency/percentage figures via a
+// DISPLAY-only regex pass that never modifies m.text itself.
+// Currency (Rs./₹ prefixed), percentages, and bare large numbers (4+
+// digits, or any comma-grouped number) - the last branch matters because
+// the deterministic verified-fact path (rag.py's tablelookup) often states
+// a raw figure with no "Rs." prefix at all ("The first year tuition fee is
+// 27500"), which the first two branches alone would miss entirely.
+const _KEY_FIGURE_RE = /((?:Rs\.?|₹)\s?[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%|\b\d{1,3}(?:,\d{2,3})+\b|\b\d{4,}\b)/g;
+
+function _boldKeyFigures(text, keyPrefix) {
+  const parts = text.split(_KEY_FIGURE_RE);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) => (i % 2 === 1
+    ? html`<strong key=${`${keyPrefix}-${i}`}>${part}</strong>`
+    : part));
+}
+
+function formatAnswer(text) {
+  const paragraphs = (text || "").split(/\n+/).map((p) => p.trim()).filter(Boolean);
+  if (paragraphs.length <= 1) return _boldKeyFigures(text || "", "kf");
+  return paragraphs.map((para, i) => html`
+    <p key=${i} class="answer-para">${_boldKeyFigures(para, `p${i}`)}</p>`);
+}
+
+function Message({ m, lang, onReplayBrowser, onPickProgram, onFeedback }) {
   if (m.role === "user")
     return html`<div class="row user"><div class="bubble">${m.text}</div></div>`;
   if (m.role === "thinking")
@@ -266,9 +334,42 @@ function Message({ m, lang, onReplayBrowser }) {
   if (m.role === "error")
     return html`<div class="row bot err"><div class="bubble">${m.text}</div></div>`;
 
+  // Program-clarification prompt: no audio/source controls, just the
+  // question and one chip per program - clicking resubmits the original
+  // question (see App.send's keyOverride) under that program's own key.
+  if (m.clarifyOptions) {
+    return html`
+      <div class="row bot">
+        <div>
+          <div class="bubble">${m.text}</div>
+          <div class="chips">
+            ${m.clarifyOptions.map((o) => html`
+              <button class="chip" key=${o.projectId}
+                      onClick=${() => onPickProgram(o.projectId, m.originalQuestion)}>
+                ${o.label}
+              </button>`)}
+          </div>
+        </div>
+      </div>`;
+  }
+
   const srcPill = m.source === "faq-cache"
     ? html`<span class="pill cache" title="Answered instantly from cache">⚡ instant</span>`
     : m.model ? html`<span class="pill src">${m.model.replace("sarvam:", "")}</span>` : null;
+  // Set only when the default (B.V.Sc.) widget answered by redirecting to
+  // another program's own data because the question named it explicitly
+  // (see rag.py's needs_program_clarification path) - a small label so it's
+  // clear which program the answer actually came from, since the widget
+  // itself didn't switch context the way a clicked clarification chip does.
+  const programPill = m.answeredForProgram
+    ? html`<span class="pill program" title="Answered from this program's own prospectus">${m.answeredForProgram.label}</span>`
+    : null;
+  // A comparison answer pulled from several programs at once (see rag.py's
+  // needs_comparison path) - one pill per program so it's clear which ones
+  // were actually consulted, same reasoning as programPill above.
+  const comparisonPills = m.comparedPrograms && m.comparedPrograms.length
+    ? m.comparedPrograms.map((p) => html`<span class="pill program" key=${p.projectId} title="Included in this comparison">${p.label}</span>`)
+    : null;
 
   const state = m.audioState;
   const title = state === "generating" ? "Generating natural voice…"
@@ -286,14 +387,27 @@ function Message({ m, lang, onReplayBrowser }) {
   return html`
     <div class="row bot">
       <div>
-        <div class="bubble">${m.text}</div>
+        <div class="bubble">${formatAnswer(m.text)}</div>
         <div class="meta">
+          ${programPill}
+          ${comparisonPills}
           ${(m.pages || []).map((p) => html`<span class="pill" key=${p}>p. ${p}</span>`)}
           ${srcPill}
           <button class=${"mini-btn" + (state === "ready" ? " on" : "")} title=${title}
                   disabled=${state === "generating" || state === "unspeakable"} onClick=${handleClick}>
             ${state === "generating" ? html`<span class="dots" style=${{ padding: 0 }}><i></i><i></i><i></i></span>` : Icon.play}
           </button>
+          ${m.faqId && html`
+            <span class="feedback-group">
+              <button class=${"mini-btn" + (m.feedback === "liked" ? " on" : "")} title="This answer was correct and helpful"
+                      disabled=${!!m.feedback} onClick=${() => onFeedback(m.id, m.faqId, m.feedbackKey, true)}>
+                ${Icon.thumbUp}
+              </button>
+              <button class=${"mini-btn warn" + (m.feedback === "disliked" ? " on" : "")} title="This answer was wrong or unhelpful"
+                      disabled=${!!m.feedback} onClick=${() => onFeedback(m.id, m.faqId, m.feedbackKey, false)}>
+                ${Icon.thumbDown}
+              </button>
+            </span>`}
         </div>
       </div>
     </div>`;
@@ -358,24 +472,94 @@ function DemoLibrary({ onClose }) {
     </div>`;
 }
 
+// One-time (until changed) language + script picker. `mode="intro"` renders it
+// full-screen as the very first thing a student sees, replacing the old header
+// dropdown + toggle - picking is a single flow instead of two separate controls
+// to find and click. `mode="modal"` renders the same steps over the chat so the
+// choice can be revisited later from the header's language pill.
+function LangPicker({ mode, initial, onDone, onCancel }) {
+  const [step, setStep] = useState(1);
+  const [lang, setLang] = useState((initial && initial.lang) || null);
+
+  const pickLanguage = (code) => {
+    if (code === "en") { onDone({ lang: "en", script: "latin" }); return; }
+    setLang(code);
+    setStep(2);
+  };
+
+  const langOpt = LANGUAGE_OPTIONS.find((o) => o.code === lang);
+
+  const content = step === 1 ? html`
+    <div class="lang-step">
+      <h2 class="lang-title">${mode === "intro" ? "Pick your language" : "Change language"}</h2>
+      <p class="lang-desc">You can still ask a question in any language, any time - this just sets the app's own text, mic and voice.</p>
+      <div class="lang-grid">
+        ${LANGUAGE_OPTIONS.map((o) => html`
+          <button class=${"lang-card" + (initial && initial.lang === o.code ? " on" : "")}
+                  key=${o.code} onClick=${() => pickLanguage(o.code)}>
+            <span class="lang-card-main">${o.label}</span>
+            <span class="lang-card-sub">${o.sub}</span>
+          </button>`)}
+      </div>
+    </div>` : html`
+    <div class="lang-step">
+      <button class="lang-back" onClick=${() => setStep(1)}>&larr; Back</button>
+      <h2 class="lang-title">Native script or Latin?</h2>
+      <p class="lang-desc">How should ${langOpt.sub} answers be written back to you?</p>
+      <div class="script-grid">
+        <button class=${"script-card" + (initial && initial.lang === lang && initial.script === "native" ? " on" : "")}
+                onClick=${() => onDone({ lang, script: "native" })}>
+          <span class="script-card-label">Native script</span>
+          <span class="script-card-example">${SCRIPT_EXAMPLES[lang].native}</span>
+        </button>
+        <button class=${"script-card" + (initial && initial.lang === lang && initial.script === "latin" ? " on" : "")}
+                onClick=${() => onDone({ lang, script: "latin" })}>
+          <span class="script-card-label">Latin / romanized</span>
+          <span class="script-card-example">${SCRIPT_EXAMPLES[lang].latin}</span>
+        </button>
+      </div>
+    </div>`;
+
+  if (mode === "intro") return html`<div class="lang-intro">${content}</div>`;
+  return html`
+    <div class="modal-backdrop" onClick=${onCancel}>
+      <div class="modal lang-modal" onClick=${(e) => e.stopPropagation()}>
+        <button class="icon-btn lang-modal-close" title="Close" onClick=${onCancel}>${Icon.close}</button>
+        <div class="modal-body">${content}</div>
+      </div>
+    </div>`;
+}
+
 function App() {
+  // null until the student has picked a language once (see LANG_PREF_KEY) - the
+  // absence of a saved pref is exactly what triggers the full-screen intro
+  // picker below, before any chat UI renders at all.
+  const [pref, setPref] = useState(loadLangPref);
+  const [showLangPicker, setShowLangPicker] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [lang, setLang] = useState("en-IN");
   const [speakOn, setSpeakOn] = useState(true);
-  // Off means "auto", which mirrors whatever script the student typed in: type in
-  // Devanagari and the reply comes back in Devanagari, type "fee kiti ahe" and it
-  // comes back romanized (see rag._apply_script_pref). On forces native script,
-  // which is what someone typing romanized wants when they'd rather read
-  // Devanagari/Tamil - and what makes the answer speakable, since the TTS voice
-  // can't pronounce romanized text.
-  const [nativeScript, setNativeScript] = useState(false);
   const [recording, setRecording] = useState(false);
   const [hint, setHint] = useState("");
   const [showDemo, setShowDemo] = useState(false);
 
+  const lang = LANG_TO_CODE[pref ? pref.lang : "en"];
+  // "auto" mirrors whatever script the student typed in: type in Devanagari and
+  // the reply comes back in Devanagari, type "fee kiti ahe" and it comes back
+  // romanized (see rag._apply_script_pref). "native" forces native script, which
+  // is what someone who picked native script wants even from romanized input -
+  // and what makes the answer speakable, since the TTS voice can't pronounce
+  // romanized text.
+  const nativeScript = !!(pref && pref.script === "native");
+
   const welcome = WELCOME[TTS_LANG_MAP[lang]] || WELCOME.en;
+
+  const applyPref = (p) => {
+    saveLangPref(p);
+    setPref(p);
+    setShowLangPicker(false);
+  };
 
   const patchMessage = (id, patch) =>
     setMessages((m) => m.map((msg) => (msg.id === id ? { ...msg, ...patch } : msg)));
@@ -388,9 +572,20 @@ function App() {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [messages]);
 
-  const send = useCallback(async (text) => {
+  // `keyOverride` (set only when resubmitting after a program-clarification
+  // chip click - see pickProgram) applies to THIS request only and is never
+  // persisted - removed 2026-08-12 after a real vague follow-up question got
+  // silently answered from a program a student had switched to minutes
+  // earlier and forgotten about, with no visible sign it was still "stuck"
+  // there. Every message not resubmitting a specific clarified answer now
+  // always starts fresh from DEFAULT_API_KEY, so the backend's own routing
+  // (rag.py's detect_program/needs_comparison/needs_program_clarification)
+  // decides each question independently rather than a stale client-side key
+  // deciding it for them.
+  const send = useCallback(async (text, keyOverride) => {
     const q = (text || "").trim();
     if (!q || sending) return;
+    const activeKey = keyOverride || DEFAULT_API_KEY;
     setMessages((m) => [...m, { role: "user", text: q }, { role: "thinking" }]);
     setInput("");
     if (taRef.current) taRef.current.style.height = "auto";
@@ -398,7 +593,7 @@ function App() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(API_KEY ? { "X-API-Key": API_KEY } : {}) },
+        headers: { "Content-Type": "application/json", ...(activeKey ? { "X-API-Key": activeKey } : {}) },
         body: JSON.stringify({
           question: q,
           scriptPreference: nativeScript ? "native" : "auto",
@@ -411,6 +606,9 @@ function App() {
       setMessages((m) => [...m.slice(0, -1), {
         id: botId, role: "bot", text: d.answerText, pages: d.pageReferences || [],
         model: d.model, source: d.source, audioState: d.speakable ? "idle" : "unspeakable",
+        clarifyOptions: d.clarifyOptions || null, answeredForProgram: d.answeredForProgram || null,
+        comparedPrograms: d.comparedPrograms || null,
+        originalQuestion: q, faqId: d.faqId || null, feedback: null, feedbackKey: activeKey,
       }]);
 
       if (speakOn && d.speakable) {
@@ -421,7 +619,7 @@ function App() {
           // Generate now, in the background - the user taps the button to actually
           // hear it once it's ready, which is what keeps playback reliable.
           patchMessage(botId, { audioState: "generating" });
-          fetchIndicAudio(d.answerText, short)
+          fetchIndicAudio(d.answerText, short, activeKey)
             .then((url) => patchMessage(botId, { audioState: "ready", audioUrl: url }))
             .catch(() => patchMessage(botId, { audioState: "error" }));
         }
@@ -435,6 +633,42 @@ function App() {
       setSending(false);
     }
   }, [sending, lang, speakOn, nativeScript]);
+
+  // Resolves a program-clarification prompt: look up that program's own
+  // widget key and resubmit the original question under it, for this one
+  // request only (see send's keyOverride) - the NEXT message a student
+  // types is unaffected and goes through the default project's own routing
+  // fresh, same as embedding that program's own dedicated widget would for
+  // just this one answer, not for the rest of the conversation.
+  const pickProgram = useCallback((projectId, originalQuestion) => {
+    const program = PROGRAMS.find((p) => p.projectId === projectId);
+    if (!program) return;
+    send(originalQuestion, program.apiKey);
+  }, [send]);
+
+  // Thumbs up/down on a specific served answer. Uses the key that ANSWERED
+  // this particular message (m.feedbackKey), stored on the message itself at
+  // send time - independent of whatever key answers the NEXT message, so
+  // feedback always lands in the project that actually served it. Marks the
+  // message locally right
+  // away so the buttons disable and show the choice - no need to wait on a
+  // response to feel responsive, and a failure just leaves it retryable.
+  const sendFeedback = useCallback(async (messageId, faqId, feedbackKey, liked) => {
+    patchMessage(messageId, { feedback: liked ? "liked" : "disliked" });
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(feedbackKey ? { "X-API-Key": feedbackKey } : {}) },
+        body: JSON.stringify({ faqId, liked }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      // Don't silently claim success on a failed submit - let the student
+      // see it didn't take and try again, rather than a false "recorded"
+      // state with no actual effect server-side.
+      patchMessage(messageId, { feedback: null });
+    }
+  }, []);
 
   const toggleMic = useCallback(() => {
     const r = rec.current;
@@ -465,6 +699,14 @@ function App() {
     e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
   };
 
+  // First run: nothing picked yet, so the language/script choice IS the whole
+  // screen - no chat, no header, no other controls to click through first.
+  if (!pref) {
+    return html`<${LangPicker} mode="intro" initial=${null} onDone=${applyPref} />`;
+  }
+
+  const currentLangLabel = LANGUAGE_OPTIONS.find((o) => o.code === pref.lang).label;
+
   return html`
     <div class="chat">
       <header class="chat-header">
@@ -479,15 +721,10 @@ function App() {
           <button class="icon-btn" title="Demo question library" onClick=${() => setShowDemo(true)}>
             ${Icon.list}
           </button>
-          <select class="lang-select" value=${lang} onChange=${(e) => setLang(e.target.value)} aria-label="Voice language">
-            ${LANGS.map((l) => html`<option key=${l.code} value=${l.code}>${l.label}</option>`)}
-          </select>
-          ${lang !== "en-IN" && html`
-            <button class=${"icon-btn script-toggle" + (nativeScript ? " on" : "")}
-                    title=${nativeScript ? "Native script — tap for romanized (Hinglish/Tanglish)" : "Romanized (Hinglish/Tanglish) — tap for native script"}
-                    onClick=${() => setNativeScript(!nativeScript)}>
-              ${nativeScript ? "अ" : "aA"}
-            </button>`}
+          <button class="icon-btn lang-current" title="Change language" onClick=${() => setShowLangPicker(true)}>
+            <span>${currentLangLabel}</span>
+            ${pref.lang !== "en" && html`<span class="lang-current-script">${pref.script === "native" ? "· native" : "· Latin"}</span>`}
+          </button>
           <button class=${"icon-btn" + (speakOn ? " on" : "")} title="Read answers aloud"
                   onClick=${() => { setSpeakOn(!speakOn); if (speakOn) stopSpeaking(); }}>
             ${Icon.speaker}
@@ -508,7 +745,7 @@ function App() {
               ${welcome.chips.map((s) => html`<button class="chip" key=${s} onClick=${() => send(s)}>${s}</button>`)}
             </div>
           </div>`}
-        ${messages.map((m, i) => html`<${Message} key=${m.id || i} m=${m} lang=${lang} onReplayBrowser=${(t) => speakBrowserNow(t, lang)} />`)}
+        ${messages.map((m, i) => html`<${Message} key=${m.id || i} m=${m} lang=${lang} onReplayBrowser=${(t) => speakBrowserNow(t, lang)} onPickProgram=${pickProgram} onFeedback=${sendFeedback} />`)}
       </main>
 
       <footer class="composer">
@@ -522,6 +759,7 @@ function App() {
       </footer>
 
       ${showDemo && html`<${DemoLibrary} onClose=${() => setShowDemo(false)} />`}
+      ${showLangPicker && html`<${LangPicker} mode="modal" initial=${pref} onDone=${applyPref} onCancel=${() => setShowLangPicker(false)} />`}
     </div>`;
 }
 

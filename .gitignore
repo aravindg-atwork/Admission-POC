@@ -20,6 +20,7 @@ node_modules/
 # --- Generated data (keys, cache, indexes, uploaded PDFs) ---
 data/api-keys.json
 data/faq-cache.json
+data/learned-discriminators.json
 data/prospectus/*
 data/vector-store/*
 !data/prospectus/.gitkeep

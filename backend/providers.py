@@ -88,9 +88,9 @@ class SarvamProvider:
     def configured(self):
         return bool(config.SARVAM_API_KEY)
 
-    def chat(self, system_prompt, user_prompt, timeout, **_):
+    def chat(self, system_prompt, user_prompt, timeout, temperature=None, **_):
         payload = {"model": config.SARVAM_MODEL, "max_tokens": self.max_tokens,
-                   "temperature": config.CHAT_TEMPERATURE,
+                   "temperature": config.CHAT_TEMPERATURE if temperature is None else temperature,
                    "messages": _messages(system_prompt, user_prompt)}
         headers = {"api-subscription-key": config.SARVAM_API_KEY}
         result = _post(config.SARVAM_URL, payload, headers, timeout)
@@ -105,12 +105,12 @@ class SarvamProvider:
         return answer, "sarvam:" + config.SARVAM_MODEL
 
 
-def _ollama_options():
+def _ollama_options(temperature=None):
     """Sampling options for Ollama, which nests them under "options" rather than
     accepting them at the top level like the OpenAI-shaped API - a top-level
     temperature here is silently ignored, not rejected.
     """
-    options = {"temperature": config.CHAT_TEMPERATURE}
+    options = {"temperature": config.CHAT_TEMPERATURE if temperature is None else temperature}
     if config.OLLAMA_SEED:
         options["seed"] = config.OLLAMA_SEED
     return options
@@ -125,7 +125,7 @@ class OllamaProvider:
     def configured(self):
         return bool(config.OLLAMA_URL)
 
-    def chat(self, system_prompt, user_prompt, timeout, question="", model=None, **_):
+    def chat(self, system_prompt, user_prompt, timeout, question="", model=None, temperature=None, **_):
         model = model or config.MODEL_LOCAL
         user_prompt += _SCRIPT_REMINDER.get(detect_script(question), "")
         payload = {
@@ -136,7 +136,7 @@ class OllamaProvider:
             # OpenAI-shaped payload Sarvam takes - a top-level "temperature" is
             # silently ignored here rather than rejected, so it would look set
             # while the model kept running at its 0.8 default.
-            "options": _ollama_options(),
+            "options": _ollama_options(temperature),
             "messages": _messages(system_prompt, user_prompt),
         }
         url = config.OLLAMA_URL.rstrip("/") + "/api/chat"
@@ -170,15 +170,48 @@ class SelfHostedProvider:
     def configured(self):
         return bool(config.SELFHOSTED_URL and config.SELFHOSTED_API_KEY)
 
-    def chat(self, system_prompt, user_prompt, timeout, question="", model=None, **_):
-        model = model or config.SELFHOSTED_MODEL
+    def chat(self, system_prompt, user_prompt, timeout, question="", model=None, temperature=None, **_):
+        # `question` is blank for translate_to_english's call (see llm.py) -
+        # fall back to scripting off user_prompt so that call still routes to
+        # the Indic-capable model instead of defaulting to the English one.
+        script = detect_script(question or user_prompt)
+        model = model or (
+            config.SELFHOSTED_MODEL_INTL if script in ("devanagari", "tamil")
+            else config.SELFHOSTED_MODEL_EN
+        )
         # Same reminder Ollama needs (see OllamaProvider.chat): a smaller
         # model is more likely to drop the system-prompt language rule for
         # Indic questions than sarvam-105b was.
         user_prompt += _SCRIPT_REMINDER.get(detect_script(question), "")
+        # max_tokens and repetition control were both missing here originally
+        # (unlike SarvamProvider, which at least caps max_tokens=4096) - on
+        # the small quantized models this server runs (sarvam-1-gguf-Q4_K_M
+        # is 2B), low CHAT_TEMPERATURE plus no repetition penalty is a
+        # textbook degenerate-loop trigger. Reproduced directly: a plain
+        # Marathi hostel-availability question spun into the same Q&A pair
+        # repeated as 35+ numbered list items, still going when the caller's
+        # own 120s timeout cut it off.
+        #
+        # frequency_penalty/presence_penalty (OpenAI fields) plus llama.cpp's
+        # own repeat_penalty were all sent together as a hedge, on the
+        # assumption the OpenAI fields were "inert if unused." That
+        # assumption was wrong: the self-hosted server was silently dropping
+        # all three (a server-side bug, since fixed 2026-08-11) - so they had
+        # zero real effect the whole time this was tuned. Once the server
+        # started actually honoring them, having all three stacked
+        # simultaneously over-suppressed the small model so hard it could no
+        # longer generate anything novel and just echoed the question back
+        # verbatim instead of answering - confirmed on two separate Marathi
+        # questions. repeat_penalty alone (llama.cpp's native, most targeted
+        # mechanism) at 1.15 is what actually works: breaks the repetition
+        # loop without over-suppressing. Do not add frequency_penalty/
+        # presence_penalty back without deliberately re-testing the combined
+        # effect - they are no longer inert.
         payload = {
             "model": model, "stream": False,
-            "temperature": config.CHAT_TEMPERATURE,
+            "temperature": config.CHAT_TEMPERATURE if temperature is None else temperature,
+            "max_tokens": 1024,
+            "repeat_penalty": 1.15,
             "messages": _messages(system_prompt, user_prompt),
         }
         # The server accepts both; Bearer matches the standard OpenAI shape
@@ -191,7 +224,43 @@ class SelfHostedProvider:
         return clean(result["choices"][0]["message"]["content"]), "selfhosted:" + model
 
 
-_REGISTRY = {p.name: p for p in (SarvamProvider(), OllamaProvider(), SelfHostedProvider())}
+class HetznerProvider:
+    """Hetzner Inference API - genuinely OpenAI-compatible (standard
+    /v1/chat/completions, unlike SelfHostedProvider's nonstandard /v1/chat),
+    exposing noticeably larger models than the self-hosted server it was
+    added to replace as CHAT_FALLBACK 2026-08-12.
+
+    is_cloud = False for the same reason as SelfHostedProvider: llm.py's
+    _usable() gates any is_cloud=True provider behind Sarvam's daily-cap
+    bookkeeping, which has nothing to do with this service's own (separate,
+    unmetered-here) usage.
+    """
+
+    name = "hetzner"
+    is_cloud = False
+
+    def configured(self):
+        return bool(config.HETZNER_API_KEY)
+
+    def chat(self, system_prompt, user_prompt, timeout, question="", model=None, temperature=None, **_):
+        model = model or config.HETZNER_MODEL
+        # Same reminder Ollama/self-hosted need (see their .chat methods) -
+        # not yet verified whether these specific models need it as much as
+        # the small self-hosted ones did, but costs nothing to include and
+        # avoids re-discovering the same Indic-language-drop bug blind.
+        user_prompt += _SCRIPT_REMINDER.get(detect_script(question), "")
+        payload = {
+            "model": model,
+            "temperature": config.CHAT_TEMPERATURE if temperature is None else temperature,
+            "messages": _messages(system_prompt, user_prompt),
+        }
+        headers = {"Authorization": f"Bearer {config.HETZNER_API_KEY}"}
+        url = config.HETZNER_URL.rstrip("/") + "/chat/completions"
+        result = _post(url, payload, headers, timeout)
+        return clean(result["choices"][0]["message"]["content"]), "hetzner:" + model
+
+
+_REGISTRY = {p.name: p for p in (SarvamProvider(), OllamaProvider(), SelfHostedProvider(), HetznerProvider())}
 
 
 def get(name):

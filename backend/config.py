@@ -51,6 +51,27 @@ LEGACY_STATS_PATH = DATA_DIR / "stats.json"
 EMBEDDING_URL = os.environ.get("EMBEDDING_URL", "http://localhost:8000/embed")
 EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY", "")
 
+# --- Self-hosted embeddings (BGE-M3, multilingual) ---
+# Set EMBEDDING_PROVIDER=selfhosted to route embeddings through the same
+# self-hosted server as chat (SELFHOSTED_URL/SELFHOSTED_API_KEY above)
+# instead of the local nomic-embed-text-v1 service (EMBEDDING_URL above).
+# The point is cross-lingual retrieval: nomic-embed-text doesn't align
+# Hindi/Marathi/Tamil with English closely enough for a native-script
+# question to reliably retrieve the right English prospectus chunks, which
+# is why every non-English question currently pays for a translate-to-
+# English round trip before retrieval (see llm.translate_to_english) - a
+# round trip that has been the source of several bugs today. BGE-M3 is
+# trained for direct cross-lingual alignment and could remove that step from
+# the retrieval path entirely. Added 2026-08-11 while the model was still
+# downloading on the user's server - UNVERIFIED against a live endpoint;
+# confirm the actual request/response shape (embeddings.py currently guesses
+# the OpenAI-standard POST /v1/embeddings convention, matching how vLLM/TEI/
+# llama.cpp servers commonly expose embeddings) before trusting this in
+# production, the same way SELFHOSTED_URL's chat path turned out to deviate
+# from the OpenAI standard (POST /v1/chat, not /v1/chat/completions).
+EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "local")
+SELFHOSTED_EMBEDDING_MODEL = os.environ.get("SELFHOSTED_EMBEDDING_MODEL", "bge-m3")
+
 # --- Ollama + model routing ---
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 # Keep models resident in memory so there is no per-request cold start.
@@ -71,25 +92,76 @@ MODEL_LOCAL = os.environ.get("MODEL_LOCAL", "gemma2:2b")
 MODEL_FALLBACK = os.environ.get("MODEL_FALLBACK", "llama3.1")
 
 # --- Self-hosted LLM API (OpenAI-shaped, custom endpoint path) ---
+# CHAT DUTY REMOVED 2026-08-12: leadership decided against depending on this
+# shared server for answer generation at all - Sarvam is fast enough as
+# CHAT_PRIMARY, and HetznerProvider (see providers.py) replaced this as
+# CHAT_FALLBACK. SELFHOSTED_MODEL_EN/INTL below and SelfHostedProvider's
+# per-request model routing are now DEAD CODE under the current .env - both
+# only execute if CHAT_FALLBACK is set back to "selfhosted" (confirmed via
+# grep: every remaining call site branches on that check). Left in place
+# rather than deleted, in case this server's chat duty is ever revived; this
+# server's EMBEDDING duty (SELFHOSTED_EMBEDDING_MODEL, EMBEDDING_PROVIDER
+# above) is unaffected and still live.
+#
+# Everything below this point describes history from when this server DID
+# handle chat (through 2026-08-12 morning) - kept for that record, not
+# because it's still operative.
+#
 # A team-run server exposing several models over an OpenAI-compatible
 # body/response shape - except completions are POSTed to /v1/chat, not the
-# standard /v1/chat/completions. Intended to replace the on-box Ollama
-# fallback (see CHAT_FALLBACK) now that this laptop is the only active dev
-# machine and running a local model on it is not the goal; Sarvam stays
-# primary since these models are rated below sarvam-105b on quality.
+# standard /v1/chat/completions.
 #
-# SELFHOSTED_MODEL is a plain string so switching which of the server's
-# models answers is a config change, not a code change - same pattern as
-# MODEL_LOCAL above. Verified against GET {SELFHOSTED_URL}/v1/models on
-# 2026-08-10, the server listed: sarvam-1-gguf-Q4_K_M, llama3.1-8b,
-# gemma2-2b, qwen2.5-7b-lora-test-base, qwen2.5-7b-lora-test-deepthink. Note
-# this is a live, mutable list on someone else's infrastructure - it did NOT
-# include qwen2.5-coder:1.5b or llama3.2-3b, both mentioned when this was set
-# up, so re-check that endpoint before assuming a model name here still
-# exists.
+# SELFHOSTED_MODEL_EN / SELFHOSTED_MODEL_INTL split the self-hosted tier by
+# language, kept as two separate settings even though both point at
+# qwen2.5-3b-instruct as of 2026-08-12, in case the right model per lane
+# diverges again later (it already has once - see history below).
+#
+# sarvam-1-gguf-Q4_K_M (2B) was the INTL pick through 2026-08-11 on the
+# reasoning that it was the only model on this server reliably handling
+# Hindi/Marathi/Tamil script. That reasoning didn't hold up under this
+# project's actual RAG-sized prompts (~3.5-5.9K tokens, 9-10 retrieved
+# excerpts): captured the exact live request/response for a real Marathi
+# question and replayed it directly against the server three separate ways -
+# default settings echoed the question back with zero content, repeat_penalty
+# tuned to stop a 35+ line repetition loop instead produced a DIFFERENT
+# zero-content echo, and even full-context repeat_last_n=-1 only fixed it at
+# 114s (not demo-viable). qwen2.5-3b-instruct (3B) handled the IDENTICAL
+# captured payload correctly on the first attempt, no tuning, 84s, coherent
+# Devanagari, clean stop. Switched INTL to it on that evidence; not yet
+# separately validated on Tamil script specifically (the repro that drove
+# this was Marathi/Devanagari) - re-check if Tamil answers regress.
+#
+# The EN pick changed once already for an unrelated reason: glm-4-9b-chat was
+# the pick on 2026-08-11 morning, but by that afternoon it showed as
+# "available" (not "running", no bound port) on GET {SELFHOSTED_URL}/v1/models
+# - unloaded on the server side - while qwen2.5-3b-instruct was actually
+# running, so that's what EN moved to.
+#
+# SelfHostedProvider.chat() picks between the two settings per-request via
+# detect_script (see providers.py) unless a caller passes model= explicitly.
+# This is a config change, not a code change, if the server's lineup shifts
+# again - which it has repeatedly; this is a live, mutable list on someone
+# else's infrastructure, re-check GET {SELFHOSTED_URL}/v1/models for
+# status:"running" before assuming a name here still exists.
 SELFHOSTED_URL = os.environ.get("SELFHOSTED_URL", "")
 SELFHOSTED_API_KEY = os.environ.get("SELFHOSTED_API_KEY", "")
-SELFHOSTED_MODEL = os.environ.get("SELFHOSTED_MODEL", "sarvam-1-gguf-Q4_K_M")
+SELFHOSTED_MODEL_EN = os.environ.get("SELFHOSTED_MODEL_EN", "qwen2.5-3b-instruct")
+SELFHOSTED_MODEL_INTL = os.environ.get("SELFHOSTED_MODEL_INTL", "qwen2.5-3b-instruct")
+
+# --- Hetzner Inference API (OpenAI-shaped, standard /v1/chat/completions) ---
+# Added 2026-08-12 to replace SelfHostedProvider as CHAT_FALLBACK: genuinely
+# OpenAI-compatible (unlike the self-hosted server's nonstandard /v1/chat
+# path above), noticeably larger/more capable models (35B-1T range vs.
+# qwen2.5-3b-instruct's 3B), and moves this app's fallback load off the
+# shared self-hosted server entirely (embeddings still go through
+# SELFHOSTED_URL above - unrelated to this). One model for both EN and INTL
+# lanes, unlike the self-hosted split above - no evidence yet that a model
+# this much larger needs the same per-language routing a 3B model did;
+# revisit with SELFHOSTED_MODEL_EN/INTL's split pattern if a real Indic
+# regression turns up.
+HETZNER_API_KEY = os.environ.get("HETZNER_API_KEY", "")
+HETZNER_URL = os.environ.get("HETZNER_URL", "https://inference.hetzner.com/api/v1")
+HETZNER_MODEL = os.environ.get("HETZNER_MODEL", "Qwen/Qwen3.6-35B-A3B-FP8")
 
 # --- Chat provider selection (see providers.py) ---
 # Which backend answers questions, and what to fall back to when it fails or is
@@ -153,6 +225,68 @@ SARVAM_USAGE_PATH = BASE_DIR / "data" / "sarvam-usage.json"
 # Short timeout so a stalled cloud call fails over to the local model fast, instead
 # of hanging the UI. Sarvam normally answers in ~5-12s.
 SARVAM_TIMEOUT = int(os.environ.get("SARVAM_TIMEOUT", "45"))
+
+# --- Orchestration / validation / self-learning (2026-08-12) ---
+# ORCHESTRATOR_PROVIDER is deliberately never "sarvam" in normal operation:
+# every new call path added by this feature (sub-topic answers, the
+# validator, a failed-review regeneration retry) is Hetzner-only by
+# construction, so none of it can compete with the single user-facing
+# answer call for Sarvam's metered daily quota - see llm.generate_scoped's
+# docstring. This is a design principle, not just today's quota situation -
+# it means this feature can never make a FUTURE quota crunch worse either.
+ORCHESTRATOR_PROVIDER = os.environ.get("ORCHESTRATOR_PROVIDER", "hetzner")
+
+# Master switches - each piece can be independently disabled without
+# touching the others, matching this codebase's existing per-feature flag
+# pattern (FAQ_AUTOCACHE below).
+ORCHESTRATOR_ENABLED = os.environ.get("ORCHESTRATOR_ENABLED", "true").lower() == "true"
+VALIDATION_ENABLED = os.environ.get("VALIDATION_ENABLED", "true").lower() == "true"
+# Deterministic checks (validate.deterministic_checks) always run when
+# VALIDATION_ENABLED is true and cost nothing; this second switch gates
+# ONLY the bounded LLM check + regeneration on top of them, so the
+# zero-cost signal can be verified against real traffic before spending
+# any Hetzner calls on it (see the plan's staged rollout).
+VALIDATION_LLM_CHECK_ENABLED = os.environ.get("VALIDATION_LLM_CHECK_ENABLED", "false").lower() == "true"
+
+# Orchestrator: complexity trigger + sub-topic fan-out (see orchestrator.py).
+ORCHESTRATOR_MIN_WORDS = int(os.environ.get("ORCHESTRATOR_MIN_WORDS", "35"))
+ORCHESTRATOR_MAX_SUBTASKS = int(os.environ.get("ORCHESTRATOR_MAX_SUBTASKS", "3"))
+ORCHESTRATOR_TIMEOUT = int(os.environ.get("ORCHESTRATOR_TIMEOUT", "60"))
+# Retrieval chunks per sub-topic in an orchestrated answer, deliberately
+# smaller than config.TOP_K (15): that number was tuned for ONE topic's
+# context filling the whole prompt, but an orchestrated question pulls from
+# several sub-topics at once - same reasoning as rag.py's
+# _COMPARISON_TOP_K_PER_PROGRAM (10), which was itself raised from an
+# initial 6 after live-testing found 6 too tight for even a single topic
+# (see rag.py's comment on that constant) - starting at the already-
+# measured-sufficient value here rather than re-discovering the same gap.
+ORCHESTRATOR_TOP_K_PER_SUBTASK = int(os.environ.get("ORCHESTRATOR_TOP_K_PER_SUBTASK", "10"))
+
+# Validation: the bound is hard-coded in code (exactly one validator call,
+# exactly one regeneration attempt - see validate.py/rag.py), not a loop
+# driven by this number. VALIDATION_MAX_ROUNDS exists as a named constant
+# for clarity/future reference only; deliberately not used to drive
+# iteration - an unbounded validate-regenerate loop on a service already
+# averaging ~30s/answer is a runaway-latency/cost risk, not a robustness
+# win (see the plan's "deliberate deviations" section).
+VALIDATION_MAX_ROUNDS = int(os.environ.get("VALIDATION_MAX_ROUNDS", "1"))
+# 45s timed out on Hetzner's 35B model for a real validator call that
+# genuinely needed ~60-90s (measured directly, see llm_check's docstring
+# context) - a too-tight timeout here silently fails PASS (see llm_check's
+# safe-degrade rule), which is the wrong failure mode for a check whose
+# whole job is catching a wrong answer. 90s costs latency only on the rare
+# path where a deterministic check already found something to escalate.
+VALIDATION_TIMEOUT = int(os.environ.get("VALIDATION_TIMEOUT", "90"))
+
+# Self-learning: how much flagged/review-log history counts, and how many
+# repeats of the same pattern justify surfacing it at all - low defaults
+# since this project's total daily volume is small (see stats).
+PATTERN_WINDOW_DAYS = int(os.environ.get("PATTERN_WINDOW_DAYS", "14"))
+PATTERN_MIN_OCCURRENCES = int(os.environ.get("PATTERN_MIN_OCCURRENCES", "3"))
+# A single GLOBAL overlay file, not per-project: faq.py's _CONTRAST_FORMS/
+# _ORDINAL_FORMS discriminator vocabulary is itself module-level and shared
+# across every project's cache, so learned additions to it are global too.
+LEARNED_DISCRIMINATORS_PATH = BASE_DIR / "data" / "learned-discriminators.json"
 
 # --- Indic TTS service (Dockerized AI4Bharat) ---
 TTS_URL = os.environ.get("TTS_URL", "http://localhost:8001/tts")
@@ -235,7 +369,26 @@ FAQ_AUTOCACHE = os.environ.get("FAQ_AUTOCACHE", "1") == "1"
 # from pages that did not contain the fact and correctly said it wasn't
 # specified. K=10 took recall to 68/68 for both languages; 12 and 14 added
 # nothing, so this is the knee of the curve rather than a guess.
-TOP_K = int(os.environ.get("TOP_K", "10"))
+#
+# 15, raised from 10 on 2026-08-12: that 68/68 result was measured against
+# nomic-embed-text-v1 (the originally documented embedding model, see
+# docs/MODELS_AND_DEPLOYMENT.md), not what's actually running - EMBEDDING_PROVIDER
+# has since moved to selfhosted BGE-M3 (see .env), and nobody re-validated K
+# against the new embedding space until this date. Re-run on BGE-M3: K=10
+# had quietly regressed to 61/68 (89.7%), not the documented 100%. Swept
+# 5/7/10/15 - K=15 recovered the most (63/68, 92.6%) and also gave the best
+# table-lookup accuracy (15/17, still 0 confidently wrong at every K tested).
+# Trade-off, not a free win: noise (non-gold chunks retrieved) rises with K
+# too (measured ~88% of retrieved chunks are non-gold at K=15, vs ~83% at
+# K=10) - accepted deliberately, since the recall wins are real chunks that
+# were missing entirely, not just more padding. 5 probes (reservation-%
+# questions, attendance, college locations) stayed missed at every K from 5
+# to 15 - a genuine BGE-M3 semantic-retrieval gap for those topics, not a
+# windowing problem, and not fixed by raising K further. Left as a tracked
+# gap - likely needs a chunking/content fix (e.g. markdown-sourced ingestion)
+# rather than more retrieval headroom. See tools/test_retrieval_hi_mr.py to
+# re-measure if the embedding model or corpus changes again.
+TOP_K = int(os.environ.get("TOP_K", "15"))
 CHUNK_CHARS = int(os.environ.get("CHUNK_CHARS", "1200"))
 CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "200"))
 

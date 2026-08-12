@@ -10,6 +10,7 @@ pattern (require a domain-context word AND a problem word, to avoid false
 positives on a plain factual question).
 """
 
+import re
 import unicodedata
 
 # A payment-domain word alone ("What is the fee?") is a completely normal
@@ -111,3 +112,68 @@ def is_payment_issue(text):
     """
     words = _words(text)
     return bool(words & _PAYMENT_CONTEXT) and bool(words & _PROBLEM_MARKERS)
+
+
+# Added 2026-08-12 after a live, reported failure: "I have scored 60% am I
+# eligible for bvsc, bfsc, b.tech?" got THREE inconsistent answers from the
+# same bare "60%" - accepted at face value for B.V.Sc.'s "Biology OR
+# Biotechnology" combo, then rejected for B.F.Sc./B.Tech citing "doesn't
+# specify subject combination" for the EXACT SAME NUMBER. Eligibility across
+# all these programs is based on the subject-COMBINATION percentage (PCB or
+# PCM specifically), not the student's overall 12th aggregate, and a bare
+# "60%" genuinely doesn't say which one it is - the fix is not a better
+# guess, it's asking, the same lesson the NRI-scope leak taught earlier the
+# same day (see rag.py's _add_nri_scope_caveat): when prompting alone can't
+# guarantee a model treats the same ambiguous input consistently, a
+# deterministic short-circuit is what makes it not the model's call at all.
+#
+# "I have"/"I scored"/etc. requires "I" directly before the verb (not just
+# "have" alone, which is common in totally unrelated questions like "what
+# documents do I have to submit") - combined with a percentage actually
+# appearing nearby, false positives on ordinary questions are minimal: "I
+# have a question" has no percent sign, so never matches this.
+_SELF_SCORE_RE = re.compile(r"\bi\s+(?:have|scored|got|secured|obtained|achieved)\b", re.IGNORECASE)
+_PERCENT_RE = re.compile(r"\d{1,3}\s*%")
+# A student who already names which figure they mean has resolved the
+# ambiguity themselves - do not force a clarification they already answered.
+_SCOPE_QUALIFIERS = (
+    "overall", "aggregate", "pcb", "pcm", "pcbe", "pcme",
+    "subject wise", "subject-wise", "subjectwise", "each subject",
+    "in physics", "in pcb", "in pcm",
+)
+_ELIGIBILITY_WORDS = {"eligible", "eligibility", "admission", "apply", "qualify", "qualified"}
+# Word-set membership alone missed real phrasing found in a live 2026-08-12
+# stress test: "I got 45% marks, can I get into B.F.Sc.?" has the exact same
+# ambiguous-percentage shape as the original reported failure, but "get into"
+# has neither word in _ELIGIBILITY_WORDS, so the guardrail silently didn't
+# fire while an almost-identical question phrased with "eligible" did -
+# inconsistent behavior on the same underlying ambiguity. Phrase-based
+# (substring, like _SCOPE_QUALIFIERS) rather than adding "get"/"into" as
+# standalone words, since either alone is far too generic and would false-
+# positive on unrelated questions.
+_ELIGIBILITY_PHRASES = (
+    "get into", "get admission", "get selected", "get a seat",
+    "chance of getting", "can i join", "will i get",
+)
+
+
+def needs_percentage_clarification(text):
+    """True when a question states the student's OWN percentage without
+    saying whether it's their overall 12th aggregate or the required
+    subject-combination score, for a question that's actually about
+    eligibility. English-only for now (the reported failure was English) -
+    not yet extended to Hindi/Marathi self-score phrasing, which is
+    grammatically harder to pin down with a fixed regex (postposition-based,
+    not a fixed "I verb'd" word order) - revisit if a real Indic miss turns
+    up, same as this module's other sets.
+    """
+    if not _PERCENT_RE.search(text):
+        return False
+    if not _SELF_SCORE_RE.search(text):
+        return False
+    lowered = text.lower()
+    if any(qualifier in lowered for qualifier in _SCOPE_QUALIFIERS):
+        return False
+    if _words(text) & _ELIGIBILITY_WORDS:
+        return True
+    return any(phrase in lowered for phrase in _ELIGIBILITY_PHRASES)

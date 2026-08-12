@@ -5,6 +5,7 @@ Windows host under the machine's Application Control policy. Serves the React
 frontend (static files) and the JSON API:
 
   POST /api/chat                         X-API-Key gated - ask a question
+  POST /api/feedback                     X-API-Key gated - like/dislike a specific answered response
   POST /api/ingest                       X-API-Key gated - upload a prospectus PDF (multipart)
   POST /api/tts                          X-API-Key gated - proxy to the Indic TTS service
   POST /api/catalogue/match              X-API-Key gated - rank catalogue items against quotation text
@@ -14,6 +15,14 @@ frontend (static files) and the JSON API:
   PATCH           /admin/projects/id     X-Admin-Token gated - update project settings (allow_cloud, prospectus_url, watch_enabled)
   DELETE          /admin/projects/id     X-Admin-Token gated - delete a project
   GET             /admin/projects/id/stats   X-Admin-Token gated - dashboard/cost metrics + health
+  GET             /admin/projects/id/flagged X-Admin-Token gated - disliked answers pulled from cache, for review
+  PATCH           /admin/projects/id/flagged/flagId  X-Admin-Token gated - resolve a flagged dislike (dismissed/corrected/rule-changed)
+  GET             /admin/projects/id/review-log      X-Admin-Token gated - the system's OWN self-detected near-misses (validation flags/regenerations)
+  GET             /admin/projects/id/review-summary  X-Admin-Token gated - aggregate counts over flagged + review-log
+  GET             /admin/projects/id/suggestions      X-Admin-Token gated - detected patterns, split safe-to-automate vs propose-only
+  POST            /admin/projects/id/suggestions/apply X-Admin-Token gated - apply a safe-to-automate discriminator synonym
+  GET             /admin/learned-discriminators        X-Admin-Token gated - audit list of applied learned overlay entries (global)
+  DELETE          /admin/learned-discriminators/id     X-Admin-Token gated - revert one learned overlay entry
   POST            /admin/projects/id/ingest  X-Admin-Token gated - upload a prospectus PDF (multipart)
   POST            /admin/projects/id/cache/clear  X-Admin-Token gated - clear that project's FAQ cache
   POST            /admin/projects/id/cache/seed   X-Admin-Token gated - bulk-load curated Q&A into that cache
@@ -34,12 +43,21 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import (apikeys, audiocache, catalogue, config, embeddings,
-               extension_settings, faq, llm, projects, prospectus_watch, rag,
-               stats, textclean)
+               extension_settings, faq, llm, programs, projects,
+               prospectus_watch, rag, reviewlog, selflearn, stats, textclean)
 
 # Injected into index.html so the first-party chat widget authenticates without the
 # key being hard-coded in client files.
 _KEY_SNIPPET = '<script>window.ADMISSION_API_KEY="{}";</script>'
+# Every program's own widget key, so the frontend can switch context when a
+# student picks a program off the clarification prompt (see rag.py's
+# needs_program_clarification path) - a plain resubmit under the right key,
+# not a server-side router, since these are already client-embedded widget
+# keys and not treated as secrets (same trust level as ADMISSION_API_KEY
+# above). Built fresh per request rather than cached: cheap (six dict lookups
+# plus get_or_create_default, which is itself already cached), and always
+# reflects whatever projects currently exist.
+_PROGRAMS_SNIPPET = '<script>window.MAFSU_PROGRAMS={};</script>'
 
 
 def _read_multipart_file(body, content_type):
@@ -136,11 +154,23 @@ class Handler(BaseHTTPRequestHandler):
             return
         html = target.read_text(encoding="utf-8")
         key = apikeys.get_or_create_default(config.DEFAULT_PROJECT_ID)["key"]
-        html = html.replace("</head>", _KEY_SNIPPET.format(key) + "</head>", 1)
+        program_list = [
+            {"projectId": pid, "label": name,
+             "apiKey": apikeys.get_or_create_default(pid)["key"]}
+            for pid, name in programs.PROGRAM_NAMES.items()
+            if projects.get(pid)
+        ]
+        snippets = (_KEY_SNIPPET.format(key)
+                    + _PROGRAMS_SNIPPET.format(json.dumps(program_list)))
+        html = html.replace("</head>", snippets + "</head>", 1)
         self._send(200, html, "text/html; charset=utf-8")
 
     def do_GET(self):
         m_stats = re.match(r"^/admin/projects/([^/]+)/stats$", self.path)
+        m_flagged = re.match(r"^/admin/projects/([^/]+)/flagged$", self.path)
+        m_review_log = re.match(r"^/admin/projects/([^/]+)/review-log$", self.path)
+        m_review_summary = re.match(r"^/admin/projects/([^/]+)/review-summary$", self.path)
+        m_suggestions = re.match(r"^/admin/projects/([^/]+)/suggestions$", self.path)
 
         if self.path == "/" or self.path.startswith("/?") or self.path == "/index.html":
             self._serve_index()
@@ -151,6 +181,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(401, {"error": "Invalid admin token."})
                 return
             self._json(200, apikeys.list_keys())
+        elif self.path == "/admin/learned-discriminators":
+            if not self._admin_ok():
+                self._json(401, {"error": "Invalid admin token."})
+                return
+            # Global, not per-project - faq.py's discriminator vocabulary
+            # (and its learned overlay) is itself module-level, shared
+            # across every project's FAQ cache (see selflearn.py's module
+            # docstring).
+            self._json(200, faq.list_learned_discriminators())
         elif self.path == "/admin/projects":
             if not self._admin_ok():
                 self._json(401, {"error": "Invalid admin token."})
@@ -170,6 +209,50 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(404, {"error": "Project not found."})
                 return
             self._json(200, self._build_stats(project_id))
+        elif m_flagged:
+            if not self._admin_ok():
+                self._json(401, {"error": "Invalid admin token."})
+                return
+            project_id = m_flagged.group(1)
+            if not projects.get(project_id):
+                self._json(404, {"error": "Project not found."})
+                return
+            self._json(200, faq.load_flagged(projects.flagged_path(project_id)))
+        elif m_review_log:
+            if not self._admin_ok():
+                self._json(401, {"error": "Invalid admin token."})
+                return
+            project_id = m_review_log.group(1)
+            if not projects.get(project_id):
+                self._json(404, {"error": "Project not found."})
+                return
+            self._json(200, list(reversed(reviewlog.load(projects.review_log_path(project_id)))))
+        elif m_review_summary:
+            if not self._admin_ok():
+                self._json(401, {"error": "Invalid admin token."})
+                return
+            project_id = m_review_summary.group(1)
+            if not projects.get(project_id):
+                self._json(404, {"error": "Project not found."})
+                return
+            self._json(200, self._review_summary(project_id))
+        elif m_suggestions:
+            if not self._admin_ok():
+                self._json(401, {"error": "Invalid admin token."})
+                return
+            project_id = m_suggestions.group(1)
+            if not projects.get(project_id):
+                self._json(404, {"error": "Project not found."})
+                return
+            patterns = selflearn.detect_recurring_patterns(faq.load_flagged(projects.flagged_path(project_id)))
+            safe, propose = [], []
+            for p in patterns:
+                if selflearn.classify(p) == selflearn.SAFE_TO_AUTOMATE:
+                    safe.append({"signature": list(p["signature"]), "count": p["count"],
+                                 "sampleQuestions": [e.get("question", "") for e in p["entries"][:5]]})
+                else:
+                    propose.append(selflearn.propose(p))
+            self._json(200, {"safeToAutomate": safe, "proposeOnly": propose})
         elif self.path.startswith("/api/") or self.path.startswith("/admin/keys/") \
                 or self.path.startswith("/admin/projects/"):
             self._send(404, "Not found", "text/plain")
@@ -181,6 +264,7 @@ class Handler(BaseHTTPRequestHandler):
         m_clear = re.match(r"^/admin/projects/([^/]+)/cache/clear$", self.path)
         m_seed = re.match(r"^/admin/projects/([^/]+)/cache/seed$", self.path)
         m_watch_check = re.match(r"^/admin/projects/([^/]+)/watch/check$", self.path)
+        m_suggestions_apply = re.match(r"^/admin/projects/([^/]+)/suggestions/apply$", self.path)
 
         if self.path == "/api/chat":
             project_id = apikeys.resolve_active(self.headers.get("X-API-Key"))
@@ -196,16 +280,53 @@ class Handler(BaseHTTPRequestHandler):
             ui_language = body.get("uiLanguage") if body.get("uiLanguage") in ("en", "hi", "mr", "ta") else None
             try:
                 result = rag.answer(project_id, question, script_pref, ui_language)
-                self._json(200, {
+                payload = {
                     "answerText": result["answer"],
                     "pageReferences": result["pages"],
                     "model": result["model"],
                     "language": result["language"],
                     "source": result["source"],
                     "speakable": result["speakable"],
-                })
+                }
+                if result.get("clarifyOptions"):
+                    payload["clarifyOptions"] = result["clarifyOptions"]
+                if result.get("answeredForProgram"):
+                    payload["answeredForProgram"] = {
+                        "projectId": result["answeredForProgram"],
+                        "label": programs.PROGRAM_NAMES.get(result["answeredForProgram"], ""),
+                    }
+                # Already {projectId, label} dicts from rag._answer_comparison,
+                # unlike answeredForProgram above (a bare id server.py wraps) -
+                # a comparison answer names several programs, not one.
+                if result.get("comparedPrograms"):
+                    payload["comparedPrograms"] = result["comparedPrograms"]
+                # Only present for answers that actually went through the FAQ
+                # cache (rag/faq-cache/payment-issue/verified-fact) - a
+                # clarify-program prompt, greeting or guard refusal has
+                # nothing for a like/dislike to target, so /api/feedback has
+                # no id to act on and the frontend shows no buttons for those.
+                if result.get("faqId"):
+                    payload["faqId"] = result["faqId"]
+                self._json(200, payload)
             except Exception as exc:
                 self._json(500, {"error": str(exc)})
+
+        elif self.path == "/api/feedback":
+            project_id = apikeys.resolve_active(self.headers.get("X-API-Key"))
+            if not project_id:
+                self._json(401, {"error": "Missing or inactive API key."})
+                return
+            body = self._read_json()
+            faq_id = (body.get("faqId") or "").strip()
+            if not faq_id or "liked" not in body:
+                self._json(400, {"error": "faqId and liked are required."})
+                return
+            ok = faq.apply_feedback(projects.faq_path(project_id), projects.flagged_path(project_id),
+                                     faq_id, bool(body.get("liked")))
+            if not ok:
+                self._json(404, {"error": "Unknown faqId - it may already have been removed."})
+                return
+            self._json(200, {"ok": True})
 
         elif self.path == "/api/ingest":
             project_id = apikeys.resolve_active(self.headers.get("X-API-Key"))
@@ -432,6 +553,31 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(404, {"error": "Project not found."})
                 return
             self._json(200, prospectus_watch.check_and_refresh(project_id))
+        elif m_suggestions_apply:
+            if not self._admin_ok():
+                self._json(401, {"error": "Invalid admin token."})
+                return
+            project_id = m_suggestions_apply.group(1)
+            if not projects.get(project_id):
+                self._json(404, {"error": "Project not found."})
+                return
+            body = self._read_json()
+            group, canonical, word = body.get("group"), body.get("canonical"), body.get("word")
+            if not (group and canonical and word):
+                self._json(400, {"error": "group, canonical, and word are all required."})
+                return
+            # A minimal re-derived pattern shape for the evidence string -
+            # the admin console already showed the full pattern (count,
+            # sample questions) before the admin chose to apply it, so only
+            # the count needs to survive into the audit trail here.
+            pseudo_pattern = {"signature": tuple((k, tuple(v)) for k, v in body.get("signature", [])),
+                               "count": body.get("count", 0)}
+            try:
+                entry_id = selflearn.apply_safe(group, canonical, word, pseudo_pattern)
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+                return
+            self._json(200, {"id": entry_id})
 
         else:
             self._send(404, "Not found", "text/plain")
@@ -440,6 +586,7 @@ class Handler(BaseHTTPRequestHandler):
         m_key = re.match(r"^/admin/keys/([^/]+)$", self.path)
         m_project = re.match(r"^/admin/projects/([^/]+)$", self.path)
         m_ext_settings = re.match(r"^/admin/extension-settings$", self.path)
+        m_flag_resolve = re.match(r"^/admin/projects/([^/]+)/flagged/([^/]+)$", self.path)
 
         if m_key:
             if not self._admin_ok():
@@ -457,6 +604,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, updated)
             except Exception as exc:
                 self._json(500, {"error": str(exc)})
+        elif m_flag_resolve:
+            if not self._admin_ok():
+                self._json(401, {"error": "Invalid admin token."})
+                return
+            project_id, flag_id = m_flag_resolve.groups()
+            if not projects.get(project_id):
+                self._json(404, {"error": "Project not found."})
+                return
+            body = self._read_json()
+            resolution = body.get("resolution", "")
+            note = body.get("note", "")
+            ok = faq.resolve_flag(projects.flagged_path(project_id), flag_id, resolution, note)
+            if not ok:
+                self._json(404, {"error": "Flag not found or invalid resolution."})
+                return
+            self._json(200, {"ok": True})
         elif m_project:
             if not self._admin_ok():
                 self._json(401, {"error": "Invalid admin token."})
@@ -481,6 +644,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         m_key = re.match(r"^/admin/keys/([^/]+)$", self.path)
         m_project = re.match(r"^/admin/projects/([^/]+)$", self.path)
+        m_learned = re.match(r"^/admin/learned-discriminators/([^/]+)$", self.path)
 
         if m_key:
             if not self._admin_ok():
@@ -488,6 +652,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             ok = apikeys.delete(m_key.group(1))
             self._json(200 if ok else 404, {"deleted": m_key.group(1)} if ok else {"error": "Key not found."})
+        elif m_learned:
+            if not self._admin_ok():
+                self._json(401, {"error": "Invalid admin token."})
+                return
+            ok = faq.remove_learned_discriminator(m_learned.group(1))
+            self._json(200 if ok else 404, {"deleted": m_learned.group(1)} if ok else {"error": "Entry not found."})
         elif m_project:
             if not self._admin_ok():
                 self._json(401, {"error": "Invalid admin token."})
@@ -559,20 +729,131 @@ class Handler(BaseHTTPRequestHandler):
                 "activeKeys": sum(1 for k in keys if k["active"]), "totalKeys": len(keys),
                 "health": self._check_health(), "prospectusWatch": self._prospectus_watch_summary(p)}
 
+    def _review_summary(self, project_id):
+        """Aggregate view over flagged (student dislikes) + review-log (the
+        system's own self-detected near-misses) - computed fresh per
+        request, same pattern as _build_stats/_check_health above (no
+        scheduler, no background job; this is stdlib http.server and the
+        underlying files are small). Feeds the admin console's Review tab
+        and, longer-term, selflearn.detect_recurring_patterns.
+        """
+        flagged = faq.load_flagged(projects.flagged_path(project_id))
+        log = reviewlog.load(projects.review_log_path(project_id))
+
+        open_flags = [f for f in flagged if f.get("resolution", "open") == "open"]
+        reason_counts = {}
+        for entry in log:
+            for reason in entry.get("reasons", []):
+                # Only the reason KIND, not its detail (e.g. "unsupported_number:
+                # 18000" -> "unsupported_number") - the detail is per-question and
+                # not useful to aggregate; the kind is what selflearn groups on.
+                kind = reason.split(":", 1)[0].strip()
+                reason_counts[kind] = reason_counts.get(kind, 0) + 1
+
+        return {
+            "flaggedTotal": len(flagged),
+            "flaggedOpen": len(open_flags),
+            "reviewLogTotal": len(log),
+            "reviewLogRegenerated": sum(1 for e in log if e.get("kind") == "validation_regenerated"),
+            "reasonCounts": reason_counts,
+        }
+
     @staticmethod
-    def _check_health():
-        health = {}
+    def _selfhosted_model_status():
+        """GET {SELFHOSTED_URL}/v1/models -> {model name: status}, or None on failure.
+
+        Added 2026-08-12 after bge-m3 and glm-4-9b-chat went "running"->"stopped"
+        mid-session with zero warning - discovered only when a live chat/embed
+        request failed. This is the same endpoint used to diagnose that live,
+        now surfaced in the admin health strip instead of requiring a manual
+        curl after something already broke.
+        """
+        if not config.SELFHOSTED_URL:
+            return None
         try:
-            urllib.request.urlopen(config.EMBEDDING_URL.rsplit("/embed", 1)[0] + "/health", timeout=2)
-            health["embedding"] = "up"
+            req = urllib.request.Request(
+                config.SELFHOSTED_URL.rstrip("/") + "/v1/models",
+                headers={"Authorization": f"Bearer {config.SELFHOSTED_API_KEY}"},
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return {m.get("name"): m.get("status") for m in data}
         except Exception:
-            health["embedding"] = "down"
+            return None
+
+    @staticmethod
+    def _hetzner_model_available():
+        """GET {HETZNER_URL}/models -> whether HETZNER_MODEL is in the list, or
+        None on failure. Unlike SelfHostedProvider's server, Hetzner's /v1/models
+        response has no per-model "status" (running/stopped) - it's a managed
+        inference service, not a bare-metal box someone can unload a model
+        from - so reachability plus the configured model id actually being
+        listed is the whole check.
+        """
+        if not config.HETZNER_API_KEY:
+            return None
+        try:
+            req = urllib.request.Request(
+                config.HETZNER_URL.rstrip("/") + "/models",
+                headers={"Authorization": f"Bearer {config.HETZNER_API_KEY}"},
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return {m.get("id") for m in data.get("data", [])}
+        except Exception:
+            return None
+
+    @classmethod
+    def _check_health(cls):
+        health = {}
+        selfhosted_models = None
+        needs_selfhosted = (config.EMBEDDING_PROVIDER == "selfhosted"
+                             or config.CHAT_FALLBACK == "selfhosted")
+        if needs_selfhosted:
+            selfhosted_models = cls._selfhosted_model_status()
+
+        # Embeddings: check whichever backend is actually configured, not
+        # always the local Docker service - EMBEDDING_PROVIDER=selfhosted
+        # (the current default) routes embeddings through the self-hosted
+        # server instead, and pinging the unused local service there just
+        # produces a misleading "down" or a false "up" for a path nothing
+        # actually calls.
+        if config.EMBEDDING_PROVIDER == "selfhosted":
+            if selfhosted_models is None:
+                health["embedding"] = "unreachable"
+            else:
+                status = selfhosted_models.get(config.SELFHOSTED_EMBEDDING_MODEL)
+                health["embedding"] = "up" if status == "running" else f"stopped ({config.SELFHOSTED_EMBEDDING_MODEL})"
+        else:
+            try:
+                urllib.request.urlopen(config.EMBEDDING_URL.rsplit("/embed", 1)[0] + "/health", timeout=2)
+                health["embedding"] = "up"
+            except Exception:
+                health["embedding"] = "down"
+
         try:
             urllib.request.urlopen(config.OLLAMA_URL.rstrip("/") + "/api/tags", timeout=2)
             health["ollama"] = "up"
         except Exception:
             health["ollama"] = "down"
         health["sarvam"] = "configured" if config.SARVAM_API_KEY else "not configured"
+
+        if config.CHAT_FALLBACK == "selfhosted":
+            if selfhosted_models is None:
+                health["selfhosted"] = "unreachable"
+            else:
+                needed = {config.SELFHOSTED_MODEL_EN, config.SELFHOSTED_MODEL_INTL}
+                not_running = sorted(m for m in needed if selfhosted_models.get(m) != "running")
+                health["selfhosted"] = "up" if not not_running else f"stopped ({', '.join(not_running)})"
+        elif config.CHAT_FALLBACK == "hetzner":
+            available = cls._hetzner_model_available()
+            if available is None:
+                health["hetzner"] = "unreachable"
+            elif config.HETZNER_MODEL not in available:
+                health["hetzner"] = f"model not listed ({config.HETZNER_MODEL})"
+            else:
+                health["hetzner"] = "up"
+
         return health
 
     def _proxy_tts(self, project_id):

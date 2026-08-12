@@ -27,6 +27,7 @@ const Icon = {
   mic: html`<svg viewBox="0 0 20 20" width="16" height="16" fill="none"><rect x="7.5" y="2.5" width="5" height="9" rx="2.5" fill="currentColor"/><path d="M5 9a5 5 0 0 0 10 0M10 14v3M7.5 17h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   speaker: html`<svg viewBox="0 0 20 20" width="15" height="15" fill="none"><path d="M4 8v4h3l4 3V5L7 8H4z" fill="currentColor"/><path d="M14 7c1 1 1 5 0 6M16 5c2 2 2 8 0 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   play: html`<svg viewBox="0 0 20 20" width="13" height="13" fill="none"><path d="M4 8v4h3l4 3V5L7 8H4z" fill="currentColor"/><path d="M14 7c1 1 1 5 0 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  flag: html`<svg viewBox="0 0 20 20" width="15" height="15" fill="none"><path d="M5 17V3M5 3.5c1.5-1 3.5-1 5 0s3.5 1 5 0v8c-1.5 1-3.5 1-5 0s-3.5-1-5 0" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
 };
 
 const TTS_LANG_MAP = { "hi-IN": "hi", "mr-IN": "mr", "ta-IN": "ta", "en-IN": "en" };
@@ -98,6 +99,8 @@ function Dashboard({ token, projectId }) {
         <div class="health-item"><span class=${"status-dot "+(d.health.embedding==="up"?"ok":"err")}></span>Embeddings ${d.health.embedding}</div>
         <div class="health-item"><span class=${"status-dot "+(d.health.ollama==="up"?"ok":"err")}></span>Ollama ${d.health.ollama}</div>
         <div class="health-item"><span class=${"status-dot "+(d.health.sarvam==="configured"?"ok":"idle")}></span>Sarvam ${d.health.sarvam}</div>
+        ${d.health.selfhosted ? html`<div class="health-item"><span class=${"status-dot "+(d.health.selfhosted==="up"?"ok":"err")}></span>Self-hosted ${d.health.selfhosted}</div>` : ""}
+        ${d.health.hetzner ? html`<div class="health-item"><span class=${"status-dot "+(d.health.hetzner==="up"?"ok":"err")}></span>Hetzner ${d.health.hetzner}</div>` : ""}
       </div>
       <div class="stat-grid">
         <div class="stat-card"><div class="num">${d.totalQuestions}</div><div class="lbl">Questions answered</div></div>
@@ -168,6 +171,157 @@ function Cost({ token, projectId, onChange }) {
       </div>
       <div class="section-h">Cache</div>
       <div class="card" style=${{padding:"16px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style=${{fontSize:14,fontWeight:500}}>${d.cacheHits} instant answers, ${d.cacheHitRate}% hit rate</div></div><button class="btn danger" onClick=${clearCache}>Clear cache</button></div>
+    </div>`;
+}
+
+// ---------- Flagged answers (dislikes) ----------
+// Every dislike lands here (see faq.apply_feedback) whether or not it got
+// pulled from the cache - a plain auto-cached guess is removed immediately
+// on a dislike, but a seeded/trusted/verified entry stays served and is
+// only flagged for review, on the theory that one click is too noisy a
+// signal to override an admin's curation or the system's own deterministic
+// table-lookup confirmation on its own (see rag.py's cache-hit re-check).
+// The pills below are what let an admin tell those apart at a glance,
+// instead of re-deriving it from raw booleans each time.
+const _RESOLUTION_LABELS = {
+  open: "open", dismissed: "dismissed - answer was fine",
+  corrected: "corrected", "rule-changed": "fixed at the rule level",
+};
+
+function FlaggedPanel({ token, projectId }) {
+  const [items, setItems] = useState(null);
+  const load = useCallback(() => {
+    if (token && projectId) api(`/admin/projects/${projectId}/flagged`, { token }).then(setItems).catch(() => {});
+  }, [token, projectId]);
+  useEffect(() => { setItems(null); load(); }, [load]);
+
+  const resolve = async (flagId, resolution) => {
+    const note = resolution === "open" ? "" : (prompt(`Note for "${_RESOLUTION_LABELS[resolution]}" (optional):`) || "");
+    await api(`/admin/projects/${projectId}/flagged/${flagId}`, { method: "PATCH", token, body: { resolution, note } });
+    load();
+  };
+
+  if (!token) return html`<div class="panel"><h1>Flagged</h1><p class="lead">Connect with the admin token to review disliked answers.</p></div>`;
+  if (!items) return html`<div class="panel"><h1>Flagged</h1><p class="lead">Loading…</p></div>`;
+
+  return html`
+    <div class="panel"><h1>Flagged</h1><p class="lead">Answers a student disliked, newest first. A pill shows why it was kept (or that it was pulled) so you can tell a genuine wrong answer from noise.</p>
+      ${items.length === 0 && html`<div class="card" style=${{padding:"20px",color:"var(--ink-3)"}}>No flagged answers yet.</div>`}
+      ${items.slice().reverse().map((it) => html`
+        <div class="card" key=${it.flag_id || it.id + "_" + it.flagged_at} style=${{padding:"14px 18px",marginBottom:10}}>
+          <div style=${{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+            <div style=${{fontWeight:600,fontSize:14}}>${it.question}</div>
+            <span style=${{fontSize:11.5,color:"var(--ink-3)",whiteSpace:"nowrap"}}>${timeAgo(it.flagged_at)}</span>
+          </div>
+          <div style=${{fontSize:13,color:"var(--ink-2)",margin:"6px 0"}}>${it.answer}</div>
+          <div class="project-row-status">
+            ${it.was_verified && html`<span class="pill cache" title=${"Table-confirmed: "+it.verified_figure}>verified figure kept</span>`}
+            ${it.was_seeded && html`<span class="pill src">admin-seeded, kept</span>`}
+            ${it.was_trusted && !it.was_seeded && html`<span class="pill src">earlier liked, kept</span>`}
+            ${it.removed_from_cache
+              ? html`<span class="pill" style=${{color:"var(--danger)",borderColor:"var(--danger)"}}>removed from cache</span>`
+              : !(it.was_verified || it.was_seeded || it.was_trusted) && html`<span class="pill">kept</span>`}
+            ${it.pages.length > 0 && html`<span class="pill">pages ${it.pages.join(", ")}</span>`}
+            ${it.resolution && it.resolution !== "open" && html`<span class="pill cache" title=${it.resolution_note || ""}>${_RESOLUTION_LABELS[it.resolution] || it.resolution}</span>`}
+          </div>
+          ${(!it.resolution || it.resolution === "open") && it.flag_id && html`
+            <div class="actions" style=${{marginTop:10,display:"flex",gap:8}}>
+              <button class="btn sm" onClick=${() => resolve(it.flag_id, "dismissed")}>Dismiss (was fine)</button>
+              <button class="btn sm" onClick=${() => resolve(it.flag_id, "corrected")}>Mark corrected</button>
+              <button class="btn sm" onClick=${() => resolve(it.flag_id, "rule-changed")}>Fixed at rule level</button>
+            </div>`}
+        </div>`)}
+    </div>`;
+}
+
+// ---------- Review: the system's own self-detected near-misses ----------
+// Distinct from FlaggedPanel above (student dislikes only) - this surfaces
+// a validation FAIL/regeneration even on a day no student happened to
+// click dislike, per the 2026-08-12 orchestration/validation plan.
+function ReviewPanel({ token, projectId }) {
+  const [summary, setSummary] = useState(null);
+  const [log, setLog] = useState(null);
+  const [suggestions, setSuggestions] = useState(null);
+  const [learned, setLearned] = useState(null);
+  const [wordInputs, setWordInputs] = useState({});
+  const load = useCallback(() => {
+    if (!token || !projectId) return;
+    api(`/admin/projects/${projectId}/review-summary`, { token }).then(setSummary).catch(() => {});
+    api(`/admin/projects/${projectId}/review-log`, { token }).then(setLog).catch(() => {});
+    api(`/admin/projects/${projectId}/suggestions`, { token }).then(setSuggestions).catch(() => {});
+    api("/admin/learned-discriminators", { token }).then(setLearned).catch(() => {});
+  }, [token, projectId]);
+  useEffect(() => { setSummary(null); setLog(null); setSuggestions(null); setLearned(null); load(); }, [load]);
+
+  const applySafe = async (pattern) => {
+    const [group, canonical] = (pattern.signature[0] || ["", [""]]);
+    const word = (wordInputs[JSON.stringify(pattern.signature)] || "").trim();
+    if (!word) { alert("Type the synonym word to add first."); return; }
+    await api(`/admin/projects/${projectId}/suggestions/apply`, {
+      method: "POST", token,
+      body: { group, canonical: canonical[0], word, signature: pattern.signature, count: pattern.count },
+    });
+    load();
+  };
+  const revertLearned = async (id) => { await api(`/admin/learned-discriminators/${id}`, { method: "DELETE", token }); load(); };
+
+  if (!token) return html`<div class="panel"><h1>Review</h1><p class="lead">Connect with the admin token to see self-detected validation events.</p></div>`;
+  if (!summary || !log || !suggestions || !learned) return html`<div class="panel"><h1>Review</h1><p class="lead">Loading…</p></div>`;
+
+  return html`
+    <div class="panel"><h1>Review</h1><p class="lead">Answers the system itself flagged during validation - a numeric claim not grounded in the excerpts, or a reply that drifted off-topic - whether or not a student happened to dislike it. See the Flagged tab for student-reported issues.</p>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="num">${summary.reviewLogTotal}</div><div class="lbl">Validation flags</div></div>
+        <div class="stat-card"><div class="num">${summary.reviewLogRegenerated}</div><div class="lbl">Auto-regenerated</div></div>
+        <div class="stat-card"><div class="num">${summary.flaggedOpen}</div><div class="lbl">Open student flags</div><div class="sub">${summary.flaggedTotal} total</div></div>
+      </div>
+      ${Object.keys(summary.reasonCounts).length > 0 && html`
+        <div class="section-h">Recurring reasons</div>
+        <div class="card" style=${{padding:"14px 18px"}}>
+          ${Object.entries(summary.reasonCounts).map(([reason, count]) => html`
+            <div key=${reason} style=${{display:"flex",justifyContent:"space-between",fontSize:13,padding:"4px 0"}}>
+              <span>${reason}</span><span class="pill">${count}</span>
+            </div>`)}
+        </div>`}
+
+      <div class="section-h">Recurring flag patterns - safe to fix directly</div>
+      <p class="lead" style=${{fontSize:12.5}}>An existing FAQ-cache discriminator just needs one more synonym word - can only make matching MORE conservative, never cause a wrong cache hit.</p>
+      ${suggestions.safeToAutomate.length === 0 && html`<div class="card" style=${{padding:"16px",color:"var(--ink-3)"}}>No recurring patterns yet.</div>`}
+      ${suggestions.safeToAutomate.map((p, i) => html`
+        <div class="card" key=${i} style=${{padding:"12px 16px",marginBottom:8}}>
+          <div style=${{fontSize:13,fontWeight:600}}>${p.signature.map(([g,v]) => `${g}=${v.join("/")}`).join(", ")} <span class="pill">${p.count}×</span></div>
+          <div style=${{fontSize:12,color:"var(--ink-3)",margin:"4px 0"}}>${p.sampleQuestions.slice(0,3).join(" · ")}</div>
+          <div style=${{display:"flex",gap:8,marginTop:6}}>
+            <input placeholder="synonym word to add" style=${{flex:1,fontSize:12.5}}
+                   value=${wordInputs[JSON.stringify(p.signature)] || ""}
+                   onInput=${e => setWordInputs({...wordInputs, [JSON.stringify(p.signature)]: e.target.value})} />
+            <button class="btn sm" onClick=${() => applySafe(p)}>Apply</button>
+          </div>
+        </div>`)}
+
+      ${suggestions.proposeOnly.length > 0 && html`
+        <div class="section-h">Other suggestions - needs a human look</div>
+        ${suggestions.proposeOnly.map((s, i) => html`
+          <div class="card" key=${i} style=${{padding:"12px 16px",marginBottom:8,fontSize:13,color:"var(--ink-2)"}}>${s.summary}</div>`)}`}
+
+      ${learned.length > 0 && html`
+        <div class="section-h">Learned discriminators (applied)</div>
+        ${learned.map(e => html`
+          <div class="card" key=${e.id} style=${{padding:"10px 16px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13}}>
+            <span><span class="pill">${e.group}</span> ${e.canonical} += "${e.word}"</span>
+            <button class="mini-btn warn" title="Revert" onClick=${() => revertLearned(e.id)}>${Icon.trash}</button>
+          </div>`)}`}
+
+      <div class="section-h">Recent events</div>
+      ${log.length === 0 && html`<div class="card" style=${{padding:"20px",color:"var(--ink-3)"}}>No validation events logged yet.</div>`}
+      ${log.slice(0, 50).map((e, i) => html`
+        <div class="card" key=${i} style=${{padding:"10px 16px",marginBottom:8,fontSize:13}}>
+          <div style=${{display:"flex",justifyContent:"space-between"}}>
+            <span><span class="pill">${e.kind}</span> from <span class="pill">${e.source}</span></span>
+            <span style=${{fontSize:11.5,color:"var(--ink-3)"}}>${timeAgo(e.ts)}</span>
+          </div>
+          <div style=${{color:"var(--ink-2)",marginTop:4}}>${(e.reasons || []).join("; ")}</div>
+        </div>`)}
     </div>`;
 }
 
@@ -321,6 +475,8 @@ const TABS = [
   { id: "tester", label: "Try It", icon: Icon.chat },
   { id: "ext", label: "Extension", icon: Icon.puzzle },
   { id: "cost", label: "Cost", icon: Icon.coin },
+  { id: "flagged", label: "Flagged", icon: Icon.flag },
+  { id: "review", label: "Review", icon: Icon.flag },
 ];
 
 function Sidebar({
@@ -513,6 +669,8 @@ function App() {
         ${selectedProjectId && tab === "tester" && html`<${TesterPanel} keys=${projectKeys} />`}
         ${selectedProjectId && tab === "ext" && html`<${ExtensionSettingsPanel} token=${token} />`}
         ${selectedProjectId && tab === "cost" && html`<${Cost} token=${token} projectId=${selectedProjectId} onChange=${() => refresh()} />`}
+        ${selectedProjectId && tab === "flagged" && html`<${FlaggedPanel} token=${token} projectId=${selectedProjectId} />`}
+        ${selectedProjectId && tab === "review" && html`<${ReviewPanel} token=${token} projectId=${selectedProjectId} />`}
       </div>
     </div>`;
 }

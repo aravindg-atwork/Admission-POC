@@ -58,6 +58,35 @@ def watch_state_path(project_id):
     return _dir(project_id) / "watch-state.json"
 
 
+def flagged_path(project_id):
+    """Disliked answers that were pulled from the FAQ cache (see
+    faq.apply_feedback) - kept here, not just deleted, so an admin can tell
+    whether a dislike meant "wrong" or just "incomplete" and re-seed it if it
+    was actually fine.
+    """
+    return _dir(project_id) / "flagged.json"
+
+
+def review_log_path(project_id):
+    """The system's OWN self-detected near-misses (a validation FAIL, an
+    orchestrator decomposition that gave up) - distinct from flagged_path
+    above, which only ever holds a STUDENT's dislike. Added 2026-08-12 so a
+    quiet failure mode is visible to an admin even on a day no student
+    happened to click dislike. Never holds raw question/answer text - same
+    "never log question/answer content" discipline as stats.py.
+    """
+    return _dir(project_id) / "review-log.json"
+
+
+def suggestions_path(project_id):
+    """Templated, propose-only rule-change suggestions from selflearn.py -
+    an admin manually applies these by hand-editing the named source file;
+    nothing here is ever auto-applied (see selflearn.py's SAFE_TO_AUTOMATE
+    vs PROPOSE_ONLY bar).
+    """
+    return _dir(project_id) / "rule-suggestions.json"
+
+
 def tts_cache_dir(project_id):
     return _dir(project_id) / "tts-cache"
 

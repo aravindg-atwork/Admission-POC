@@ -1,4 +1,4 @@
-"""Deterministic Hindi/Marathi -> English domain terms for retrieval.
+"""Deterministic Hindi/Marathi/Tamil -> English domain terms for retrieval.
 
 The retrieval path translates a Devanagari question to English (see
 llm.translate_to_english) because the prospectus is English and the embedding
@@ -68,14 +68,25 @@ _TERMS = {
     "परीक्ष": "examination fee exam",
     "नोंदणी": "registration fee",
     "पंजीकरण": "registration fee",
-    "वसतिगृह": "hostel fees",
-    "छात्रावास": "hostel fees",
-    "हॉस्टेल": "hostel fees",
     "इंटर्नशिप": "internship",
     "कॉशन": "caution money deposit",
     "अनामत": "caution money deposit",
     "परतावा": "refund",
     "वापसी": "refund",
+    # accommodation - deliberately NOT mapped to "hostel fees": these words
+    # (hostel/dormitory) just mean the accommodation itself, not its cost.
+    # Mapping them to "hostel fees" meant every hostel question - including a
+    # plain "is hostel available" with zero fee content - had "fees" injected
+    # into its own retrieval terms, inflating the keyword-overlap score of
+    # the hostel FEE table page enough to outrank the actual availability
+    # passage. Reproduced directly: that mismatch is what pulled in a 27-line
+    # linearized fee-table block (see pdf.py) for a question that had nothing
+    # to do with fees, which is what pushed a small self-hosted model into a
+    # repetition/echo loop (see providers.py). "hostel accommodation" matches
+    # the prospectus's own section heading ("5. HOSTEL ACCOMMODATION").
+    "वसतिगृह": "hostel accommodation",
+    "छात्रावास": "hostel accommodation",
+    "हॉस्टेल": "hostel accommodation",
     # process and documents
     "प्रवेश": "admission",
     "पात्रत": "eligibility criteria",
@@ -101,6 +112,52 @@ _TERMS = {
     "स्थानांतरण": "transfer",
     "अभ्यासक्रम": "course degree",
     "पाठ्यक्रम": "course degree",
+
+    # --- Tamil ---
+    # Added 2026-08-12: this dict had zero Tamil coverage until now, discovered
+    # via a live Tamil probe ("பாதுகாப்புப் பணியாளர்களுக்கு எத்தனை சதவீத இடங்கள்
+    # ஒதுக்கப்பட்டுள்ளன?" - defence-quota percentage) that mistranslated to
+    # "merit students" and, with no glossary term to correct it, missed the
+    # gold page entirely - the same failure shape documented above for Hindi/
+    # Marathi, just never checked for Tamil before. Same stem-matching function
+    # handles any script already; only data was missing. Unlike the Hindi/
+    # Marathi terms above, these were NOT refined against a battery of live
+    # Tamil probes over a full session - treat as a first pass, worth
+    # revisiting if a Tamil question mismatches after this.
+    "இராணுவ": "defence personnel",
+    "படைவீரர": "defence personnel",
+    "விடுதலைப்போராளி": "freedom fighter",
+    "அனாதை": "orphan candidate",
+    "மாற்றுத்திறன": "physically handicapped disability",
+    "பொருளாதார": "economically weaker section",
+    "பிற்படுத்தப்பட்ட": "backward class",
+    "ஒதுக்கீ": "reserved reservation",
+    "பொதுப்பிரிவு": "open category unreserved",
+    "பிரிவு": "category",
+    "சதவீத": "percentage percent",
+    "இடங்க": "seats intake capacity",
+    "கட்டண": "fee fees",
+    "கல்விக்கட்டண": "tuition fee",
+    "தேர்வுக்கட்டண": "examination fee exam",
+    "பதிவுக்கட்டண": "registration fee",
+    "பயிற்சிக்கால": "internship",
+    "வைப்புத்தொகை": "caution money deposit",
+    "திரும்பப்": "refund",
+    "விடுதி": "hostel accommodation",
+    "சேர்க்கை": "admission",
+    "தகுதிவரிசை": "merit list",
+    "தகுதி": "eligibility criteria",
+    "விண்ணப்ப": "application form",
+    "ஆவண": "certificates documents",
+    "சான்றிதழ்": "certificates documents",
+    "வதிவிட": "domicile residence certificate",
+    "செல்லுபடி": "caste validity certificate",
+    "சாதி": "caste certificate",
+    "புகார்": "grievance",
+    "தேதி": "date last date",
+    "வருகை": "attendance",
+    "இடமாற்ற": "transfer",
+    "படிப்பு": "course degree",
 }
 
 

@@ -1,0 +1,290 @@
+"""Program-name detection: lightweight, deterministic routing across the
+university's several separate degree-program projects (see projects.py).
+
+Same design philosophy as lang.py's script detection and intent.py's payment-
+issue check: keyword/substring matching, no model call, fast and auditable.
+Each program lives in its own project with its own vector store and FAQ cache
+(kept isolated on purpose - see the 2026-08-12 session that added the other
+five programs, to avoid exactly the cross-program contamination that today's
+B.V.Sc.-only retrieval bugs were about). This module exists for the one thing
+that isolation doesn't solve by itself: a query arriving at the general/
+default entry point that never says which program it means ("how much is the
+fee?"), where answering from B.V.Sc. data by default would just be a silent
+wrong guess for a B.Tech. or M.V.Sc. applicant.
+"""
+
+import re
+import unicodedata
+
+# Canonical display names, also used to label the disambiguation options
+# shown to the student (see server.py's clarification response and app.js).
+PROGRAM_NAMES = {
+    "default": "B.V.Sc. & A.H.",
+    "bfsc": "B.F.Sc.",
+    "btech-dairy": "B.Tech. (Dairy Technology)",
+    "mvsc": "M.V.Sc.",
+    "phd": "Ph.D.",
+    "mtech-dairy": "M.Tech. (Dairy)",
+}
+
+
+def _normalize(text):
+    """Lowercase, letters/digits only - collapses 'B.V.Sc.', 'BVSc', 'B V Sc'
+    and 'bvsc' to the same comparable form, and 'Dairy Technology' to
+    'dairytechnology' regardless of the student's spacing/punctuation.
+    """
+    return "".join(ch for ch in text.lower() if ch.isalnum())
+
+
+# Substring-matched against the normalized question. Deliberately conservative
+# on the two dairy programs: bare "dairy" is genuinely ambiguous between them
+# (Bachelor's vs Master's) and is left OUT on purpose, so a bare "dairy fee"
+# question correctly falls through to needs_clarification rather than
+# guessing which one. "btech"/"mtech" alone are safe and specific because,
+# among these six programs, each belongs to exactly one.
+#
+# "dairytechnology" was removed from btech-dairy's aliases 2026-08-12: it's
+# just as ambiguous as bare "dairy" (both programs' full names end in "Dairy
+# Technology"), and having it here silently contradicted the comment above -
+# "M.Tech. Dairy Technology" matched BOTH btech-dairy (via "dairytechnology")
+# and mtech-dairy (via "mtech"), so a plain single-program M.Tech question got
+# routed through the cross-program comparison path and answered with an
+# unnecessary "the B.Tech document doesn't specify..." aside about a program
+# nobody asked about. Before needs_comparison existed to check for 2+ matches,
+# this silently misrouted the same questions to btech-dairy outright (it
+# happened to sort first in this dict) - a latent bug this surfaced rather
+# than introduced.
+#
+# "veterinary" was removed from default's aliases the same day, same bug
+# shape: M.V.Sc. IS "Master of VETERINARY Science", so any question
+# mentioning "my veterinary degree" (without naming B.V.Sc. specifically)
+# matched BOTH default (via "veterinary") and mvsc (via "mvsc") - a plain
+# M.V.Sc. question about the applicant's own prior degree got routed through
+# the comparison path and picked up an irrelevant "For B.V.Sc. & A.H.
+# program... not directly relevant to your question" aside. "bvsc" alone is
+# specific enough - unlike "veterinary", which describes the whole field.
+_PROGRAM_ALIASES = {
+    "default": ("bvsc", "animalhusbandry"),
+    "bfsc": ("bfsc", "fishery", "fisheries"),
+    "btech-dairy": ("btech",),
+    "mvsc": ("mvsc", "masterofveterinary"),
+    "phd": ("phd", "doctorate", "doctoral"),
+    "mtech-dairy": ("mtech", "masteroftechnology"),
+}
+
+
+# Found 2026-08-12: "I completed my B.V.Sc. abroad. Do I need to appear for
+# AIEEA for M.V.Sc. admission?" named two programs (bvsc, mvsc) and wrongly
+# triggered the cross-program comparison path against B.V.Sc., even though
+# B.V.Sc. here is pure background about the student's own prior degree, not
+# something to compare against M.V.Sc. - the resulting answer led with a
+# flat, unhedged claim and buried its NRI-scope caveat under the unrelated
+# B.V.Sc. paragraph. Program-name detection itself was correct (both names
+# genuinely appear); the bug was treating "student's own already-completed
+# degree, named only as background" the same as "program the student wants
+# information about" - same bug SHAPE as the "veterinary"-alias fix above,
+# but that fix can't catch this: "bvsc" is a legitimate, specific alias, and
+# removing it would just break every real B.V.Sc. question.
+_SELF_CREDENTIAL_RE = re.compile(
+    r"\b(?:i\s+(?:have\s+)?(?:completed|did|done|passed|finished|hold|holds|"
+    r"obtained|got|graduated)|already\s+have|my\s+own|i\s+am\s+a\s+graduate\s+of)\b",
+    re.IGNORECASE,
+)
+_SELF_CREDENTIAL_WINDOW = 40  # chars after the marker to look for the named program
+# Bounds the window to the credential's own clause so a SECOND, unrelated
+# program named right after ("...B.Tech Dairy degree, is M.Tech Dairy
+# eligibility different?") isn't swept in too - "." is deliberately excluded
+# from this boundary set even though it usually ends a clause, because every
+# program abbreviation here IS internal periods ("B.V.Sc.", "Ph.D."); cutting
+# on "." would truncate the window before the abbreviation it needs to match.
+_CLAUSE_BOUNDARY_RE = re.compile(
+    r"[,;?!]|\b(?:is|are|do|does|am|was|were|can|could|will|would|should|and|but|so)\b",
+    re.IGNORECASE,
+)
+
+
+def _self_credential_programs(text):
+    """Project ids named only as the student's OWN prior/completed degree,
+    not the program being asked about - see _SELF_CREDENTIAL_RE above.
+    """
+    found = set()
+    for match in _SELF_CREDENTIAL_RE.finditer(text):
+        rest = text[match.end():match.end() + _SELF_CREDENTIAL_WINDOW]
+        boundary = _CLAUSE_BOUNDARY_RE.search(rest)
+        span = rest[:boundary.start()] if boundary else rest
+        window = _normalize(span)
+        for project_id, aliases in _PROGRAM_ALIASES.items():
+            if any(alias in window for alias in aliases):
+                found.add(project_id)
+    return found
+
+
+def detect_programs_multi(text):
+    """Return every project id a question explicitly names, ordered by where
+    its first alias appears in the text - not just one (see detect_program).
+
+    Added 2026-08-12 to tell "what is the B.Tech Dairy fee" (exactly one
+    program - route/redirect there, see rag.py) apart from "compare B.V.Sc.
+    and B.F.Sc." or "which courses require NEET vs MHT-CET" (two or more
+    programs, or none at all with comparison language - see
+    needs_comparison), which need a genuine cross-project synthesized answer
+    instead of a single redirect. Text order rather than the dict's key
+    order so a mixed mention ("B.F.Sc. or B.V.Sc.?") lists the programs the
+    way the student actually asked about them. Programs named only as the
+    student's own prior/completed degree are excluded entirely (see
+    _self_credential_programs) - never counted for comparison, redirect, or
+    clarification decisions.
+    """
+    norm = _normalize(text)
+    self_credential = _self_credential_programs(text)
+    found = []
+    for project_id, aliases in _PROGRAM_ALIASES.items():
+        if project_id in self_credential:
+            continue
+        positions = [norm.find(alias) for alias in aliases if alias in norm]
+        if positions:
+            found.append((min(positions), project_id))
+    found.sort()
+    return [project_id for _, project_id in found]
+
+
+def detect_program(text):
+    """Return the project id a question explicitly names, or None.
+
+    Not exhaustive - tune by adding aliases as real misses turn up, same as
+    lang.py's marker sets. The alias sets above don't overlap by
+    construction (each token/phrase names exactly one program), so which one
+    "wins" only matters when a question names several - see
+    detect_programs_multi, which this delegates to.
+    """
+    multi = detect_programs_multi(text)
+    return multi[0] if multi else None
+
+
+# Devanagari vowel signs (matras) and the virama are combining marks, not
+# alnum, so a naive isalnum() split shatters every Devanagari word mid-token
+# ("फी" -> "फ", silently dropping the "ी" - reproduced directly: needed
+# needs_program_clarification's own _PROGRAM_SPECIFIC_MARKERS check for "फी"
+# to actually fire on "फी किती आहे?"). Same fix as intent.py's _words() and
+# faq.py's _is_word_char - duplicated here rather than imported because each
+# of those has its own slightly different normalization needs, matching this
+# codebase's existing convention of small per-module tokenizers over a shared
+# one (see faq.py's docstring on this point).
+def _words(text):
+    out, current = [], []
+    for ch in text.lower():
+        if ch.isalnum() or unicodedata.category(ch) in ("Mn", "Mc"):
+            current.append(ch)
+        elif current:
+            out.append("".join(current))
+            current = []
+    if current:
+        out.append("".join(current))
+    return set(out)
+
+
+# Topics whose answer genuinely varies per program - fees, eligibility, seats,
+# dates and the like. A question hitting one of these, with no program named,
+# is the case that actually needs disambiguating.
+_PROGRAM_SPECIFIC_MARKERS = {
+    "fee", "fees", "eligibility", "eligible", "criteria", "admission",
+    "seat", "seats", "hostel", "tuition", "marks", "quota", "reservation",
+    "reserved", "unreserved", "syllabus", "course", "degree", "intake",
+    "neet", "aieea", "cgpa", "documents", "certificate", "certificates",
+    "deadline", "merit", "grievance", "refund", "internship", "vacancy",
+    "vacancies", "cutoff", "duration", "curriculum",
+    # Hindi / Marathi
+    "शुल्क", "फी", "फीस", "पात्रता", "जागा", "वसतिगृह", "प्रवेश",
+}
+# Portal-mechanics topics that have exactly one correct answer regardless of
+# which program - matches tools/seed_faq_portal.py's shared content. A
+# question hitting one of these must NOT be treated as needing program
+# disambiguation, or it would fight the existing "How to Register?" answer
+# (see rag.py/faq cache), which already disambiguates portal-signup from
+# academic-registration on its own, a completely different axis.
+_SHARED_PORTAL_MARKERS = {
+    "register", "registration", "password", "login", "log", "upload",
+    "print", "resubmission", "resubmit", "account", "forgot",
+}
+
+
+def _is_devanagari(s):
+    return any(0x0900 <= ord(c) <= 0x097F for c in s)
+
+
+def _matches(words, markers):
+    """Exact match for English; stem/prefix match for Devanagari markers,
+    since Hindi/Marathi agglutinate case endings onto the noun the same way
+    glossary.py's stems do ("वसतिगृह" -> "वसतिगृहाची") - an exact-set check
+    silently missed every inflected form, reproduced directly: "वसतिगृहाची
+    सोय उपलब्ध आहे का?" (is hostel available) never matched the bare
+    "वसतिगृह" marker. `len(marker) >= 3` guards against a short marker
+    stem-matching words it has no business matching.
+    """
+    for word in words:
+        for marker in markers:
+            if word == marker:
+                return True
+            if _is_devanagari(marker) and len(marker) >= 3 and word.startswith(marker):
+                return True
+    return False
+
+
+def needs_program_clarification(text):
+    """True when a question is about something that varies per program,
+    names no specific program, and isn't one of the shared portal-mechanics
+    questions that already has one correct answer regardless of program.
+    """
+    if detect_program(text):
+        return False
+    words = _words(text)
+    if _matches(words, _SHARED_PORTAL_MARKERS):
+        return False
+    return _matches(words, _PROGRAM_SPECIFIC_MARKERS)
+
+
+# The three undergraduate programs - the sensible default set for a generic
+# "which/all courses" comparison with no program named (see comparison_targets
+# below). A 12th-marks eligibility question has no bearing on the three
+# postgraduate/doctoral programs, so defaulting to all six would only add
+# noise to the answer, not real coverage.
+_UG_PROGRAMS = ("default", "bfsc", "btech-dairy")
+
+# Word-level co-occurrence, not phrase matching: a trigger word ("which",
+# "all", "compare"...) AND a course/program noun must both appear SOMEWHERE
+# in the question, not adjacently - real phrasing puts modifiers between them
+# ("which MAFSU UNDERGRADUATE courses", "all the MAFSU undergraduate
+# courses"), which an adjacent-phrase check misses. Neither set is broad
+# enough to misfire alone: "which documents are required" has a trigger but
+# no course/program noun; "what is the duration of the course" has the noun
+# but no trigger. Tuned against the exact generic no-program-named
+# cross-program questions found in the 2026-08-12 benchmark run.
+_COMPARISON_TRIGGER_WORDS = {"which", "all", "compare", "comparison", "difference", "differ"}
+_COMPARISON_NOUN_WORDS = {"course", "courses", "program", "programs"}
+
+
+def needs_comparison(text):
+    """True when a question genuinely spans multiple programs and needs a
+    synthesized cross-project answer (see rag.py's comparison answer path) -
+    either by naming two or more programs explicitly, or by asking a generic
+    "which/all courses" question with comparison language and no single
+    program named. A question naming exactly one program is never a
+    comparison, regardless of phrasing - that's an ordinary single-program
+    question (see detect_program/needs_program_clarification instead).
+    """
+    named = detect_programs_multi(text)
+    if len(named) >= 2:
+        return True
+    if named:
+        return False
+    words = _words(text)
+    return bool(words & _COMPARISON_TRIGGER_WORDS) and bool(words & _COMPARISON_NOUN_WORDS)
+
+
+def comparison_targets(text):
+    """Which projects a comparison answer should pull from: the programs
+    explicitly named (2+), or the three undergraduate programs by default.
+    Only meaningful when needs_comparison(text) is already True.
+    """
+    named = detect_programs_multi(text)
+    return named if len(named) >= 2 else list(_UG_PROGRAMS)

@@ -34,11 +34,40 @@ how much cost costs many i my me we our you your it its that this there do does
 did can could will would should shall please tell about
 """.split())
 
+# Bare "year"/"years" doesn't discriminate in THIS kind of table on its own:
+# every row descriptor is either "for Nth Year" or "for Internship", so the
+# word appears (or is implied) across virtually every candidate regardless of
+# which one is meant - the actual signal is the ordinal ("4th", "first") or
+# "internship" itself, both already handled by _SYNONYMS/direct match. Left
+# in, it actively hurts: "What is the registration fee during the internship
+# year?" scored the correct "Registration Fee for Internship" reading at 0.6
+# but "...for 1st Year" and "...for 4th year" both scored 0.5 purely because
+# they share the word "year" too - a 0.1 margin, under _MIN_MARGIN, so the
+# correct match was discarded as "too close to call" despite the question
+# being unambiguous to a human reader. Verified 2026-08-11 against a 10-case
+# regression set spanning tuition/exam/hostel/NRI readings that no other case
+# depends on "year" for its margin - it's redundant everywhere it currently
+# resolves, since the ordinal alone already uniquely narrows the match.
+_STOPWORDS |= {"year", "years"}
+
 _MIN_SCORE = 0.34
 _MIN_MARGIN = 0.15
 
+# The source PDF renders ordinal suffixes inconsistently: "1st Year" but
+# "2 nd year" / "3 rd year" / "4 th year" - a layout/kerning artifact of the
+# original table, preserved as-is by pdf.py's extraction. Split apart, "4"
+# alone is a single character and gets dropped below (len(w) > 1), leaving
+# only the bare, non-discriminating "th" as that reading's term - so a clean
+# query token "4th" (from _SYNONYMS mapping "fourth") never matches it.
+# Verified: "What is the special fee for NRI candidates in the fourth year?"
+# scored zero candidates for exactly this reason, on a reading that otherwise
+# matches perfectly. Joining the split ordinal before tokenizing fixes the
+# term at the source, for both the question and every reading alike.
+_SPLIT_ORDINAL = re.compile(r"(\d+)\s+(st|nd|rd|th)\b", re.I)
+
 
 def _terms(text):
+    text = _SPLIT_ORDINAL.sub(r"\1\2", text)
     words, current = [], []
     for ch in text.lower():
         if ch.isalnum():
@@ -125,8 +154,17 @@ def lookup(question, chunks):
     if best[0] < _MIN_SCORE:
         return None
     if len(scored) > 1 and best[0] - scored[1][0] < _MIN_MARGIN:
-        # Two cells fit the question about equally well - answering would mean
-        # picking one arbitrarily, which is the failure this module exists to
-        # prevent. Let the model see the full table instead.
-        return None
+        # Two or more cells fit the question about equally well - normally
+        # that means picking one would be an arbitrary guess, the failure
+        # this module exists to prevent. But if EVERY cell within margin of
+        # the best score holds the same value, there is no actual ambiguity
+        # in the answer, only in which row's label gets shown - a flat fee
+        # that doesn't vary by year (e.g. "special fee for Goa State
+        # candidates", same Rs.75,000 every year) ties 5-ways across the
+        # year-1/2/3/4/internship readings when the question names no year,
+        # and used to fall through to the model despite every tied reading
+        # agreeing. Still declines the moment any tied reading disagrees.
+        tied = [s for s in scored if best[0] - s[0] < _MIN_MARGIN]
+        if any(s[2] != best[2] for s in tied):
+            return None
     return {"descriptor": best[1], "value": best[2]}

@@ -25,6 +25,17 @@ _MAX_CHUNKS_PER_PAGE = 3
 # How much lexical overlap can add on top of cosine (which spans roughly 0-1).
 _KEYWORD_WEIGHT = 0.25
 
+# A relevance floor relative to each query's own top score was tried here and
+# reverted: the actual bug behind a "is hostel available" question retrieving
+# the hostel FEE table (see pdf.py's table-reading block) turned out to be
+# glossary.py mapping "वसतिगृह"/hostel to the retrieval terms "hostel fees"
+# unconditionally, inflating the fee table's keyword score regardless of
+# what was actually asked - fixed there instead. Measured directly on this
+# corpus: the fee table scored 0.6062 against a top score of 0.6335, a ~4%
+# gap that no reasonably lenient relative threshold would have caught anyway,
+# so the threshold wasn't even solving the case it was written for. Left out
+# rather than kept as unvalidated, unproven-necessary complexity.
+
 
 def _norm(vec):
     return sum(x * x for x in vec) ** 0.5

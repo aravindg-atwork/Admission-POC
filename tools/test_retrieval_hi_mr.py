@@ -34,7 +34,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, ".")
-from backend import embeddings, faq, llm, projects, tablelookup, vectorstore  # noqa: E402
+from backend import embeddings, faq, glossary, llm, projects, tablelookup, vectorstore  # noqa: E402
 from backend import config  # noqa: E402
 
 # (id, lang, question, gold_pages, expected_value_or_None)
@@ -138,13 +138,39 @@ def evaluate(probes, show_misses=False):
     stats = {}
     misses = []
     lookup_ok = lookup_attempted = lookup_wrong = 0
+    # Noise: how many retrieved chunks/pages are NOT the gold page, i.e. how
+    # much irrelevant content rides along per question. Added 2026-08-12 -
+    # the earlier same-day retrieval-scoping attempt (a relative relevance
+    # threshold in vectorstore.search) was tried, reverted, and re-tried
+    # blind twice partly because this harness only ever measured recall (did
+    # the gold page make it in), never precision (how much came along that
+    # shouldn't have) - a change could silently start starving compound
+    # questions of real context with no way to see it here. Chunk-level, not
+    # page-level: several chunks can share one gold page, so page-set
+    # overlap alone would undercount noise on pages with multiple chunks.
+    noise_chunks_total = noise_pages_total = chunks_total = 0
 
     for probe_id, lang, question, gold, expected in probes:
         english = llm.translate_to_english(question, lang)
-        vector = embeddings.embed([english])[0]
-        top = vectorstore.search(store, vector, config.TOP_K, english)
+        # Mirror rag.py's actual retrieval_text construction exactly (see
+        # _answer): translation alone, without the glossary's deterministic
+        # domain-noun augmentation, understates both retrieval and table-
+        # lookup accuracy relative to what the real app does - this harness
+        # existed to measure the real pipeline, so it needs the real
+        # pipeline's inputs, not a simplified stand-in for them.
+        retrieval_text = " ".join(filter(None, [english, glossary.english_terms(question)]))
+        # Mirror rag.py's retrieval_vector choice too (fixed 2026-08-12): the
+        # VECTOR half embeds the native-script question, not the translation -
+        # see rag.py's retrieval_vector comment for the measured 92.6%->98.5%
+        # recall jump and the mistranslation root cause it traces to.
+        vector = embeddings.embed([question])[0]
+        top = vectorstore.search(store, vector, config.TOP_K, retrieval_text)
         pages = {e["page"] for e in top}
         hit = bool(gold & pages)
+
+        chunks_total += len(top)
+        noise_chunks_total += sum(1 for e in top if e["page"] not in gold)
+        noise_pages_total += len(pages - gold)
 
         s = stats.setdefault(lang, {"hit": 0, "n": 0})
         s["hit"] += hit
@@ -154,7 +180,7 @@ def evaluate(probes, show_misses=False):
 
         if expected:
             lookup_attempted += 1
-            resolved = tablelookup.lookup(english, top)
+            resolved = tablelookup.lookup(retrieval_text, top)
             # Mirror rag.py exactly: a descriptor contradicting the original
             # question is dropped rather than stated as verified.
             if resolved and not faq.compatible_questions(question, resolved["descriptor"]):
@@ -180,6 +206,16 @@ def evaluate(probes, show_misses=False):
         print(f"  {lang}:  {s['hit']:3d}/{s['n']:3d} = {100*s['hit']/s['n']:5.1f}%")
     if total_n:
         print(f"  ALL: {total_hit:3d}/{total_n:3d} = {100*total_hit/total_n:5.1f}%")
+
+    print()
+    print("=" * 68)
+    print("PRECISION: irrelevant content retrieved alongside the gold page")
+    print("=" * 68)
+    if total_n:
+        print(f"  avg chunks retrieved/question : {chunks_total/total_n:5.2f}  (TOP_K={config.TOP_K})")
+        print(f"  avg NOISE chunks/question      : {noise_chunks_total/total_n:5.2f}"
+              f"  ({100*noise_chunks_total/chunks_total:4.1f}% of retrieved chunks)")
+        print(f"  avg NOISE pages/question       : {noise_pages_total/total_n:5.2f}")
 
     print()
     print("=" * 68)

@@ -91,3 +91,63 @@ def detect_romanized_indic(text):
     if hi_hits >= _ROMANIZED_INDIC_MIN_HITS:
         return "hi"
     return None
+
+
+# Native-Devanagari counterparts of the exact same marker words above (not a
+# separate vocabulary - each entry here is the native spelling of a word
+# already vetted as high-signal/low-collision in its romanized form; variants
+# that share one Devanagari spelling, e.g. "nahi"/"nahin", collapse to one
+# entry). Hindi and Marathi share a script, so native text needs its own
+# lexical check the same way romanized text does - detect_script alone only
+# proves "Devanagari," not which of the two languages. Kept as a distinct set
+# rather than folded into the romanized ones since callers need to run this
+# against different, non-overlapping input (native text vs. Latin text).
+_HINDI_DEVANAGARI_MARKERS = {
+    "है", "हैं", "क्या", "क्यों", "कैसे", "कब", "कहाँ", "कौनसा", "कौनसी",
+    "कितना", "कितने", "कितनी", "मेरा", "मेरी", "मेरे", "तेरा", "तेरी", "तेरे",
+    "तुम्हारा", "तुम्हारी", "हम", "हमें", "मुझे", "तुम्हें", "आपको", "आपका",
+    "करो", "करना", "चाहिए", "मिलेगा", "मिलेगी", "मिलेंगे", "होगा", "होगी",
+    "होंगे", "नहीं", "हाँ", "अभी", "कृपया", "बताइए", "बताओ", "बताएं",
+    "लगेगा", "लगेगी",
+}
+_MARATHI_DEVANAGARI_MARKERS = {
+    "आहे", "आहेत", "किती", "मला", "तुम्हाला", "त्याला", "आम्हाला", "काय",
+    "कधी", "कुठे", "कसा", "कशी", "करायचा", "करायचे", "पाहिजे", "लागतो",
+    "लागतात", "माझी", "माझा", "तुझी", "तुझा", "तुमची", "तुमचा", "होय",
+    "नको", "हवी", "हवेत", "मध्ये",
+}
+_DEVANAGARI_HI_MR_MIN_HITS = 1
+
+
+def detect_devanagari_hi_mr(text):
+    """Best-effort: 'hi', 'mr', or None for native-Devanagari text, by the same
+    word-list-hit-count technique as detect_romanized_indic (see its docstring
+    for the tradeoffs), but with min_hits=1 rather than that function's 2.
+
+    detect_romanized_indic needs 2 hits because a single romanized marker word
+    can collide with genuine English (Latin script, shared alphabet); native
+    Devanagari carries no such risk - it is never used to write English at
+    all - and these marker words are closed-class grammar words (copulas,
+    question words, possessives) essentially unique to one language each, not
+    borrowed/ambiguous terms. Confirmed empirically: a real short question
+    ("...उपलब्ध आहे का?", "is X available?") carries exactly one marker
+    ("आहे") - min_hits=2 would silently return None on precisely the
+    short-question case this exists to catch.
+
+    Exists because ui_language is only a reliable Hindi/Marathi signal when the
+    student explicitly picked one of those two in the app; someone who left the
+    default (English) selector but asked a native-script question gives
+    rag._language_hint nothing to work with otherwise, and unlike the
+    previous self-hosted model, the current one does not reliably infer
+    Marathi from context alone - it defaults to Hindi under real ambiguity.
+    This closes that gap the same way detect_romanized_indic already closes it
+    for romanized input, from the question text itself rather than a guess.
+    """
+    words = {w.strip(".,?!।॥\"'()") for w in text.split()}
+    hi_hits = len(words & _HINDI_DEVANAGARI_MARKERS)
+    mr_hits = len(words & _MARATHI_DEVANAGARI_MARKERS)
+    if mr_hits > hi_hits and mr_hits >= _DEVANAGARI_HI_MR_MIN_HITS:
+        return "mr"
+    if hi_hits >= _DEVANAGARI_HI_MR_MIN_HITS:
+        return "hi"
+    return None
