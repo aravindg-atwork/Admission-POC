@@ -33,7 +33,10 @@ quota that has to stay available for the one user-facing answer call - the
 same principle ORCHESTRATOR_PROVIDER is documented under in config.py.
 """
 
+import hashlib
 import json
+import threading
+import time
 
 from .. import config
 from ..core import programs
@@ -189,6 +192,66 @@ def _validate(data, question):
     }
 
 
+# Classification is deterministic (temperature 0) and a student often
+# rephrases or resends the same thing, so repeating the call buys nothing but
+# latency and another slot against a rate limit. Small and short-lived on
+# purpose: this is a burst absorber, not a persistent cache, and routing must
+# still re-read a question whose meaning could have moved on.
+_CACHE_TTL_SECONDS = 300
+_CACHE_MAX = 256
+_cache = {}
+_cache_lock = threading.Lock()
+
+
+def _cache_key(question, history):
+    recent = "|".join((t.get("text") or "")[:200] for t in (history or [])[-2:])
+    return hashlib.sha256(f"{question}\u0000{recent}".encode("utf-8")).hexdigest()
+
+
+def _cache_get(key):
+    with _cache_lock:
+        hit = _cache.get(key)
+        if not hit:
+            return None
+        stored_at, value = hit
+        if time.time() - stored_at > _CACHE_TTL_SECONDS:
+            _cache.pop(key, None)
+            return None
+        return value
+
+
+def _cache_put(key, value):
+    with _cache_lock:
+        if len(_cache) >= _CACHE_MAX:
+            # Cheapest possible eviction - drop the oldest entry. A smarter
+            # policy is not worth the bookkeeping at this size.
+            oldest = min(_cache, key=lambda k: _cache[k][0])
+            _cache.pop(oldest, None)
+        _cache[key] = (time.time(), value)
+
+
+def _providers():
+    """Router providers in preference order, de-duplicated.
+
+    ROUTER_PROVIDER first (Groq - sub-second), then ROUTER_FALLBACK_PROVIDER
+    (Hetzner - slower but unmetered and not rate-limited the same way).
+    Added 2026-08-13 after Groq returned HTTP 429 during a normal test run:
+    generate_scoped neither retries nor falls back, so a single rate-limit
+    reply silently reverted every routing decision to keyword matching for
+    that request. That degradation is safe but invisible, and it would bite
+    hardest exactly when traffic is highest - which is the moment the
+    understanding layer matters most. Deliberately never Sarvam: the metered
+    daily quota has to stay available for real answers.
+    """
+    chain = [config.ROUTER_PROVIDER, config.ROUTER_FALLBACK_PROVIDER]
+    seen, out = set(), []
+    for name in chain:
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
 def classify(question, history=None, cloud_ok=True):
     """Classify one student message. Returns the validated dict, or None on
     ANY failure so the caller falls back to the deterministic guards.
@@ -206,21 +269,39 @@ def classify(question, history=None, cloud_ok=True):
         + "Classify this message:\n"
         + question.strip()
     )
-    try:
-        result = llm.generate_scoped(
-            config.ROUTER_PROVIDER,
-            _ROUTER_SYSTEM.format(programs=_program_block()),
-            user_prompt,
-            # question="" suppresses providers.py's reply-in-native-script
-            # reminder, which is meant for answer generation and directly
-            # contradicts "return only JSON" here.
-            "",
-            timeout=config.ROUTER_TIMEOUT,
-            temperature=0.0,
-        )
-    except Exception as exc:  # noqa: BLE001 - routing must never break a request
-        print(f"[router] classify failed: {exc!r}")
-        return None
-    if result is None:
-        return None
-    return _validate(_extract_json(result[0]), question)
+    key = _cache_key(question, history)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    for index, name in enumerate(_providers()):
+        # Primary fails fast; every fallback gets the longer budget it needs
+        # to actually finish (see config.ROUTER_FALLBACK_TIMEOUT).
+        timeout = config.ROUTER_TIMEOUT if index == 0 else config.ROUTER_FALLBACK_TIMEOUT
+        try:
+            result = llm.generate_scoped(
+                name,
+                _ROUTER_SYSTEM.format(programs=_program_block()),
+                user_prompt,
+                # question="" suppresses providers.py's reply-in-native-script
+                # reminder, which is meant for answer generation and directly
+                # contradicts "return only JSON" here.
+                "",
+                timeout=timeout,
+                temperature=0.0,
+            )
+        except Exception as exc:  # noqa: BLE001 - routing must never break a request
+            print(f"[router] {name} raised: {exc!r}")
+            continue
+        if result is None:
+            # generate_scoped already logged why. Try the next provider rather
+            # than dropping straight to keyword routing.
+            continue
+        verdict = _validate(_extract_json(result[0]), question)
+        if verdict is not None:
+            verdict["provider"] = name
+            _cache_put(key, verdict)
+            return verdict
+        # Parsed but malformed - a different model may well answer cleanly.
+        print(f"[router] {name} returned an unusable classification")
+    return None

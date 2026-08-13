@@ -72,13 +72,19 @@ def _normalize(text):
 # script could never satisfy the check. The intent router usually catches
 # this, but it is rate-limited/unavailable often enough (observed: Groq
 # HTTP 429) that the deterministic floor has to handle it too.
+# Tamil added alongside Devanagari 2026-08-13 - fixing only one of the
+# two Indic scripts the app supports would have left the identical bug
+# open for every Tamil-speaking student.
 _PROGRAM_ALIASES = {
-    "default": ("bvsc", "animalhusbandry", "बवहएसस", "बवएसस", "पशवदयकय"),
-    "bfsc": ("bfsc", "fishery", "fisheries", "बएफएसस", "मतसय"),
-    "btech-dairy": ("btech", "बटक"),
-    "mvsc": ("mvsc", "masterofveterinary", "एमवहएसस", "एमवएसस"),
-    "phd": ("phd", "doctorate", "doctoral", "पएचड", "डकटरट"),
-    "mtech-dairy": ("mtech", "masteroftechnology", "एमटक"),
+    "default": ("bvsc", "animalhusbandry", "बवहएसस", "बवएसस", "पशवदयकय",
+                "பவஎஸச", "கலநட"),
+    "bfsc": ("bfsc", "fishery", "fisheries", "बएफएसस", "मतसय",
+             "பஎஃபஎஸச", "மனவளம"),
+    "btech-dairy": ("btech", "बटक", "படக"),
+    "mvsc": ("mvsc", "masterofveterinary", "एमवहएसस", "एमवएसस", "எமவஎஸச"),
+    "phd": ("phd", "doctorate", "doctoral", "पएचड", "डकटरट",
+            "பஎசட", "மனவர"),
+    "mtech-dairy": ("mtech", "masteroftechnology", "एमटक", "எமடக"),
 }
 
 

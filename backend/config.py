@@ -262,10 +262,22 @@ GREETING_PROVIDER = os.environ.get("GREETING_PROVIDER", "groq")
 # the fallback for any individual failed call anyway.
 ROUTER_ENABLED = os.environ.get("ROUTER_ENABLED", "true").lower() == "true"
 ROUTER_PROVIDER = os.environ.get("ROUTER_PROVIDER", "groq")
+# Tried when the primary router provider fails or rate-limits. Groq's free
+# tier returns HTTP 429 readily, and without a second option every routing
+# decision silently reverts to keyword matching under load.
+ROUTER_FALLBACK_PROVIDER = os.environ.get("ROUTER_FALLBACK_PROVIDER", "hetzner")
 # Short by design: the router sits in front of EVERY answer, so a stalled
 # routing call must fail over to the deterministic guards fast rather than
 # adding its own timeout to the student's wait.
 ROUTER_TIMEOUT = int(os.environ.get("ROUTER_TIMEOUT", "12"))
+# The fallback needs a far longer leash than the primary. 12s is generous
+# for Groq (sub-second in practice) but too tight for Hetzner, which
+# answers the same classification in 7-15s - measured: with one shared
+# 12s budget, a Groq 429 fell through to Hetzner and then timed out, so
+# the fallback existed on paper and never actually completed. A slow
+# classification still beats no classification, because the alternative
+# is keyword routing.
+ROUTER_FALLBACK_TIMEOUT = int(os.environ.get("ROUTER_FALLBACK_TIMEOUT", "35"))
 
 # Master switches - each piece can be independently disabled without
 # touching the others, matching this codebase's existing per-feature flag
