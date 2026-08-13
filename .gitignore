@@ -56,3 +56,6 @@ demo-bundle*.zip
 # macOS / scratch
 .DS_Store
 .disk_check_tmp
+
+# Local admin token - never in the repo (config reads ADMIN_TOKEN from .env)
+admin-token.txt

@@ -191,12 +191,13 @@ _REDACTION = ("{name}, this isn't clearly stated in the prospectus excerpts - "
 # program's own lead-in ("... 69410. For " before "M.Tech."). Trimming back to
 # the last sentence end leaves that lead-in where it belongs - without this,
 # redacting one program silently decapitated the next one's sentence.
-# Newline counts as a boundary too, not just sentence punctuation: when the
-# model answers in a label:value list ("Unreserved category: Rs. 40,610") the
-# lines carry no terminating period, so trimming on [.!?] alone stopped early
-# and left the tail of the redacted segment stranded in the reply - observed
-# leaving a bare "69,410" floating after the redaction line.
-_SENTENCE_END_RE = re.compile(r"(?s)^.*[.!?\n]")
+# A redacted span runs up to the NEXT programme's name, so it also swallows
+# that programme's lead-in ("... Rs. 69,410.\n\nFor " before "M.Tech."). Only
+# that tail is trimmed back. Sentence-boundary matching was tried first and
+# was wrong here: "Rs." ends in a period, so a greedy [.!?] match stopped
+# inside "Other state: Rs. 69,410" and left a bare "69,410" stranded in the
+# reply - the exact artifact this is meant to remove.
+_TRAILING_LEADIN_RE = re.compile(r"(?i)\s*(?:for|and|note:?)?\s*$")
 
 
 def redact(reply, bad_pids, program_names):
@@ -216,18 +217,37 @@ def redact(reply, bad_pids, program_names):
     correct, and throwing those away would punish the student for the
     model's failure on one.
     """
-    segments = _segment_by_program(reply, program_names)
-    out = reply
-    for pid in bad_pids:
-        segment = segments.get(pid)
-        if not segment:
+    # Span-based, not string-replace. _segment_by_program CONCATENATES every
+    # occurrence of a program name into one string, so when a name appears
+    # more than once (a heading plus a mention in a closing note) that
+    # concatenation matches nothing in the reply and the replace either
+    # no-ops or clips a fragment, stranding the rest of the figures -
+    # observed as a bare "69,410" left floating after a redaction line.
+    # Editing by character span, back to front so earlier offsets stay
+    # valid, removes exactly the text that was measured and nothing else.
+    marks = []
+    for pid, name in program_names.items():
+        head = name.split()[0]
+        for match in re.finditer(re.escape(head), reply):
+            marks.append((match.start(), pid))
+    if not marks:
+        return reply
+    marks.sort()
+
+    spans = []
+    for index, (start, pid) in enumerate(marks):
+        if pid not in bad_pids:
             continue
-        segment = segment.strip()
-        trimmed = _SENTENCE_END_RE.match(segment)
-        if trimmed:
-            segment = trimmed.group(0)
-        if segment and segment in out:
-            out = out.replace(segment, _REDACTION.format(name=program_names.get(pid, pid)))
+        end = marks[index + 1][0] if index + 1 < len(marks) else len(reply)
+        # Hand back this span's tail (the next program's own lead-in, e.g.
+        # "\n\nFor ") by cutting at the last sentence end or line break.
+        chunk = reply[start:end]
+        end = start + len(_TRAILING_LEADIN_RE.sub("", chunk))
+        spans.append((start, end, pid))
+
+    out = reply
+    for start, end, pid in reversed(spans):
+        out = out[:start] + _REDACTION.format(name=program_names.get(pid, pid)) + out[end:]
     return out
 
 

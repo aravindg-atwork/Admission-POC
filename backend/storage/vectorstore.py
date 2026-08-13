@@ -176,14 +176,28 @@ def search(store, query_vector, top_k=None, query_text=""):
     # no room for the pages that actually held the answer. Lower-ranked pages
     # backfill the remaining slots; if there genuinely aren't enough distinct
     # pages, the overflow is added back rather than returning short.
+    # Budgeted per (page, kind), not per page. A fee page yields BOTH grid
+    # slices and the prose rule that states the answer in words, and those
+    # answer different questions. Under a flat per-page cap the three
+    # near-identical grid slices - which score within 0.02 of each other
+    # because they share the same header and legend - took every slot on
+    # their page and pushed the prose chunk into overflow. Measured on the
+    # Ph.D. fee page: the sentence giving the actual admission fee was
+    # unreachable for a multi-program query for exactly this reason, and the
+    # model answered from the grid instead, misreading a reservation fee as
+    # the unreserved one. Splitting the budget lets the page contribute its
+    # grid AND its prose without either crowding the other out, and without
+    # raising the overall per-page allowance that stops one table dominating
+    # the whole result set. `kind` is absent from stores ingested before this
+    # existed; those all fall into one bucket and behave exactly as before.
     picked, overflow, seen = [], [], {}
     for entry in ranked:
         if len(picked) >= top_k:
             break
-        page = entry.get("page")
-        if seen.get(page, 0) >= _MAX_CHUNKS_PER_PAGE:
+        bucket = (entry.get("page"), entry.get("kind", ""))
+        if seen.get(bucket, 0) >= _MAX_CHUNKS_PER_PAGE:
             overflow.append(entry)
             continue
-        seen[page] = seen.get(page, 0) + 1
+        seen[bucket] = seen.get(bucket, 0) + 1
         picked.append(entry)
     return [{**entry, "score": score_by_id[id(entry)]} for entry in (picked + overflow)[:top_k]]

@@ -21,7 +21,9 @@ from ..storage import projects, vectorstore
 #   4 - table detection widened to 2-column tables (schedule/date grids)
 #  11 - single-level year-column fee tables linearized too (Annexure III-A/III-C),
 #       which previously produced no readings at all
-PIPELINE_VERSION = "11"
+#  12 - prose beside a table kept as its own caption-prefixed chunk, and
+#       chunk `kind` (table/prose) stored so retrieval can budget per kind
+PIPELINE_VERSION = "12"
 
 
 def ingest(project_id, pdf_path):
@@ -63,7 +65,15 @@ def ingest(project_id, pdf_path):
     for i in range(0, len(chunks), batch):
         vectors.extend(embeddings.embed([c["text"] for c in chunks[i:i + batch]]))
 
-    store = [{"page": c["page"], "text": c["text"], "vector": v} for c, v in zip(chunks, vectors)]
+    # `kind` is carried through, not dropped: vectorstore.search budgets its
+    # per-page slots per (page, kind), so one page can contribute both its
+    # table slices and the prose rule that states the answer in words.
+    # Dropping the field here silently collapsed every chunk into a single
+    # bucket and reinstated the exact crowding the split was built to fix -
+    # the near-identical grid slices taking every slot on the page while the
+    # prose chunk, which actually answers the question, never surfaced.
+    store = [{"page": c["page"], "text": c["text"], "kind": c.get("kind", ""), "vector": v}
+             for c, v in zip(chunks, vectors)]
     vectorstore.save(projects.store_path(project_id), store)
 
     manifest_path.parent.mkdir(parents=True, exist_ok=True)

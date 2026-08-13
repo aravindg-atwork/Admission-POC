@@ -586,7 +586,7 @@ def _prose_chunks(page, text):
         # short page whose first prose line IS the heading).
         if caption and not body.startswith(caption[:40]):
             body = f"{caption} {body}"
-        chunks.append({"page": page, "text": body})
+        chunks.append({"page": page, "text": body, "kind": "prose"})
     return chunks
 
 
@@ -612,7 +612,8 @@ def _chunk_table_page(page, text):
     # wastes index space and blunts retrieval by making several chunks compete
     # with nearly identical embeddings.
     whole = linearize_table(text)
-    chunks = [{"page": page, "text": whole}] if len(whole) <= _TABLE_WHOLE_MAX else []
+    chunks = ([{"page": page, "text": whole, "kind": "table"}]
+              if len(whole) <= _TABLE_WHOLE_MAX else [])
     # A schedule-style table is a list of independent facts, not one structure,
     # so each row is also indexed on its own. As a single chunk the 31-row
     # admission programme averaged out to a vague "dates" vector and lost to
@@ -631,7 +632,7 @@ def _chunk_table_page(page, text):
     lines = text.split("\n")
     data_idx = [i for i, l in enumerate(lines) if _numeric_column_count(l) >= 2]
     if not data_idx:
-        return [{"page": page, "text": text}]
+        return chunks + [{"page": page, "text": text, "kind": "table"}]
     chunks.extend(prose)
 
     header = lines[:data_idx[0]]
@@ -650,7 +651,8 @@ def _chunk_table_page(page, text):
         slices.append(current)
 
     return chunks + [
-        {"page": page, "text": linearize_table("\n".join(header + s + legend))}
+        {"page": page, "text": linearize_table("\n".join(header + s + legend)),
+         "kind": "table"}
         for s in slices
     ]
 
