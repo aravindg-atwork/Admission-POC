@@ -262,10 +262,19 @@ GREETING_PROVIDER = os.environ.get("GREETING_PROVIDER", "groq")
 # the fallback for any individual failed call anyway.
 ROUTER_ENABLED = os.environ.get("ROUTER_ENABLED", "true").lower() == "true"
 ROUTER_PROVIDER = os.environ.get("ROUTER_PROVIDER", "groq")
-# Tried when the primary router provider fails or rate-limits. Groq's free
-# tier returns HTTP 429 readily, and without a second option every routing
-# decision silently reverts to keyword matching under load.
-ROUTER_FALLBACK_PROVIDER = os.environ.get("ROUTER_FALLBACK_PROVIDER", "hetzner")
+# Tried when the primary router provider fails or rate-limits. EMPTY BY
+# DEFAULT, and that default is a measurement, not an oversight: Hetzner - the
+# only other non-metered option - answers a trivial prompt in 52-77s, so it
+# cannot complete inside any timeout that may sit in front of a student's
+# question. Enabling it made the failure path WORSE, not better: a Groq 429
+# returns in well under a second, but the request then sat ~35s waiting on a
+# fallback that was never going to finish before dropping to keyword routing
+# regardless. Fast keyword routing beats a slow one.
+#
+# Set this to a provider name if a genuinely fast second option appears (a
+# paid Groq tier, another LPU host). The chain, per-provider timeouts and
+# breaker below are all still in place and will use it.
+ROUTER_FALLBACK_PROVIDER = os.environ.get("ROUTER_FALLBACK_PROVIDER", "")
 # Short by design: the router sits in front of EVERY answer, so a stalled
 # routing call must fail over to the deterministic guards fast rather than
 # adding its own timeout to the student's wait.
