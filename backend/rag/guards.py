@@ -29,6 +29,29 @@ from ..prompts.canned import (_DISPUTE_PROMPT, _META_ACKNOWLEDGE_TEXT, _OFF_TOPI
                                _PROGRAM_CLARIFY_TEXT)
 
 
+def _clarify_language(ctx):
+    """Which language a fixed guard reply should be written in.
+
+    hint_language first (the explicit picker, when it agrees with what was
+    actually typed), then the raw ui_language - and finally the question's
+    own SCRIPT. That last fallback is the fix: a caller that sends no
+    uiLanguage left both of the first two empty, so a Tamil question was
+    answered "Which program are you asking about?" in English. The script is
+    unambiguous evidence of what the student reads, and Devanagari defaults
+    to Hindi only because these canned texts have no separate Marathi-vs-
+    Hindi signal to go on at this point - detect_devanagari_hi_mr has
+    already had its say via hint_language when it had an opinion.
+    """
+    explicit = ctx.hint_language or ctx.ui_language
+    if explicit:
+        return explicit
+    if ctx.language == "tamil":
+        return "ta"
+    if ctx.language == "devanagari":
+        return "hi"
+    return "en"
+
+
 def _routed(ctx, field):
     """The router's verdict for `field`, or None when there is no usable
     routing decision (unavailable, or too unsure to act on).
@@ -217,7 +240,7 @@ def _meta_correction_guard(ctx):
     # only a pure correction, with nothing asked, reaches the acknowledgement.
     if _routed(ctx, "resolved_question"):
         return None
-    clarify_lang = ctx.hint_language or ctx.ui_language
+    clarify_lang = _clarify_language(ctx)
     text = _META_ACKNOWLEDGE_TEXT.get(clarify_lang, _META_ACKNOWLEDGE_TEXT["en"])
     return {"answer": text, "pages": [], "model": "guard", "language": ctx.language,
             "source": "meta-correction", "speakable": True}
@@ -277,7 +300,7 @@ def _percentage_clarify_guard(ctx):
         # Same "picked by hint_language, not just the raw UI selector" rule
         # as _program_clarify_guard below - a Hindi/Marathi question that
         # trips the guard must not get an English clarification back.
-        clarify_lang = hint_language or ui_language
+        clarify_lang = _clarify_language(ctx)
         text = _PERCENTAGE_CLARIFY_TEXT.get(clarify_lang, _PERCENTAGE_CLARIFY_TEXT["en"])
         return {"answer": text, "pages": [], "model": "guard",
                 "language": language, "source": "clarify-percentage", "speakable": True}
@@ -386,7 +409,7 @@ def _program_clarify_guard(ctx):
             # No program named at all, and the topic is one that genuinely
             # varies per program (see programs.py) - nothing useful to
             # search for or cache yet, so no retrieval or LLM call either.
-            clarify_lang = hint_language or ui_language
+            clarify_lang = _clarify_language(ctx)
             text = _PROGRAM_CLARIFY_TEXT.get(clarify_lang, _PROGRAM_CLARIFY_TEXT["en"])
             options = [{"projectId": pid, "label": name} for pid, name in programs.PROGRAM_NAMES.items()]
             return {"answer": text, "pages": [], "model": "guard", "language": language,

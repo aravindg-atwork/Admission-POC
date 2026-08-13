@@ -63,13 +63,22 @@ def _normalize(text):
 # the comparison path and picked up an irrelevant "For B.V.Sc. & A.H.
 # program... not directly relevant to your question" aside. "bvsc" alone is
 # specific enough - unlike "veterinary", which describes the whole field.
+# The Devanagari entries are POST-_normalize skeletons, not readable words:
+# _normalize keeps only alnum characters, and Devanagari matras/viramas are
+# combining marks (category Mn), so "बी.व्ही.एस्सी." and "बीव्हीएससी" both
+# reduce to "बवहएसस". Added 2026-08-13 after a Hindi question naming its
+# programme in Devanagari was still asked "which programme did you mean?" -
+# only the Latin spellings were listed, so a student writing in their own
+# script could never satisfy the check. The intent router usually catches
+# this, but it is rate-limited/unavailable often enough (observed: Groq
+# HTTP 429) that the deterministic floor has to handle it too.
 _PROGRAM_ALIASES = {
-    "default": ("bvsc", "animalhusbandry"),
-    "bfsc": ("bfsc", "fishery", "fisheries"),
-    "btech-dairy": ("btech",),
-    "mvsc": ("mvsc", "masterofveterinary"),
-    "phd": ("phd", "doctorate", "doctoral"),
-    "mtech-dairy": ("mtech", "masteroftechnology"),
+    "default": ("bvsc", "animalhusbandry", "बवहएसस", "बवएसस", "पशवदयकय"),
+    "bfsc": ("bfsc", "fishery", "fisheries", "बएफएसस", "मतसय"),
+    "btech-dairy": ("btech", "बटक"),
+    "mvsc": ("mvsc", "masterofveterinary", "एमवहएसस", "एमवएसस"),
+    "phd": ("phd", "doctorate", "doctoral", "पएचड", "डकटरट"),
+    "mtech-dairy": ("mtech", "masteroftechnology", "एमटक"),
 }
 
 

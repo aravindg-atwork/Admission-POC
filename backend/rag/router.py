@@ -90,7 +90,7 @@ Return ONLY a JSON object, no prose and no code fences, with these fields:
 
 "needs_program_clarification": true ONLY when ALL of: the answer genuinely differs per program, the student named no program, this is not a comparison, and nothing earlier in the conversation established which program they mean. Portal mechanics that work the same for every program (how to register, password reset, uploading documents) are false.
 
-"self_score_ambiguous": true when the student cites their own marks/percentage but it is unclear which exam or board it refers to, so the eligibility answer would differ depending on the reading. False when they state it clearly enough to check, or cite no marks at all.
+"self_score_ambiguous": true ONLY when the student cites their own marks/percentage AND does not say what it is a percentage OF, so eligibility cannot be checked without asking ("I got 60%, am I eligible?"). It is FALSE the moment they name the subjects or the exam the figure refers to - "I have 60% in Physics, Chemistry, Biology and English" or "my PCB percentage is 60" are answerable as written, and asking them to clarify what they already told you wastes their turn. Also false when they cite no marks at all.
 
 "confidence": "high" or "low". Use "low" whenever the message is too short, garbled or ambiguous to be sure - the caller falls back to its own safer logic when you are unsure."""
 

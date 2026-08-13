@@ -40,7 +40,11 @@ def ask(q, script_pref=None):
     with urllib.request.urlopen(req, timeout=200) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
-base_q = "आवेदन शुल्क कितना है?"
+# Names the programme explicitly. Without it this question is ambiguous
+# across the six programmes and now (correctly) hits the program-clarify
+# guard, which returns fixed Devanagari text and never reaches the
+# script-preference path this test is actually about.
+base_q = "बी.व्ही.एस्सी. के लिए आवेदन शुल्क कितना है?"
 
 print("=== AUTO mode (default, should be Devanagari + speakable) ===")
 d1 = ask(base_q + f" [{int(time.time()*1000)}]")
@@ -51,13 +55,34 @@ assert r1 > 0.5, "FAIL: auto mode not in Devanagari"
 assert d1.get("speakable") is True, "FAIL: auto mode should be speakable"
 print("PASS\n")
 
-print("=== HINGLISH mode (explicit, should be Roman + NOT speakable) ===")
-d2 = ask(base_q + f" [{int(time.time()*1000)}]", script_pref="hinglish")
+# Romanized INPUT is what romanized output is keyed on, not a script_pref
+# value. Updated 2026-08-13: this block used to send the Devanagari question
+# above with script_pref="hinglish" and assert a Roman reply. That contract
+# changed deliberately (see helpers._apply_script_pref) - "auto" now mirrors
+# the script the student actually typed, because romanizing a question
+# someone deliberately wrote in Devanagari returned mechanical Harvard-Kyoto
+# that is harder to read than the Devanagari they typed, and it contradicted
+# test_matrix.py, which has always asserted Devanagari in -> Devanagari out.
+# "hinglish" was never a value the API accepted either (only "native"/"auto"),
+# so the old call was silently testing plain "auto".
+romanized_q = "bvsc ka application fee kitna hai?"
+
+print("=== Romanized input (should come back Roman + NOT speakable) ===")
+d2 = ask(romanized_q + f" [{int(time.time()*1000)}]")
 r2 = devanagari_ratio(d2["answerText"])
 print(f"devanagari_ratio={r2:.2f} speakable={d2.get('speakable')} model={d2['model']}")
 print("A:", d2["answerText"][:150])
-assert r2 < 0.3, "FAIL: hinglish mode still mostly Devanagari"
-assert d2.get("speakable") is False, "FAIL: hinglish mode should be marked not speakable"
+assert r2 < 0.3, "FAIL: romanized input did not come back romanized"
+assert d2.get("speakable") is False, "FAIL: romanized reply should be marked not speakable"
+print("PASS\n")
+
+print("=== Romanized input + explicit native (should be Devanagari + speakable) ===")
+d3 = ask(romanized_q + f" [{int(time.time()*1000)}]", script_pref="native")
+r3 = devanagari_ratio(d3["answerText"])
+print(f"devanagari_ratio={r3:.2f} speakable={d3.get('speakable')} model={d3['model']}")
+print("A:", d3["answerText"][:150])
+assert r3 > 0.5, "FAIL: explicit native did not force Devanagari"
+assert d3.get("speakable") is True, "FAIL: native reply should be speakable"
 print("PASS\n")
 
 print("=== Cache isolation: repeat AUTO question should still return Devanagari (not leak hinglish cache) ===")

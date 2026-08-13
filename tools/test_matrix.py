@@ -120,7 +120,11 @@ for lang, q in lang_questions.items():
                   f"tamil_ratio={ratio:.2f} | {text[:70]}")
 
 print("\n== 2. FAQ cache: repeat question should be instant + source=faq-cache ==")
-repeat_q = lang_questions["English"]
+# Names the programme. The shared lang_questions entry names none, so it now
+# (correctly) hits the program-clarify guard, which is answered from fixed
+# text with no model call and is therefore never cached - nothing to hit on
+# the second call, so this asserted a cache hit that could not happen.
+repeat_q = "What is the application fee for B.V.Sc. & A.H.?"
 status, d1 = chat(repeat_q)
 status2, d2 = chat(repeat_q)
 check("Second identical call hits FAQ cache", d2.get("source") == "faq-cache", f"source={d2.get('source')}")
@@ -156,7 +160,12 @@ print("\n== 5. Admin: stats endpoint reflects activity ==")
 status, stats = req("GET", "/admin/projects/default/stats", {"X-Admin-Token": ADMIN})
 check("Stats endpoint 200", status == 200, f"status={status}")
 check("Stats totalQuestions > 0 after tests above", stats.get("totalQuestions", 0) > 0, f"total={stats.get('totalQuestions')}")
-check("Health block present with 3 services", set(stats.get("health", {}).keys()) == {"embedding", "ollama", "sarvam"}, str(stats.get("health")))
+# Subset, not equality: providers get added over time (hetzner joined as
+# CHAT_FALLBACK, and selfhosted/groq can appear too). Pinning the exact set
+# made an ordinary config change look like a regression.
+check("Health block reports the core services",
+      {"embedding", "ollama", "sarvam"} <= set(stats.get("health", {}).keys()),
+      str(stats.get("health")))
 
 print("\n== 6. Admin: unauthorized access blocked ==")
 status, d = req("GET", "/admin/projects/default/stats", {"X-Admin-Token": "wrong-token"})
