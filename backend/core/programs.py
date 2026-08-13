@@ -212,6 +212,22 @@ def _is_devanagari(s):
     return any(0x0900 <= ord(c) <= 0x097F for c in s)
 
 
+def _levenshtein_le(a, b, max_dist):
+    """True if a and b are within max_dist single-character edits - no
+    external dependency (this backend stays stdlib-only, see config.py's
+    module docstring), so a plain bounded DP instead of a library.
+    """
+    if abs(len(a) - len(b)) > max_dist:
+        return False
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i] + [0] * len(b)
+        for j, cb in enumerate(b, 1):
+            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb))
+        prev = cur
+    return prev[-1] <= max_dist
+
+
 def _matches(words, markers):
     """Exact match for English; stem/prefix match for Devanagari markers,
     since Hindi/Marathi agglutinate case endings onto the noun the same way
@@ -220,12 +236,25 @@ def _matches(words, markers):
     सोय उपलब्ध आहे का?" (is hostel available) never matched the bare
     "वसतिगृह" marker. `len(marker) >= 3` guards against a short marker
     stem-matching words it has no business matching.
+
+    English markers additionally get a single-edit typo tolerance, gated to
+    `len(marker) >= 6` for the same false-positive reason - reproduced
+    directly: "what the eligbility" (one missing letter) exact-matched
+    nothing in _PROGRAM_SPECIFIC_MARKERS, so needs_program_clarification
+    returned False and the question silently answered from whichever
+    program the request happened to be scoped to instead of asking which
+    course - the exact "ask, don't guess" guarantee this module exists to
+    give. A short marker like "fee"/"seat" is left exact-match-only: at
+    3-4 characters, an edit-distance-1 net is wide enough to catch
+    unrelated real words ("see", "fed"), which a typo fix must not do.
     """
     for word in words:
         for marker in markers:
             if word == marker:
                 return True
             if _is_devanagari(marker) and len(marker) >= 3 and word.startswith(marker):
+                return True
+            if not _is_devanagari(marker) and len(marker) >= 6 and _levenshtein_le(word, marker, 1):
                 return True
     return False
 
@@ -241,6 +270,29 @@ def needs_program_clarification(text):
     if _matches(words, _SHARED_PORTAL_MARKERS):
         return False
     return _matches(words, _PROGRAM_SPECIFIC_MARKERS)
+
+
+def is_bare_program_reply(text):
+    """True when a message is JUST a program name, carrying no question of
+    its own - "btech", "B.F.Sc.", "the dairy one".
+
+    Used by http/chat_routes.py to tell a student ANSWERING the program-
+    clarification question ("which program did you mean?") apart from one
+    asking a genuinely new question that happens to name a program. The
+    distinction matters because the first case has to be answered using the
+    EARLIER question's text (the student already said what they wanted to
+    know), while the second must be answered on its own terms.
+
+    Deliberately keyed on "carries no topic marker of its own" rather than a
+    word count: "btech dairy fees" is only three words but is a complete,
+    self-sufficient question that must NOT be rewritten into whatever was
+    asked before it, while "the btech one please" is four words and is
+    purely an answer to the clarification.
+    """
+    if not detect_program(text):
+        return False
+    words = _words(text)
+    return not _matches(words, _PROGRAM_SPECIFIC_MARKERS | _SHARED_PORTAL_MARKERS)
 
 
 # The three undergraduate programs - the sensible default set for a generic
@@ -278,7 +330,18 @@ def needs_comparison(text):
     if named:
         return False
     words = _words(text)
-    return bool(words & _COMPARISON_TRIGGER_WORDS) and bool(words & _COMPARISON_NOUN_WORDS)
+    # _matches, not a raw set intersection: the same single-character typo
+    # tolerance needs_program_clarification already gets (see _matches).
+    # Reproduced directly - "what all couse i can apply for if my score is
+    # 60%" (one missing letter in "course") failed the noun check, so this
+    # returned False, the question fell through to the program-clarify guard,
+    # and a student asking the genuinely cross-program question this path
+    # exists to answer got "which program did you mean?" instead. The
+    # trigger words are mostly under the 6-character floor _matches applies
+    # ("all", "which"), so they stay exact-match in practice; the nouns
+    # ("course"/"courses"/"program"/"programs") are all over it, which is
+    # exactly where the real typos land.
+    return _matches(words, _COMPARISON_TRIGGER_WORDS) and _matches(words, _COMPARISON_NOUN_WORDS)
 
 
 def comparison_targets(text):

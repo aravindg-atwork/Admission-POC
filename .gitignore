@@ -52,3 +52,7 @@ extension/.keys/
 
 # --- Demo transfer bundle (contains .env and live API keys - never commit) ---
 demo-bundle*.zip
+
+# macOS / scratch
+.DS_Store
+.disk_check_tmp

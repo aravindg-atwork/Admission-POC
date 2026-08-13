@@ -34,8 +34,10 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, ".")
-from backend import embeddings, faq, glossary, llm, projects, tablelookup, vectorstore  # noqa: E402
 from backend import config  # noqa: E402
+from backend.core import glossary, tablelookup  # noqa: E402
+from backend.generation import embeddings, llm  # noqa: E402
+from backend.storage import faq, projects, vectorstore  # noqa: E402
 
 # (id, lang, question, gold_pages, expected_value_or_None)
 #

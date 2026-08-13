@@ -20,8 +20,12 @@ failure shows Phase A insufficient. Nothing in this module calls an LLM.
 
 import re
 
-from . import programs
-from .faq import _discriminators, _words
+from .. import config
+from ..core import programs
+from ..prompts.system import _ORCHESTRATOR_SYSTEM_PROMPT
+from ..storage.faq import _discriminators, _words
+from .helpers import (_add_nri_scope_caveat, _apply_script_pref, _build_retrieval_text,
+                       _compact_readings, _program_name)
 
 # Reuses programs._PROGRAM_SPECIFIC_MARKERS (the same vocabulary that
 # already decides whether a question needs program-level clarification)
@@ -61,8 +65,6 @@ def is_complex(question):
     not trigger this by itself (see config.ORCHESTRATOR_MIN_WORDS's own
     reasoning).
     """
-    from . import config
-
     signals = 0
     has_clause_signal = _clause_signal(question)
     if has_clause_signal:
@@ -84,8 +86,6 @@ def _split_subtopics(question):
     back to the normal single-pass path - decomposition is an optimization,
     never a requirement to produce an answer.
     """
-    from . import config
-
     if question.count("?") >= 2:
         parts = [p.strip() + "?" for p in question.split("?") if p.strip()]
     else:
@@ -105,51 +105,25 @@ def _split_subtopics(question):
     return parts
 
 
-_ORCHESTRATOR_SYSTEM_PROMPT_BASE = (
-    "You are an admissions counselor for the {program} program. The student "
-    "asked a question with SEVERAL distinct parts. You have been given "
-    "prospectus excerpts grouped under '=== Part: <topic> ===' section "
-    "headers, one per part of the question.\n\n"
-    "RULES:\n"
-    "- Address every part the student actually asked about, using ONLY the "
-    "excerpts under that part's own section. If a section's excerpts don't "
-    "cover what was asked, say plainly that the prospectus doesn't specify "
-    "it for that part - do not fill the gap with a guess, and do not "
-    "silently skip a part the student asked about.\n"
-    "- Never invent, estimate, or round a number.\n"
-    "- Never hedge a fact you're confident about by attributing it to 'the "
-    "document'/'the prospectus' - state it directly, as something you know.\n"
-    "- Weave each part into natural spoken prose - answer them in the order "
-    "asked, one paragraph per part (a plain line break between paragraphs, "
-    "not a labeled/bulleted list).\n"
-    "- Lead with the answer itself. No preamble, no restating the question.\n"
-    "- Plain spoken prose. No markdown SYNTAX (no asterisks, no '-'/'*' "
-    "bullet markers, no '1.'/'2.' numbers, no '#' headers) - a paragraph "
-    "break between parts is fine and expected, that's not markdown. No "
-    "page references.\n\n"
-)
-
-
 def _system_prompt(project_id):
-    # Local import to avoid a module-level circular import (rag.py imports
-    # orchestrator.py, so orchestrator.py can't import rag.py at load time) -
-    # only _program_name is needed, a small pure lookup, not the rest of
-    # rag.py's machinery.
-    from .rag import _program_name
-    return _ORCHESTRATOR_SYSTEM_PROMPT_BASE.format(program=_program_name(project_id))
+    return _ORCHESTRATOR_SYSTEM_PROMPT.format(program=_program_name(project_id))
 
 
 def answer_complex(project_id, question, script_pref, ui_language, language,
-                    hint_language, hint, typed_romanized, cloud_ok):
+                    hint_language, hint, typed_romanized, cloud_ok, trace=None):
     """Top-level entry called from rag._answer() once is_complex(question)
     is already True. Returns None (not a dict) if decomposition didn't find
     a real split or if retrieval came back empty for every sub-topic - the
     caller falls back to the normal single-pass _answer flow in either
     case, same "optimization, not a requirement" rule as _split_subtopics.
     """
-    from . import config, embeddings, projects, tablelookup, textclean, vectorstore
-    from . import llm, reviewlog, validate
-    from .rag import _add_nri_scope_caveat, _apply_script_pref, _build_retrieval_text, _compact_readings
+    from .. import config
+    from ..core import tablelookup, textclean
+    from ..generation import embeddings, llm
+    from ..storage import projects, reviewlog, vectorstore
+    from . import validate
+
+    trace = trace or (lambda *a, **k: None)  # optional: callers outside the guard-stage need no trace
 
     subtopics = _split_subtopics(question)
     if not subtopics:
@@ -170,6 +144,10 @@ def answer_complex(project_id, question, script_pref, ui_language, language,
         excerpt_text = "\n\n".join(_compact_readings(e["text"]) for e in top)
         sections.append(f"=== Part: {subtopic} ===\n{excerpt_text}")
 
+    trace("retrieval", topK=config.ORCHESTRATOR_TOP_K_PER_SUBTASK, subtopics=subtopics,
+          chunks=[{"page": e.get("page"), "score": e.get("score"), "snippet": e["text"][:160]}
+                  for e in all_chunks])
+
     if not sections:
         return None
 
@@ -182,6 +160,7 @@ def answer_complex(project_id, question, script_pref, ui_language, language,
     system_prompt = _system_prompt(project_id)
     user_prompt = "Prospectus excerpts:\n" + context + "\n\nQuestion: " + question + hint + page_reminder
     reply, model = llm.generate(system_prompt, user_prompt, question, allow_cloud=cloud_ok)
+    trace("generation", model=model, promptId="orchestrator_system_prompt")
     reply = textclean.clean_for_display(reply)
     reply = validate.autofix(reply)
     reply = _add_nri_scope_caveat(question, all_chunks, reply)
@@ -195,6 +174,7 @@ def answer_complex(project_id, question, script_pref, ui_language, language,
         else:
             reasons = validate.deterministic_checks(question, context, reply)
             regenerated = False
+        trace("validation", reasons=reasons, regenerated=regenerated)
         if reasons:
             reviewlog.append(projects.review_log_path(project_id), {
                 "kind": "validation_regenerated" if regenerated else "validation_flag",

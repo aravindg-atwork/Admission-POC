@@ -32,7 +32,10 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, ".")
 sys.path.insert(0, "tools")
 
-from backend import config, embeddings, glossary, llm, projects, vectorstore  # noqa: E402
+from backend import config  # noqa: E402
+from backend.core import glossary  # noqa: E402
+from backend.generation import embeddings, llm  # noqa: E402
+from backend.storage import projects, vectorstore  # noqa: E402
 from test_retrieval_hi_mr import PROBES  # noqa: E402
 
 # Relative to the best-scoring chunk: keep everything scoring at least this

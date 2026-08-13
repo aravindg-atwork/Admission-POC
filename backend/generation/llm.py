@@ -15,8 +15,9 @@ import json
 import threading
 from datetime import datetime, timezone
 
-from . import config, providers
-from .lang import detect_script
+from . import providers
+from .. import config
+from ..core.lang import detect_script
 
 _usage_lock = threading.Lock()
 

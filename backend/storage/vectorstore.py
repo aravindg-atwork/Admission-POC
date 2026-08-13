@@ -8,7 +8,7 @@ caller passes the project's own store_path (see projects.py).
 import json
 import threading
 
-from . import config
+from .. import config
 
 # path -> (mtime, entries). The store was being re-read and JSON-parsed on every
 # single chat request - measured at 42ms of pure waste per question on a 2.5MB
@@ -157,7 +157,18 @@ def search(store, query_vector, top_k=None, query_text=""):
             entry_terms = _terms(entry.get("text", ""))
         return cosine + _KEYWORD_WEIGHT * _keyword_score(query_terms, entry_terms)
 
-    ranked = sorted(store, key=score, reverse=True)
+    # Scored once here and kept keyed by id() rather than sorting on score()
+    # directly - store's entries are the SAME cached dict objects load()
+    # returns to every caller (see its own docstring: "shared between
+    # requests"), so mutating them with a per-query score would leak this
+    # query's score into the next, unrelated one. Attached back onto a copy
+    # of each picked entry below instead. Was previously computed only for
+    # ranking and thrown away - the trace's "score" field (see rag/answer.py)
+    # has been silently None on every retrieval event since it was added.
+    scored = [(score(entry), entry) for entry in store]
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    score_by_id = {id(entry): s for s, entry in scored}
+    ranked = [entry for _, entry in scored]
 
     # Cap how many chunks one page may contribute. When a long page splits into
     # several similar chunks they score almost identically, so without this a
@@ -175,4 +186,4 @@ def search(store, query_vector, top_k=None, query_text=""):
             continue
         seen[page] = seen.get(page, 0) + 1
         picked.append(entry)
-    return (picked + overflow)[:top_k]
+    return [{**entry, "score": score_by_id[id(entry)]} for entry in (picked + overflow)[:top_k]]

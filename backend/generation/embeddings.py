@@ -7,7 +7,7 @@ an HTTP API, whichever backend is configured (see config.EMBEDDING_PROVIDER).
 import json
 import urllib.request
 
-from . import config
+from .. import config
 
 
 def _embed_local(texts):

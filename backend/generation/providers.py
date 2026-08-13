@@ -28,8 +28,8 @@ import json
 import urllib.error
 import urllib.request
 
-from . import config
-from .lang import detect_script
+from .. import config
+from ..core.lang import detect_script
 
 _END_TOKENS = ("</s>", "<|im_end|>", "<end_of_turn>", "<eos>")
 
@@ -54,9 +54,20 @@ def clean(text):
 
 
 def _post(url, payload, headers, timeout):
+    # User-Agent matters here, not just cosmetic: Groq's API sits behind
+    # Cloudflare, which rejected urllib's default "Python-urllib/3.x" UA
+    # outright with a bot-protection 403 (Cloudflare error 1010) before this
+    # was added - confirmed by reproducing the exact same call with curl's
+    # UA and getting a normal 200. Sarvam/Hetzner never showed this because
+    # neither sits behind the same bot-protection layer, not because the
+    # default UA is fine in general - applied here for every provider so a
+    # future one behind similar protection doesn't rediscover it blind.
     req = urllib.request.Request(
         url, data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", **headers}, method="POST",
+        headers={"Content-Type": "application/json",
+                 "User-Agent": "AdmissionAssistant/1.0 (+admissions-poc backend)",
+                 **headers},
+        method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
@@ -260,7 +271,37 @@ class HetznerProvider:
         return clean(result["choices"][0]["message"]["content"]), "hetzner:" + model
 
 
-_REGISTRY = {p.name: p for p in (SarvamProvider(), OllamaProvider(), SelfHostedProvider(), HetznerProvider())}
+class GroqProvider:
+    """Groq's LPU inference API - genuinely OpenAI-compatible, same shape as
+    HetznerProvider above. Added as a low-latency lane for roles that don't
+    need Sarvam's Indic-tuned quality (see config.GROQ_API_KEY's docstring
+    for why this is never used for the main RAG answer).
+
+    is_cloud = False for the same reason as Hetzner/SelfHosted: it has its
+    own separate account, not Sarvam's metered daily cap.
+    """
+
+    name = "groq"
+    is_cloud = False
+
+    def configured(self):
+        return bool(config.GROQ_API_KEY)
+
+    def chat(self, system_prompt, user_prompt, timeout, question="", model=None, temperature=None, **_):
+        model = model or config.GROQ_MODEL
+        user_prompt += _SCRIPT_REMINDER.get(detect_script(question), "")
+        payload = {
+            "model": model,
+            "temperature": config.CHAT_TEMPERATURE if temperature is None else temperature,
+            "messages": _messages(system_prompt, user_prompt),
+        }
+        headers = {"Authorization": f"Bearer {config.GROQ_API_KEY}"}
+        url = config.GROQ_URL.rstrip("/") + "/chat/completions"
+        result = _post(url, payload, headers, timeout)
+        return clean(result["choices"][0]["message"]["content"]), "groq:" + model
+
+
+_REGISTRY = {p.name: p for p in (SarvamProvider(), OllamaProvider(), SelfHostedProvider(), HetznerProvider(), GroqProvider())}
 
 
 def get(name):

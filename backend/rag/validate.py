@@ -23,7 +23,8 @@ figure, that compatible_questions's exact-equality rule would wrongly flag).
 
 import re
 
-from . import faq
+from ..prompts.system import _VALIDATE_SYSTEM
+from ..storage import faq
 
 _NUMBER_RE = re.compile(r"\b\d[\d,]*(?:\.\d+)?\s*%?")
 # Numbers under 2 digits are mostly ordinals/counts ("3 rounds", "1st year")
@@ -79,21 +80,6 @@ def autofix(reply):
     return _NUMBERED_LIST_RE.sub("", reply)
 
 
-_VALIDATE_SYSTEM = (
-    "You are checking a draft answer against the prospectus excerpts it was "
-    "generated from, for a university admissions chatbot. You are NOT "
-    "answering the question yourself - only judging the draft.\n\n"
-    "Reply with exactly one line: either the single word PASS, or FAIL "
-    "followed by a colon and a short reason (under 15 words).\n\n"
-    "FAIL only for a real problem: a number, date, or requirement stated in "
-    "the draft that is NOT actually supported by the excerpts, or the draft "
-    "answering a different question than the one asked (e.g. a different "
-    "year/category/program than what was asked about). Do NOT fail the "
-    "draft for tone, phrasing, brevity, or anything already correct - a "
-    "correct answer written differently than you would have written it is "
-    "still PASS."
-)
-
 
 def llm_check(question, context_text, reply):
     """ONE bounded llm.generate_scoped(config.ORCHESTRATOR_PROVIDER, ...)
@@ -106,7 +92,8 @@ def llm_check(question, context_text, reply):
     circular import risk, since llm.py itself is imported by many other
     leaf modules already - keeps this file safe to import from anywhere.
     """
-    from . import config, llm
+    from .. import config
+    from ..generation import llm
 
     if not config.VALIDATION_LLM_CHECK_ENABLED:
         return True, None
@@ -151,7 +138,8 @@ def check_and_regenerate(question, context_text, reply, model, system_prompt, us
     same safety nets as the original, without this leaf module needing to
     import rag.py's private helpers.
     """
-    from . import config, llm
+    from .. import config
+    from ..generation import llm
 
     reasons = deterministic_checks(question, context_text, reply)
     if not reasons:

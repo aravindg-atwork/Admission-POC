@@ -13,7 +13,7 @@ import re
 import threading
 from collections import OrderedDict
 
-from . import embeddings
+from ..generation import embeddings
 
 
 def _cosine(a, b):
@@ -185,7 +185,7 @@ def suggest_complementary(quotation_text, items, existing_ids, max_suggestions=2
     should treat these as curated suggestions to always show, not ranked
     matches to threshold-filter.
     """
-    from . import llm
+    from ..generation import llm
 
     candidates = [item for item in items if item.get("id") not in existing_ids]
     if not quotation_text or not candidates:
@@ -263,7 +263,7 @@ def generate_note(quotation_text, matched_items):
 
     Uses the existing LLM pipeline (Sarvam primary, Ollama fallback).
     """
-    from . import llm
+    from ..generation import llm
 
     if isinstance(matched_items, dict):
         matched_items = [matched_items]

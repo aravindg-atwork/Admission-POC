@@ -163,6 +163,19 @@ HETZNER_API_KEY = os.environ.get("HETZNER_API_KEY", "")
 HETZNER_URL = os.environ.get("HETZNER_URL", "https://inference.hetzner.com/api/v1")
 HETZNER_MODEL = os.environ.get("HETZNER_MODEL", "Qwen/Qwen3.6-35B-A3B-FP8")
 
+# --- Groq (OpenAI-shaped, LPU inference - added for latency-insensitive-quality
+# lanes like the greeting short-circuit, NOT the main Sarvam-vs-Hetzner answer
+# path). is_cloud = False for the same reason as Hetzner/SelfHosted above -
+# this has its own separate account/limits, not Sarvam's metered quota.
+# Never used for the main RAG answer: the 2026-08-13 decision to keep Sarvam
+# primary was explicitly "never let language quality regress, even on
+# fallback," which ruled out non-Indic-tuned fast providers for THAT path.
+# A greeting reply is a much lower quality bar (no retrieval, no figures to
+# get wrong), so it's a reasonable, scoped exception - see GREETING_PROVIDER.
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_URL = os.environ.get("GROQ_URL", "https://api.groq.com/openai/v1")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+
 # --- Chat provider selection (see providers.py) ---
 # Which backend answers questions, and what to fall back to when it fails or is
 # unavailable. Config rather than code because the choice is genuinely open:
@@ -235,6 +248,31 @@ SARVAM_TIMEOUT = int(os.environ.get("SARVAM_TIMEOUT", "45"))
 # docstring. This is a design principle, not just today's quota situation -
 # it means this feature can never make a FUTURE quota crunch worse either.
 ORCHESTRATOR_PROVIDER = os.environ.get("ORCHESTRATOR_PROVIDER", "hetzner")
+
+# Which provider answers the greeting short-circuit (see rag/guards.py's
+# _greeting_guard) - deliberately separate from ORCHESTRATOR_PROVIDER above,
+# since that one's choice is about sub-agent reasoning quality and this one
+# is purely about not making a student wait ~20s for "hey, how can I help".
+# Falls through to the normal CHAT_PRIMARY/CHAT_FALLBACK chain automatically
+# if unconfigured or a call fails (see llm.generate_scoped's None contract),
+# so an empty GROQ_API_KEY is a no-op, not a broken greeting.
+GREETING_PROVIDER = os.environ.get("GREETING_PROVIDER", "groq")
+
+# --- Intent router (2026-08-13) - see rag/router.py ---
+# One structured classification call in front of the guard stage, so routing
+# decisions come from READING the message rather than from substring/regex
+# matching. Same provider reasoning as ORCHESTRATOR_PROVIDER above: never
+# "sarvam", because this is a bounded reading task that must not compete
+# with the single user-facing answer call for the metered daily quota.
+# ROUTER_ENABLED is the kill switch - turning it off reverts every routing
+# decision to the deterministic keyword logic, which is still in place as
+# the fallback for any individual failed call anyway.
+ROUTER_ENABLED = os.environ.get("ROUTER_ENABLED", "true").lower() == "true"
+ROUTER_PROVIDER = os.environ.get("ROUTER_PROVIDER", "groq")
+# Short by design: the router sits in front of EVERY answer, so a stalled
+# routing call must fail over to the deterministic guards fast rather than
+# adding its own timeout to the student's wait.
+ROUTER_TIMEOUT = int(os.environ.get("ROUTER_TIMEOUT", "12"))
 
 # Master switches - each piece can be independently disabled without
 # touching the others, matching this codebase's existing per-feature flag
@@ -410,7 +448,7 @@ PROSPECTUS_WATCH_INTERVAL_HOURS = float(os.environ.get("PROSPECTUS_WATCH_INTERVA
 PROSPECTUS_WATCH_TIMEOUT = int(os.environ.get("PROSPECTUS_WATCH_TIMEOUT", "60"))
 
 # --- Admin / keys ---
-ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "poc-admin-dev-token")
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "password")
 DEFAULT_KEY_LABEL = "admission-site"
 
 # --- Server ---

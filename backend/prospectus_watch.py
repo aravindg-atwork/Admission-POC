@@ -24,7 +24,8 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-from . import config, projects, rag
+from . import config, rag
+from .storage import projects
 
 
 def _post(url, payload, timeout):

@@ -46,8 +46,8 @@ import time
 import unicodedata
 from pathlib import Path
 
-from . import config
-from .lang import detect_script
+from .. import config
+from ..core.lang import detect_script
 
 _lock = threading.Lock()
 _dirty = set()
@@ -219,7 +219,6 @@ def _load_learned_overlay():
     module-level and shared across every project's FAQ cache, so a learned
     addition to it is global too.
     """
-    from . import config
     path = config.LEARNED_DISCRIMINATORS_PATH
     if not path.exists():
         return []
@@ -235,7 +234,6 @@ def _effective_contrast_forms():
     vector-norm cache) so an admin's add/remove takes effect on the next
     call without a server restart.
     """
-    from . import config
     path = config.LEARNED_DISCRIMINATORS_PATH
     mtime = path.stat().st_mtime if path.exists() else 0
     if _overlay_cache["mtime"] == mtime and _overlay_cache["data"] is not None:
@@ -264,8 +262,6 @@ def add_learned_discriminator(group, canonical, word, evidence):
     """
     import secrets as _secrets
 
-    from . import config
-
     if group not in _CONTRAST_FORMS or canonical not in _CONTRAST_FORMS[group]:
         raise ValueError(f"{group!r}/{canonical!r} is not an existing discriminator - "
                           "learned entries may only add a synonym to one that already exists.")
@@ -290,8 +286,6 @@ def remove_learned_discriminator(entry_id):
     touches _CONTRAST_FORMS itself, which this can't reach). Returns False
     if entry_id doesn't exist.
     """
-    from . import config
-
     entries = _load_learned_overlay()
     kept = [e for e in entries if e.get("id") != entry_id]
     if len(kept) == len(entries):

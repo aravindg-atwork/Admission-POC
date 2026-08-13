@@ -12,7 +12,7 @@ import json
 import threading
 from copy import deepcopy
 
-from . import config
+from .. import config
 
 _lock = threading.Lock()
 
@@ -61,7 +61,7 @@ def get_registration():
     Includes a fresh API key for the extension, the backend URL, and all
     settings the admin configured.
     """
-    from . import apikeys
+    from ..storage import apikeys
     key_entry = apikeys.get_or_create_default(config.DEFAULT_PROJECT_ID)
     settings = get_settings()
     return {

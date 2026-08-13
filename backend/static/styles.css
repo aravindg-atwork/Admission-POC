@@ -18,6 +18,9 @@
   --danger: hsl(2 68% 46%);
   --danger-soft: hsl(2 74% 96%);
   --amber: hsl(38 80% 46%);
+  --trace-retrieval: hsl(212 78% 46%);
+  --trace-table: hsl(262 58% 52%);
+  --trace-validation: hsl(215 12% 42%);
   --radius: 16px;
   --radius-sm: 10px;
   --radius-xs: 7px;
@@ -187,8 +190,12 @@ button { font-family: inherit; cursor: pointer; }
 }
 @media (prefers-reduced-motion: reduce) { .row, .mic.rec { animation: none; } .dots i { animation: none; opacity: .7; } }
 
-/* ============ Console shell ============ */
-.shell { display: flex; height: 100dvh; overflow: hidden; }
+/* ============ Console shell ============
+   Same white system as the chat widget - no separate palette. The
+   "agent console" feeling comes from layout and motion (the live trace
+   rail, shimmer-while-thinking header, staggered row entrances below),
+   not from a different color scheme. */
+.shell { display: flex; height: 100dvh; overflow: hidden; background: var(--bg); }
 
 .sidebar {
   width: 268px; flex-shrink: 0; display: flex; flex-direction: column;
@@ -199,14 +206,25 @@ button { font-family: inherit; cursor: pointer; }
 .sidebar-brand .brand-name { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
 .sidebar-brand .brand-sub { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
 
-.sidebar-nav { display: flex; flex-direction: column; gap: 1px; margin-bottom: 14px; flex-shrink: 0; }
-.sidebar-nav button {
-  display: flex; align-items: center; gap: 10px; text-align: left; font: inherit; font-size: 13.5px;
-  color: var(--ink-2); background: none; border: none; border-left: 2px solid transparent;
-  border-radius: 0 var(--radius-xs) var(--radius-xs) 0; padding: 9px 12px 9px 11px; transition: background .13s ease, color .13s ease;
+.sidebar-nav { position: relative; display: flex; flex-direction: column; gap: 1px; margin-bottom: 14px; flex-shrink: 0; }
+/* One pill that slides between rows (see admin-app.js's Sidebar for the
+   getBoundingClientRect measurement) instead of every button toggling its
+   own background/border - same rail-and-highlight motion as the Live trace
+   panel's connecting line, applied to navigation. */
+.sidebar-nav-highlight {
+  position: absolute; left: 0; right: 0; z-index: 0; pointer-events: none;
+  background: var(--surface); border-left: 2px solid var(--accent);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0; box-shadow: var(--shadow-sm);
+  transition: top 220ms cubic-bezier(0.23, 1, 0.32, 1), height 220ms cubic-bezier(0.23, 1, 0.32, 1), opacity 150ms ease;
 }
-.sidebar-nav button:hover { background: var(--surface); color: var(--ink); }
-.sidebar-nav button.on { background: var(--surface); color: var(--accent); font-weight: 600; border-left-color: var(--accent); box-shadow: var(--shadow-sm); }
+.sidebar-nav button {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 10px; text-align: left; font: inherit; font-size: 13.5px;
+  color: var(--ink-2); background: none; border: none;
+  padding: 9px 12px 9px 13px; transition: color .13s ease;
+}
+.sidebar-nav button:hover { color: var(--ink); }
+.sidebar-nav button.on { color: var(--accent); font-weight: 600; }
 
 .sidebar-divider { height: 1px; background: var(--border); margin: 2px 6px 13px; flex-shrink: 0; }
 
@@ -390,8 +408,143 @@ table.keys tr:last-child td { border-bottom: none; }
 .demo-item.copied { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-hover); }
 .demo-item.copied svg { color: var(--accent); }
 
+/* ---------- Live: composer + real-time reasoning trace (Request 3) ---------- */
+/* .content (the scroll container every tab sits in) stretches to a real
+   height via flex, but .panel/.live-panel are plain block children with no
+   height of their own - so .live-split's `flex: 1` below had nothing
+   concrete to fill and just sized to content, same root cause as the grid-
+   item issue documented below. calc() anchors it to .content's own known
+   padding (36px top+bottom, see .content above) so the split genuinely
+   fills the viewport instead of only ever being as tall as its content. */
+.live-panel { display: flex; flex-direction: column; min-height: 0; height: calc(100dvh - 72px); }
+.live-split {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 18px; flex: 1; min-height: 0; margin-top: 10px;
+}
+/* Both are direct CSS Grid items (see .live-split above). Grid items default
+   to min-height: auto - sized to fit their content regardless of the
+   track's own height - which silently defeats max-height/overflow-y below:
+   instead of THIS box scrolling internally, it grows to fit every trace
+   card ever received and the whole page scrolls past the composer instead.
+   Explicit min-height: 0 overrides that default so the box actually clips
+   at max-height and scrolls on its own, as intended. */
+.live-tester { display: flex; flex-direction: column; min-height: 0; }
+.live-trace {
+  display: flex; flex-direction: column; min-height: 0; max-height: 72vh;
+  overflow-y: auto; padding-right: 4px;
+}
+/* Which program the tester is actually talking to. Was invisible before -
+   the key dropdown showed only a key LABEL ("admission-site"), so a console
+   left on the B.F.Sc. project answered every question, including plain
+   greetings, from B.F.Sc.'s prospectus with nothing on screen saying so.
+   Reported as the bot ignoring what was asked; it was doing exactly what it
+   was told, just never showing which program that was. */
+.testing-as {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 9px 13px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm); background: var(--accent-soft);
+}
+.testing-as-label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.testing-as-program { font-size: 14px; font-weight: 650; color: var(--accent); }
+.testing-as .muted { font-family: var(--font); font-size: 12px; }
+
+.trace-card { margin-bottom: 10px; transition: box-shadow .2s ease, border-color .2s ease; }
+.trace-card:hover { box-shadow: var(--shadow); }
+.trace-card-head {
+  display: flex; align-items: center; gap: 8px; padding: 11px 14px; cursor: pointer;
+  font-size: 12.5px;
+}
+.trace-card-head:hover { background: var(--surface-2); }
+.trace-status { font-family: var(--font); font-size: 12.5px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+.trace-status.shimmer-text {
+  background-image: linear-gradient(90deg, var(--ink-3) 35%, var(--ink) 50%, var(--ink-3) 65%);
+  background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer-text 1.4s linear infinite;
+}
+@keyframes shimmer-text { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.trace-toggle { margin-left: auto; color: var(--ink-3); transition: transform .2s ease; }
+.trace-rail {
+  border-top: 1px solid var(--border); padding: 10px 14px 12px 34px;
+  display: flex; flex-direction: column; gap: 8px; position: relative; font-family: var(--font-mono);
+}
+.trace-rail::before {
+  content: ""; position: absolute; left: 17.5px; top: 4px; bottom: 8px; width: 1px; background: var(--border-2);
+}
+.trace-row, .trace-row-block {
+  display: flex; align-items: center; gap: 8px; font-size: 12.5px; flex-wrap: wrap;
+  position: relative; margin-left: -20px;
+  animation: fade-up 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.trace-row-block { flex-direction: column; align-items: stretch; gap: 5px; }
+.trace-row-block > .trace-row { flex-direction: row; margin-left: 0; animation: none; }
+.trace-label { color: var(--ink-2); font-weight: 500; }
+.trace-check {
+  display: inline-flex; width: 10px; height: 10px; align-items: center; justify-content: center;
+  color: var(--ink-3); flex-shrink: 0; position: relative; z-index: 1; margin-left: -1px;
+}
+.trace-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--ink-3); position: relative; z-index: 1;
+}
+.trace-dot.guard-fired { background: var(--amber); }
+.trace-dot.guard-pass { background: var(--border-2); }
+.trace-dot.cache { background: var(--amber); }
+.trace-dot.routing { background: var(--accent); }
+.trace-dot.retrieval { background: var(--trace-retrieval); }
+.trace-dot.table { background: var(--trace-table); }
+.trace-dot.generation { background: var(--accent); }
+.trace-dot.validation { background: var(--trace-validation); }
+.trace-dot.final { background: var(--accent); width: 9px; height: 9px; }
+.trace-dot.pulse::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1.5px solid var(--accent); animation: trace-pulse 1.1s ease-out infinite;
+}
+@keyframes trace-pulse {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.pulse-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  animation: pulse-dot-blink 1.2s ease-in-out infinite;
+}
+@keyframes pulse-dot-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.pill.guard-fired { color: var(--amber); border-color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent); }
+.pill.validation-fail { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
+.context-cards { display: flex; flex-direction: column; gap: 5px; margin-left: 16px; }
+.context-card {
+  font-size: 12px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-xs); padding: 6px 9px; line-height: 1.4;
+}
+.context-card .pill { margin-right: 6px; }
+.final-answer-card {
+  margin-left: 16px; font-size: 13px; color: var(--ink); background: var(--accent-soft);
+  border: 1px solid var(--accent); border-radius: var(--radius-xs); padding: 9px 12px; line-height: 1.5;
+}
+
+/* ---------- Prompts: the master system prompts, byte-for-byte ---------- */
+.prompt-card { margin-bottom: 10px; transition: box-shadow .2s ease; }
+.prompt-card:hover { box-shadow: var(--shadow); }
+.prompt-card-head {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; flex-wrap: wrap;
+}
+.prompt-card-head:hover { background: var(--surface-2); }
+.prompt-name { font-weight: 600; font-size: 13.5px; }
+.prompt-card-head .trace-toggle { margin-left: auto; }
+.prompt-text {
+  margin: 0; padding: 14px 16px; border-top: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--ink-2);
+  white-space: pre-wrap; word-break: break-word; max-height: 60vh; overflow-y: auto;
+  background: var(--surface-2);
+}
+
 @media (max-width: 900px) {
   .shell { flex-direction: column; height: auto; overflow: visible; }
   .sidebar { width: auto; max-height: 40vh; border-right: none; border-bottom: 1px solid var(--border); }
   .content { padding: 20px; }
+  .live-split { grid-template-columns: 1fr; }
+  .live-trace { max-height: 50vh; }
 }

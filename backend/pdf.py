@@ -508,6 +508,88 @@ _TABLE_CHUNK_CHARS = 1800
 _TABLE_WHOLE_MAX = 5000
 
 
+_PROSE_MIN_WORDS = 6
+_PROSE_MIN_BLOCK_CHARS = 100
+_WORDISH_RE = re.compile(r"[A-Za-z]{2,}")
+
+
+def _prose_chunks(page, text):
+    """Sentence-prose on a table page, kept as its own chunk.
+
+    Table pages in these prospectuses are not pure grids: nearly every one
+    ends with a paragraph or two of the actual RULES ("The admission fees for
+    unreserved category Rs. 68860/-, for reservation category Rs. 30310/-...",
+    the 10% revision clause, the EBC concession terms). Both table-chunking
+    branches below discard those lines - _row_chunks keeps only lines it
+    recognizes as data rows, and the row-slice branch folds them into a
+    `legend` that is only reached when _row_chunks returns nothing.
+
+    Measured across the six ingested prospectuses: the authoritative
+    "admission fees for unreserved category" sentence was present in 0 chunks
+    for M.V.Sc., Ph.D. and M.Tech. Every program whose sentence DID survive
+    chunking answered the fee question correctly; the Ph.D. answer, with no
+    sentence to read, reconstructed figures from the mangled grid and
+    reported its reservation fee as its unreserved fee (Rs. 30,310 against a
+    real Rs. 68,860). The text was never the problem - extract_pages produces
+    that sentence perfectly - it simply never reached the index.
+
+    Emitted IN ADDITION to the table chunks, deliberately, rather than
+    replacing them: the grid and the prose answer different questions, and a
+    short prose-only chunk embeds far more sharply for "what is the admission
+    fee" than a 4KB slab of fee grid ever could.
+    """
+    blocks, current = [], []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        # A data row carries several aligned columns; prose runs as words. The
+        # word count is what separates "3. The admission fees for unreserved
+        # category Rs. 68860/-" (prose that happens to contain figures) from
+        # "1 Registration Fee 2750 2750 2750" (a row that happens to contain
+        # words).
+        # numeric_column_count <= 2, not < 2: layout-mode padding puts wide
+        # gaps inside ordinary sentences, so "3. The admission fees for
+        # unreserved category Rs. 68860/-, for reservation category" reads as
+        # two numeric columns and a stricter test excluded the single most
+        # important line on the page. Genuine grid rows carry three or more.
+        is_prose = (len(_WORDISH_RE.findall(stripped)) >= _PROSE_MIN_WORDS
+                    and _numeric_column_count(line) <= 2)
+        if is_prose:
+            current.append(stripped)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+
+    # Prefix the table's caption, exactly as _row_chunks does for rows and for
+    # the same reason: a bare paragraph loses the page's identity. Measured on
+    # the Ph.D. fee page against the live store - the plain block scored 0.6156
+    # and never surfaced, while the same text behind "ANNEXURE-IV. FEES
+    # STRUCTURE COLLEGE FEES : Ph.D." scored 0.8827 and took rank 1 ahead of
+    # the fee-grid slices that used to monopolise retrieval.
+    # Four lines, not two: these headings wrap narrowly ("ANNEXURE-IV." /
+    # "FEES STRUCTURE" / "[A] COLLEGE FEES :" / "Ph.D."), and stopping at two
+    # drops the two parts that actually discriminate - which fee table this
+    # is, and which programme it belongs to. Measured: the two-line caption
+    # left the chunk unretrievable, the four-line one put it at rank 1.
+    caption = " ".join(
+        " ".join(l.split()) for l in text.split("\n")[:4] if l.strip()
+    )[:160]
+
+    chunks = []
+    for block in blocks:
+        joined = " ".join(block)
+        if len(joined) < _PROSE_MIN_BLOCK_CHARS:
+            continue
+        body = joined
+        # Don't double the caption when the block already opens with it (a
+        # short page whose first prose line IS the heading).
+        if caption and not body.startswith(caption[:40]):
+            body = f"{caption} {body}"
+        chunks.append({"page": page, "text": body})
+    return chunks
+
+
 def _chunk_table_page(page, text):
     """Chunk a table page into self-describing slices of rows.
 
@@ -539,13 +621,18 @@ def _chunk_table_page(page, text):
     # holding the date. One row per chunk embeds sharply enough to win. The fee
     # grids are excluded because a row there is meaningless without its header.
     chunks.extend(_row_chunks(page, text))
+    # Always, in every branch - the rules stated in prose beside a table are
+    # the part a student actually asks about, and both branches below drop
+    # them otherwise. See _prose_chunks for the fee-sentence loss this fixes.
+    prose = _prose_chunks(page, text)
     if chunks:
-        return chunks
+        return chunks + prose
 
     lines = text.split("\n")
     data_idx = [i for i, l in enumerate(lines) if _numeric_column_count(l) >= 2]
     if not data_idx:
         return [{"page": page, "text": text}]
+    chunks.extend(prose)
 
     header = lines[:data_idx[0]]
     legend = lines[data_idx[-1] + 1:]
@@ -562,7 +649,7 @@ def _chunk_table_page(page, text):
     if current:
         slices.append(current)
 
-    return [
+    return chunks + [
         {"page": page, "text": linearize_table("\n".join(header + s + legend))}
         for s in slices
     ]

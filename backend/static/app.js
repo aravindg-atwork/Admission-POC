@@ -391,7 +391,13 @@ function Message({ m, lang, onReplayBrowser, onPickProgram, onFeedback }) {
         <div class="meta">
           ${programPill}
           ${comparisonPills}
-          ${(m.pages || []).map((p) => html`<span class="pill" key=${p}>p. ${p}</span>`)}
+          ${/* Page pills removed 2026-08-13: a row of "p. 5 p. 9 p. 13..."
+                under every answer read as homework - the student is here
+                because reading the PDF didn't work. Pages are still returned
+                by the API and still carried on the message, and the exact
+                page AND line get quoted when a student challenges an answer
+                (see the backend's cite-source path), which is where a
+                citation actually earns its place. */ ""}
           ${srcPill}
           <button class=${"mini-btn" + (state === "ready" ? " on" : "")} title=${title}
                   disabled=${state === "generating" || state === "unspeakable"} onClick=${handleClick}>
@@ -568,6 +574,14 @@ function App() {
   const taRef = useRef(null);
   const { supported: micSupported, rec } = useSpeech();
 
+  // Set only while the LAST answer was a program-clarification prompt, so a
+  // student who types "btech" instead of clicking the chip still gets their
+  // original question answered (the backend resolves this - see
+  // http/chat_routes.py's pendingClarification handling). A ref, not state:
+  // it must be readable inside send() without adding a dependency that would
+  // rebuild the callback on every message, and it is consumed exactly once.
+  const pendingClarifyRef = useRef(null);
+
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [messages]);
@@ -586,6 +600,10 @@ function App() {
     const q = (text || "").trim();
     if (!q || sending) return;
     const activeKey = keyOverride || DEFAULT_API_KEY;
+    // Consumed once: whether or not it resolves anything, the next message
+    // must not still look like an answer to a clarification two turns back.
+    const pendingClarification = pendingClarifyRef.current;
+    pendingClarifyRef.current = null;
     setMessages((m) => [...m, { role: "user", text: q }, { role: "thinking" }]);
     setInput("");
     if (taRef.current) taRef.current.style.height = "auto";
@@ -598,10 +616,22 @@ function App() {
           question: q,
           scriptPreference: nativeScript ? "native" : "auto",
           uiLanguage: TTS_LANG_MAP[lang] || "en",
+          // Prior turns, so a follow-up resolves against what was already
+          // asked (see backend/rag/router.py). Real exchanged text only -
+          // thinking/error placeholders carry no meaning.
+          history: messages
+            .filter((x) => (x.role === "user" || x.role === "bot") && x.text)
+            .slice(-8)
+            .map((x) => ({ role: x.role === "user" ? "user" : "assistant", text: x.text })),
+          ...(pendingClarification ? { pendingClarification } : {}),
         }),
       });
       if (!res.ok) throw new Error(res.status);
       const d = await res.json();
+      // Arm the follow-up resolution above for the NEXT message, carrying
+      // the question that actually needs answering once the student names
+      // a program - the same text the clarification chips resubmit.
+      if (d.clarifyOptions) pendingClarifyRef.current = { originalQuestion: q };
       const botId = nextId();
       setMessages((m) => [...m.slice(0, -1), {
         id: botId, role: "bot", text: d.answerText, pages: d.pageReferences || [],
@@ -632,7 +662,10 @@ function App() {
     } finally {
       setSending(false);
     }
-  }, [sending, lang, speakOn, nativeScript]);
+    // `messages` is a real dependency now that history is sent - without it
+    // send() would close over the thread as it looked when the callback was
+    // last built and ship stale (or empty) history to the router.
+  }, [sending, lang, speakOn, nativeScript, messages]);
 
   // Resolves a program-clarification prompt: look up that program's own
   // widget key and resubmit the original question under it, for this one

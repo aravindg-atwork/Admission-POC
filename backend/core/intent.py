@@ -156,17 +156,76 @@ _ELIGIBILITY_PHRASES = (
     "chance of getting", "can i join", "will i get",
 )
 
+# Hindi/Marathi extension, added 2026-08-13. Both languages share Devanagari
+# script and, for this specific shape (a student stating their own score),
+# a strikingly similar construction: a dative/ergative first-person pronoun
+# ("मुझे"/"मैंने" Hindi, "मला"/"मी" Marathi) plus a "got/received/obtained"
+# verb (मिले/मिला Hindi, मिळाले/मिळाला Marathi - both from a shared root
+# meaning "to meet/get"), somewhere in the same question - not adjacent, and
+# deliberately NOT a regex with \b word-boundary assertions on the Devanagari
+# literals: Python's re module's \b relies on \w, which does NOT treat
+# Devanagari vowel signs/anusvara (combining marks, Unicode category Mn/Mc)
+# as word characters - confirmed directly, "मैंने\b" fails to match "मैंने "
+# even though the word is right there, because \b lands between "न" and the
+# combining "े" instead of after it. This exact gap is why faq.py's/this
+# module's own _words() tokenizer explicitly folds Mn/Mc into the word it
+# continues (see _words above) - reusing that same tokenizer here, checking
+# set membership instead of a hand-rolled boundary regex, sidesteps the bug
+# entirely rather than trying to out-clever \b for Devanagari.
+_SELF_SCORE_PRONOUNS_DEVANAGARI = {"मुझे", "मुझको", "मैंने", "मला", "मी"}
+_SELF_SCORE_VERBS_DEVANAGARI = {
+    "मिले", "मिला", "मिली", "प्राप्त", "हासिल",
+    "मिळाले", "मिळाला", "मिळाली", "मिळवले", "मिळवला",
+}
+# Devanagari numerals (०-९), same normalization faq.py's _words() already
+# applies - a student CAN type "६०%" instead of "60%", and percent is often
+# spelled out as a word instead of the % symbol.
+_DEVA_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
+_PERCENT_RE_DEVANAGARI = re.compile(r"\d{1,3}\s*(?:%|प्रतिशत|टक्के)")
+# कुल/एकूण ("total", Hindi/Marathi) and समग्र/एकंदर ("overall", more formal)
+# are this module's best-supported equivalents of _SCOPE_QUALIFIERS above -
+# PCB/PCM/"subject-wise" etc are typically typed in Latin script even inside
+# an otherwise Devanagari question ("PCB मध्ये किती गुण"), so the existing
+# English _SCOPE_QUALIFIERS tuple already catches those via plain substring
+# match against the lowercased text, unchanged here.
+_SCOPE_QUALIFIERS_DEVANAGARI = ("कुल", "एकूण", "समग्र", "एकंदर")
+# पात्रता/अर्हता ("eligibility") and प्रवेश ("admission") are already
+# established, cross-checked vocabulary elsewhere in this codebase
+# (orchestrator.py's eligibility topic bucket, programs.py's program-
+# specific markers, faq.py's discriminators) - reused here rather than a
+# second hand-authored list. No Hindi/Marathi phrase-list yet (unlike
+# _ELIGIBILITY_PHRASES above, which was added reactively after a real
+# captured miss) - revisit if a real Indic miss turns up, same discipline
+# as everywhere else in this module.
+_ELIGIBILITY_WORDS_DEVANAGARI = {"पात्रता", "अर्हता", "प्रवेश"}
 
-def needs_percentage_clarification(text):
+
+def needs_percentage_clarification(text, language="latin"):
     """True when a question states the student's OWN percentage without
     saying whether it's their overall 12th aggregate or the required
     subject-combination score, for a question that's actually about
-    eligibility. English-only for now (the reported failure was English) -
-    not yet extended to Hindi/Marathi self-score phrasing, which is
-    grammatically harder to pin down with a fixed regex (postposition-based,
-    not a fixed "I verb'd" word order) - revisit if a real Indic miss turns
-    up, same as this module's other sets.
+    eligibility. `language` is the script family (see lang.detect_script) -
+    "devanagari" covers both Hindi and Marathi, which share this
+    construction closely enough to use one word set (see
+    _SELF_SCORE_PRONOUNS_DEVANAGARI's comment). Tamil is not covered yet -
+    no reported or captured failure for it so far to design a pattern against.
     """
+    if language == "devanagari":
+        normalized = text.translate(_DEVA_DIGITS)
+        if not _PERCENT_RE_DEVANAGARI.search(normalized):
+            return False
+        words = _words(text)
+        if not (words & _SELF_SCORE_PRONOUNS_DEVANAGARI):
+            return False
+        if not (words & _SELF_SCORE_VERBS_DEVANAGARI):
+            return False
+        if words & set(_SCOPE_QUALIFIERS_DEVANAGARI):
+            return False
+        lowered = normalized.lower()
+        if any(qualifier in lowered for qualifier in _SCOPE_QUALIFIERS):
+            return False
+        return bool(words & _ELIGIBILITY_WORDS_DEVANAGARI)
+
     if not _PERCENT_RE.search(text):
         return False
     if not _SELF_SCORE_RE.search(text):

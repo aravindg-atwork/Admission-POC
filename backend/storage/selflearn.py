@@ -29,6 +29,7 @@ Two tiers, deliberately unequal in how much trust they get:
 
 import time
 
+from .. import config
 from .faq import _discriminators
 
 SAFE_TO_AUTOMATE = "safe_to_automate"
@@ -45,8 +46,6 @@ def detect_recurring_patterns(flagged_entries, window_days=None, min_occurrences
     original flagged records (question/answer text and all) so a human
     reviewing the pattern has real evidence to look at, not just a count.
     """
-    from . import config
-
     window_days = window_days if window_days is not None else config.PATTERN_WINDOW_DAYS
     min_occurrences = min_occurrences if min_occurrences is not None else config.PATTERN_MIN_OCCURRENCES
     cutoff = time.time() - window_days * 86400

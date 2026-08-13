@@ -13,7 +13,7 @@ import secrets
 import threading
 from datetime import datetime, timezone
 
-from . import config
+from .. import config
 
 _lock = threading.Lock()
 

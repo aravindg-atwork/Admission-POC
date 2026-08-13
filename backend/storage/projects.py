@@ -14,7 +14,8 @@ import shutil
 import threading
 from datetime import datetime, timezone
 
-from . import apikeys, config
+from . import apikeys
+from .. import config
 
 _lock = threading.Lock()
 
