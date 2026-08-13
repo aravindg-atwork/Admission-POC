@@ -213,7 +213,11 @@ def _prospectus_watch_loop():
 
 
 def serve():
-    projects.migrate_legacy_if_needed()
+    # First run on a clean machine: create the default project. The
+    # one-time flat-layout migration that used to run here was removed
+    # 2026-08-13 (see git history) - it had been a no-op on every
+    # deployment for 11 commits, and create() below writes a strictly
+    # newer entry than the one that migration hand-built.
     if not projects.list_projects():
         projects.create("Admission Assistant", config.DEFAULT_PROJECT_ID)
     apikeys.get_or_create_default(config.DEFAULT_PROJECT_ID)

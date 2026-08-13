@@ -40,13 +40,6 @@ PROJECTS_REGISTRY_PATH = DATA_DIR / "projects.json"
 PROJECTS_DIR = DATA_DIR / "projects"
 DEFAULT_PROJECT_ID = "default"
 
-# Legacy single-tenant paths - read only during one-time migration into
-# data/projects/default/ (see projects.migrate_legacy_if_needed).
-LEGACY_STORE_PATH = DATA_DIR / "vector-store" / "vector-store.json"
-LEGACY_PROSPECTUS_DIR = DATA_DIR / "prospectus"
-LEGACY_FAQ_PATH = DATA_DIR / "faq-cache.json"
-LEGACY_STATS_PATH = DATA_DIR / "stats.json"
-
 # --- Embedding service (Dockerized nomic-embed-text) ---
 EMBEDDING_URL = os.environ.get("EMBEDDING_URL", "http://localhost:8000/embed")
 EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY", "")
