@@ -159,3 +159,18 @@ _DISPUTE_PROMPT = (
     "and do NOT mention page or line numbers. Those are attached separately "
     "below your reply, automatically.\n"
 )
+
+
+# Answer to "what programmes do you offer?" - see guards.py's
+# _program_list_guard. The list itself comes from programs.PROGRAM_NAMES, so
+# it cannot drift out of step with the projects that actually exist.
+_PROGRAM_LIST_TEXT = {
+    "en": "We offer six programmes. Tell me which one you're interested in "
+          "and I'll answer anything about it - eligibility, fees, dates or "
+          "documents.",
+    "hi": "हम छह कार्यक्रम प्रदान करते हैं। मुझे बताइए आप किसमें रुचि रखते हैं, "
+          "और मैं उसके बारे में कुछ भी बता सकता हूँ - पात्रता, शुल्क, तारीखें "
+          "या दस्तावेज़।",
+    "mr": "आम्ही सहा अभ्यासक्रम देतो. तुम्हाला कोणत्यात रस आहे ते सांगा, आणि मी "
+          "त्याबद्दल काहीही सांगू शकतो - पात्रता, शुल्क, तारखा किंवा कागदपत्रे.",
+}

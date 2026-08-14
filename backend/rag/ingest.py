@@ -23,7 +23,10 @@ from ..storage import projects, vectorstore
 #       which previously produced no readings at all
 #  12 - prose beside a table kept as its own caption-prefixed chunk, and
 #       chunk `kind` (table/prose) stored so retrieval can budget per kind
-PIPELINE_VERSION = "12"
+#  13 - chunks tagged with their prospectus SECTION and a derived topic
+#       (fees/quota/eligibility/seats/dates/documents/process/academics),
+#       so retrieval can favour the right part of the document
+PIPELINE_VERSION = "13"
 
 
 def ingest(project_id, pdf_path):
@@ -72,7 +75,9 @@ def ingest(project_id, pdf_path):
     # bucket and reinstated the exact crowding the split was built to fix -
     # the near-identical grid slices taking every slot on the page while the
     # prose chunk, which actually answers the question, never surfaced.
-    store = [{"page": c["page"], "text": c["text"], "kind": c.get("kind", ""), "vector": v}
+    store = [{"page": c["page"], "text": c["text"], "kind": c.get("kind", ""),
+              "topic": c.get("topic", "general"), "section": c.get("section", ""),
+              "vector": v}
              for c, v in zip(chunks, vectors)]
     vectorstore.save(projects.store_path(project_id), store)
 

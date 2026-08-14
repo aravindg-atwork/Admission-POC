@@ -437,6 +437,27 @@ function TraceEventRow({ event }) {
   return null;
 }
 
+// One step, expandable. Clicking shows the full detail the backend recorded
+// for that step - the retrieved chunks and their scores, the validator's
+// reasons, the router's resolved question, the prompt id that was used.
+// Asked for directly: the summary line alone does not let you see what the
+// agent had in front of it when it decided something.
+function TraceStep({ event }) {
+  const [open, setOpen] = useState(false);
+  const detail = event.detail || {};
+  const hasDetail = Object.keys(detail).length > 0;
+  return html`
+    <div class="trace-step">
+      <div class=${"trace-step-head" + (hasDetail ? " clickable" : "")}
+           onClick=${() => hasDetail && setOpen(!open)}
+           title=${hasDetail ? "Click to see what this step worked with" : ""}>
+        <${TraceEventRow} event=${event} />
+        ${hasDetail ? html`<span class="trace-step-toggle">${open ? "\u2212" : "+"}</span>` : ""}
+      </div>
+      ${open ? html`<pre class="trace-step-detail">${JSON.stringify(detail, null, 2)}</pre>` : ""}
+    </div>`;
+}
+
 function TraceCard({ trace, programNames }) {
   const [open, setOpen] = useState(true);
   const [, tick] = useState(0);
@@ -458,7 +479,7 @@ function TraceCard({ trace, programNames }) {
         <span class="muted">${trace.events.length} steps</span>
         <span class="trace-toggle" style=${{ transform: open ? "rotate(0)" : "rotate(-90deg)" }}>▾</span>
       </div>
-      ${open ? html`<div class="trace-rail">${trace.events.map((e, i) => html`<${TraceEventRow} key=${i} event=${e} />`)}</div>` : ""}
+      ${open ? html`<div class="trace-rail">${trace.events.map((e, i) => html`<${TraceStep} key=${i} event=${e} />`)}</div>` : ""}
     </div>`;
 }
 

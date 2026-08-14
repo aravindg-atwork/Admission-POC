@@ -548,3 +548,23 @@ table.keys tr:last-child td { border-bottom: none; }
   .live-split { grid-template-columns: 1fr; }
   .live-trace { max-height: 50vh; }
 }
+
+/* Expandable trace steps - click a step to see the payload behind it. */
+.trace-step { display: flex; flex-direction: column; }
+.trace-step-head { display: flex; align-items: flex-start; gap: 6px; border-radius: var(--radius-xs); }
+.trace-step-head.clickable { cursor: pointer; }
+.trace-step-head.clickable:hover { background: var(--surface-2); }
+.trace-step-head > :first-child { flex: 1; min-width: 0; }
+.trace-step-toggle {
+  flex-shrink: 0; width: 16px; text-align: center; color: var(--ink-3);
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.6; opacity: 0;
+  transition: opacity .12s ease;
+}
+.trace-step-head.clickable:hover .trace-step-toggle { opacity: 1; }
+.trace-step-detail {
+  margin: 2px 0 6px 16px; padding: 9px 11px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius-xs);
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5;
+  color: var(--ink-2); white-space: pre-wrap; word-break: break-word;
+  max-height: 320px; overflow: auto;
+}

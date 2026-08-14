@@ -420,6 +420,95 @@ def _find_group_header(lines_above):
     return []
 
 
+
+# --- Section / topic tagging -------------------------------------------
+#
+# A prospectus is not a flat bag of pages: it is a numbered document with
+# stable sections ("6. RESERVATION OF SEATS", "ANNEXURE - III FEE
+# STRUCTURE"), and every one of the six prospectuses carries 19-26 of them.
+# Tagging each chunk with the section it came from lets retrieval aim at the
+# right part of the book instead of searching the whole thing.
+#
+# Why it matters, measured on "what is the application fee for bvsc": the
+# top-15 shipped ~29,700 chars to the model, of which the genuinely
+# fee-related chunks were a minority - the rest was the table of contents, a
+# reservation Government Resolution, portal signup steps and a paragraph
+# about the Director of Instruction. That noise costs generation time and is
+# precisely how a figure from the wrong part of the document gets quoted.
+#
+# Deterministic, no model call: the headings are already in the text.
+_SECTION_RE = re.compile(
+    r"^(ANNEXURE\s*[-–—]?\s*[IVXLC0-9]+|\d{1,2}[.)]\s+[A-Z][A-Z /&,()'-]{4,})")
+
+# Heading keywords -> topic. First match wins, so the more specific
+# entries come first. "general" is the deliberate catch-all: a chunk whose
+# section says nothing useful must stay retrievable rather than be filtered
+# into a corner.
+_TOPIC_RULES = (
+    ("fees", ("FEE", "FEES", "PAYMENT", "REFUND")),
+    ("quota", ("RESERVATION", "QUOTA")),
+    ("eligibility", ("ELIGIBILITY", "SELECTION CRITERIA", "QUALIFYING")),
+    ("seats", ("AVAILABILITY OF SEATS", "INTAKE", "SEATS")),
+    ("dates", ("SCHEDULE", "PROGRAMME OF", "TIME TABLE", "IMPORTANT DATES")),
+    ("documents", ("CERTIFICATE", "DOCUMENT", "AFFIDAVIT", "UNDERTAKING")),
+    ("process", ("INSTRUCTION", "ADMISSION PROCEDURE", "CAP", "ALLOTMENT",
+                  "CANCELLATION", "GRIEVANCE", "REGISTRATION")),
+    ("academics", ("SYSTEM OF EDUCATION", "DISCIPLINE", "CURRICULUM",
+                    "ACADEMIC", "ATTENDANCE", "EXAMINATION")),
+)
+
+
+def _topic_for(heading):
+    upper = (heading or "").upper()
+    for topic, keywords in _TOPIC_RULES:
+        if any(k in upper for k in keywords):
+            return topic
+    return "general"
+
+
+def _page_sections(pages):
+    """{page_number: (heading, topic)} with the heading carried FORWARD.
+
+    A section starts at its heading and runs until the next one, so most
+    pages carry no heading of their own and inherit the one above them -
+    page 40's fee table has no "FEE STRUCTURE" line on it, that sits on page
+    39. Without carrying it forward the pages that actually hold the numbers
+    would be the ones left untagged.
+    """
+    out, current = {}, ("", "general")
+    for page in pages:
+        # Scan the WHOLE page, not just the top. A section does not have to
+        # begin on a fresh page - "4. THE ELIGIBILITY / SELECTION CRITERIA
+        # FOR ADMISSION" starts on line 13 of its page, and an 8-line window
+        # missed it, leaving the entire eligibility section tagged with
+        # whatever section preceded it (2 chunks tagged eligibility across
+        # the whole prospectus, for one of its most-asked-about topics).
+        #
+        # The FIRST heading on a page decides that page's tag and the LAST
+        # one carries forward, which is right when a page ends one section
+        # and starts the next: the bulk of that page still belongs to the
+        # section it opened under.
+        lines = [" ".join(l.split()) for l in page["text"].split("\n")]
+        lines = [l for l in lines if l]
+        first_heading = None
+        for i, text in enumerate(lines):
+            if len(text) >= 70 or not _SECTION_RE.match(text):
+                continue
+            # "ANNEXURE - III" alone says nothing about what is in it; the
+            # words that do ("FEE STRUCTURE") sit on the following line, and
+            # these headings wrap narrowly. Pull the next couple of short
+            # lines into the heading before deciding the topic - without
+            # this every ANNEXURE, including the entire fee structure,
+            # classified as "general".
+            heading = " ".join([text] + [l for l in lines[i + 1:i + 3] if len(l) < 60])
+            resolved = (heading[:120], _topic_for(heading))
+            if first_heading is None:
+                first_heading = resolved
+            current = resolved
+        out[page["page"]] = first_heading or current
+    return out
+
+
 def chunk_pages(pages):
     """Split each page into chunks on line boundaries, never mid-line.
 
@@ -436,6 +525,7 @@ def chunk_pages(pages):
     reported as the 1st-year fee). These pages top out around 4KB, well inside
     the embedding model's window, so keeping them whole costs nothing.
     """
+    sections = _page_sections(pages)
     chunks = []
     for entry in pages:
         page, text = entry["page"], entry["text"]
@@ -454,6 +544,14 @@ def chunk_pages(pages):
             size += len(line) + 1
         if current:
             chunks.append({"page": page, "text": "\n".join(current)})
+
+    # Applied once at the end so every branch above - prose pages, table
+    # pages, row slices - gets tagged without each having to remember to.
+    for chunk in chunks:
+        heading, topic = sections.get(chunk["page"], ("", "general"))
+        chunk.setdefault("kind", "")
+        chunk["section"] = heading
+        chunk["topic"] = topic
     return chunks
 
 

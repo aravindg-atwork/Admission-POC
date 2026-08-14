@@ -25,6 +25,7 @@ from ..core.intent import is_prompt_injection, needs_percentage_clarification
 from ..generation import embeddings, llm
 from ..storage import projects, vectorstore
 from ..prompts.canned import (_DISPUTE_PROMPT, _META_ACKNOWLEDGE_TEXT, _OFF_TOPIC_TASK_PROMPT,
+                               _PROGRAM_LIST_TEXT,
                                _OFF_TOPIC_TRIVIA_PROMPT, _PERCENTAGE_CLARIFY_TEXT,
                                _PROGRAM_CLARIFY_TEXT)
 
@@ -50,6 +51,20 @@ def _clarify_language(ctx):
     if ctx.language == "devanagari":
         return "hi"
     return "en"
+
+
+_LIST_TRIGGERS = {"what", "which", "list", "all", "available", "offer",
+                   "offered", "have", "there", "tell", "kaun", "konte"}
+_LIST_NOUNS = {"program", "programs", "programme", "programmes", "course",
+                "courses", "degree", "degrees", "अभ्यासक्रम", "कार्यक्रम",
+                "कोर्स", "पदवी"}
+# Any of these means the question is about a PROPERTY of the programmes
+# rather than the set itself, so it belongs to the comparison path.
+_LIST_ATTRIBUTE_WORDS = {"fee", "fees", "cost", "eligibility", "eligible",
+                          "percentage", "marks", "seat", "seats", "date",
+                          "dates", "deadline", "neet", "cet", "exam",
+                          "document", "documents", "quota", "reservation",
+                          "apply", "admission", "hostel", "duration"}
 
 
 def _routed(ctx, field):
@@ -282,6 +297,51 @@ def _off_topic_guard(ctx):
             "source": "off-topic", "speakable": speakable}
 
 
+def _program_list_guard(ctx):
+    """"What programmes do you offer?" - answered from the registry, not the
+    prospectus and not a model.
+
+    Reported directly: "what all program there is?" was met with "Which
+    program are you asking about?" and a list of six buttons. The router had
+    even understood it correctly ("what are the available programmes?") and
+    still set needs_program_clarification, because the deterministic rule
+    behind that flag only asks "does the answer vary per programme, and did
+    they name one?" - which is true here, yet the question is precisely a
+    request for the list. Asking someone to pick from a list in order to
+    tell them what the list is, is the most literal possible not-listening.
+
+    Deterministic and model-free: the assistant knows its own programmes
+    (programs.PROGRAM_NAMES), so there is nothing to retrieve and nothing to
+    get wrong. Placed ahead of comparison and clarification, both of which
+    would otherwise claim this question.
+
+    Deliberately narrow. A question about an ATTRIBUTE across programmes
+    ("which courses require NEET", "what are the fees for all courses") is a
+    real comparison and must fall through - it is only the bare "what is on
+    offer" that is answered here.
+    """
+    question = ctx.question
+    words = programs._words(question)
+    asks_for_set = bool(words & _LIST_TRIGGERS) and bool(words & _LIST_NOUNS)
+    if not asks_for_set:
+        return None
+    # An attribute word means they want those programmes COMPARED on
+    # something, which the comparison path handles properly.
+    if words & _LIST_ATTRIBUTE_WORDS:
+        return None
+    if programs.detect_program(question):
+        return None
+
+    names = list(programs.PROGRAM_NAMES.values())
+    lang = _clarify_language(ctx)
+    lead = _PROGRAM_LIST_TEXT.get(lang, _PROGRAM_LIST_TEXT["en"])
+    body = lead + "\n\n" + "\n".join(names)
+    options = [{"projectId": pid, "label": name}
+               for pid, name in programs.PROGRAM_NAMES.items()]
+    return {"answer": body, "pages": [], "model": "guard", "language": ctx.language,
+            "source": "program-list", "speakable": True, "clarifyOptions": options}
+
+
 def _percentage_clarify_guard(ctx):
     question = ctx.question
     language = ctx.language
@@ -427,6 +487,7 @@ GUARDS = [
     _dispute_guard,
     _meta_correction_guard,
     _off_topic_guard,
+    _program_list_guard,
     _percentage_clarify_guard,
     _comparison_guard,
     _program_redirect_guard,
@@ -444,5 +505,19 @@ def run_guards(ctx):
         # near-identical trace call.
         ctx.trace("guard", name=guard.__name__, fired=response is not None)
         if response is not None:
+            # Emitted here for the same reason, and because without it a
+            # guard-answered request NEVER closes its trace: the live console
+            # marks a trace finished only when it sees final_answer, which
+            # only _pipeline used to send. Every greeting, clarification,
+            # correction and off-topic reply therefore sat on "Thinking..."
+            # forever in the console while the student already had their
+            # answer - reported directly, and visible as four stuck cards
+            # against one that completed.
+            ctx.trace("final_answer", answer=response.get("answer", ""),
+                      source=response.get("source", "guard"),
+                      model=response.get("model", "guard"),
+                      pages=response.get("pages", []),
+                      speakable=response.get("speakable", True),
+                      language=response.get("language"))
             return response
     return None

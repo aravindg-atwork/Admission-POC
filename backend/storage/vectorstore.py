@@ -77,6 +77,53 @@ def _keyword_score(query_terms, entry_terms):
     return len(query_terms & entry_terms) / len(query_terms)
 
 
+
+# How much a topic match may add. Smaller than _KEYWORD_WEIGHT on purpose: a
+# chunk from the right SECTION is a hint, not proof, and must never outrank a
+# chunk that genuinely matches the question's words. Tuned to lift the right
+# section's chunks past incidental noise (a table of contents, an unrelated
+# Government Resolution) without letting a weakly-related fee paragraph beat a
+# strongly-matching one from elsewhere.
+_TOPIC_WEIGHT = 0.12
+
+# Question words -> the chunk topic they imply. The mirror image of pdf.py's
+# _TOPIC_RULES, which tags chunks from their section HEADING; this reads the
+# student's question instead. Deliberately deterministic and free - the intent
+# router already costs a call, and this must work when it is unavailable.
+_QUERY_TOPICS = (
+    ("fees", ("fee", "fees", "cost", "costs", "payment", "payments", "refund",
+               "deposit", "charges", "tuition", "hostel",
+               "शुल्क", "फी", "फीस")),
+    ("quota", ("quota", "quotas", "reservation", "reservations", "reserved",
+                "category", "categories", "ews", "obc",
+                "आरक्षण", "कोटा")),
+    ("eligibility", ("eligibility", "eligible", "criteria", "qualify",
+                      "qualifying", "percentage", "marks", "cutoff",
+                      "पात्रता", "गुण")),
+    ("seats", ("seat", "seats", "intake", "capacity", "vacancy", "vacancies",
+                "जागा")),
+    ("dates", ("date", "dates", "deadline", "last", "schedule", "when",
+                "तारीख", "तारखा")),
+    ("documents", ("document", "documents", "certificate", "certificates",
+                    "affidavit", "proof", "कागदपत्रे", "दस्तावेज")),
+)
+
+
+def query_topic(text):
+    """The section topic a question is asking about, or None when unclear.
+
+    None is common and fine - it simply means no boost is applied and
+    retrieval behaves exactly as it did before topics existed.
+    """
+    words = _terms(text or "")
+    if not words:
+        return None
+    for topic, markers in _QUERY_TOPICS:
+        if words & set(markers):
+            return topic
+    return None
+
+
 def _cosine(a, b):
     dot = sum(x * y for x, y in zip(a, b))
     na = sum(x * x for x in a) ** 0.5
@@ -141,6 +188,7 @@ def search(store, query_vector, top_k=None, query_text=""):
     if qnorm == 0:
         return []
     query_terms = _terms(query_text) if query_text else set()
+    topic = query_topic(query_text)
 
     def score(entry):
         enorm = entry.get("_norm") or _norm(entry["vector"])
@@ -155,7 +203,15 @@ def search(store, query_vector, top_k=None, query_text=""):
         entry_terms = entry.get("_terms")
         if entry_terms is None:
             entry_terms = _terms(entry.get("text", ""))
-        return cosine + _KEYWORD_WEIGHT * _keyword_score(query_terms, entry_terms)
+        total = cosine + _KEYWORD_WEIGHT * _keyword_score(query_terms, entry_terms)
+        # Section affinity: a fee question should not be competing with the
+        # table of contents and an unrelated Government Resolution for slots.
+        # Measured before this existed - "what is the application fee" shipped
+        # ~29,700 chars to the model, most of it from sections with nothing to
+        # do with fees.
+        if topic and entry.get("topic") == topic:
+            total += _TOPIC_WEIGHT
+        return total
 
     # Scored once here and kept keyed by id() rather than sorting on score()
     # directly - store's entries are the SAME cached dict objects load()
