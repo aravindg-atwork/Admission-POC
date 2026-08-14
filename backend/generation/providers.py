@@ -301,7 +301,74 @@ class GroqProvider:
         return clean(result["choices"][0]["message"]["content"]), "groq:" + model
 
 
-_REGISTRY = {p.name: p for p in (SarvamProvider(), OllamaProvider(), SelfHostedProvider(), HetznerProvider(), GroqProvider())}
+class NvidiaProvider:
+    """NVIDIA NIM (build.nvidia.com) - OpenAI-shaped, same surface as Groq and
+    Hetzner. Added 2026-08-14 when Sarvam ran out of credits (HTTP 402
+    "No credits available.") and Groq's free tier hit its 100k tokens/day
+    ceiling, leaving nothing fast enough to answer with.
+
+    Registered TWICE, under two names, because the two roles want opposite
+    things and the registry is keyed by name:
+
+      nvidia       - NVIDIA_MODEL, the answer model. A reasoning model, so it
+                     needs a Sarvam-sized token ceiling (see max_tokens below).
+      nvidia-fast  - NVIDIA_FAST_MODEL, for classification and greetings,
+                     where sub-second latency matters far more than depth.
+
+    Measured on a Hindi admissions prompt before adopting either, because
+    assuming Indic quality is exactly how this project has been burned
+    before: llama-3.1-8b answered correctly in 0.7s, nemotron-super-49b in
+    18.5s, llama-3.1-70b in 46.8s (too slow), and several catalogue entries
+    returned HTTP 404 - listed by /v1/models but not actually deployed.
+
+    is_cloud = False for the same reason as Hetzner/Groq: llm._usable() gates
+    is_cloud behind Sarvam's own daily-spend bookkeeping, which has nothing to
+    do with this account.
+    """
+
+    is_cloud = False
+
+    def __init__(self, name, model_attr):
+        self.name = name
+        self._model_attr = model_attr
+
+    def _model(self):
+        return getattr(config, self._model_attr)
+
+    def configured(self):
+        return bool(config.NVIDIA_API_KEY)
+
+    def chat(self, system_prompt, user_prompt, timeout, question="", model=None, temperature=None, **_):
+        model = model or self._model()
+        user_prompt += _SCRIPT_REMINDER.get(detect_script(question), "")
+        payload = {
+            "model": model,
+            "temperature": config.CHAT_TEMPERATURE if temperature is None else temperature,
+            # Generous on purpose: the answer model is a reasoning model and
+            # spends completion budget thinking before it writes anything, the
+            # same trap documented on SarvamProvider. A tight ceiling returns
+            # content=None, which reads as a network failure rather than what
+            # it is.
+            "max_tokens": config.NVIDIA_MAX_TOKENS,
+            "messages": _messages(system_prompt, user_prompt),
+        }
+        headers = {"Authorization": f"Bearer {config.NVIDIA_API_KEY}"}
+        url = config.NVIDIA_URL.rstrip("/") + "/chat/completions"
+        result = _post(url, payload, headers, timeout)
+        answer = clean(result["choices"][0]["message"].get("content"))
+        if not answer:
+            # Reasoning consumed the whole budget without emitting an answer.
+            # Raise so the caller's fallback handles it deliberately.
+            raise ValueError(f"{self.name} returned no answer content (reasoning hit the token cap)")
+        return answer, f"{self.name}:{model}"
+
+
+_REGISTRY = {p.name: p for p in (
+    SarvamProvider(), OllamaProvider(), SelfHostedProvider(), HetznerProvider(),
+    GroqProvider(),
+    NvidiaProvider("nvidia", "NVIDIA_MODEL"),
+    NvidiaProvider("nvidia-fast", "NVIDIA_FAST_MODEL"),
+)}
 
 
 def get(name):

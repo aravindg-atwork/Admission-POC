@@ -169,6 +169,17 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_URL = os.environ.get("GROQ_URL", "https://api.groq.com/openai/v1")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
+# --- NVIDIA NIM (OpenAI-shaped) ---
+# Adopted 2026-08-14 after Sarvam returned HTTP 402 "No credits available."
+# and Groq hit its 100k tokens/day free ceiling. Two models, two roles - see
+# NvidiaProvider. Model ids verified against /v1/models AND actually called:
+# the catalogue lists several that return 404 when used.
+NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
+NVIDIA_URL = os.environ.get("NVIDIA_URL", "https://integrate.api.nvidia.com/v1")
+NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1.5")
+NVIDIA_FAST_MODEL = os.environ.get("NVIDIA_FAST_MODEL", "meta/llama-3.1-8b-instruct")
+NVIDIA_MAX_TOKENS = int(os.environ.get("NVIDIA_MAX_TOKENS", "4096"))
+
 # --- Chat provider selection (see providers.py) ---
 # Which backend answers questions, and what to fall back to when it fails or is
 # unavailable. Config rather than code because the choice is genuinely open:
