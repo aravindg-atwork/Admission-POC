@@ -126,6 +126,8 @@ class Handler(BaseHTTPRequestHandler):
             chat_routes.handle_ingest(self)
         elif self.path == "/api/tts":
             chat_routes.handle_tts(self)
+        elif self.path == "/api/stt":
+            chat_routes.handle_stt(self)
         elif self.path == "/api/catalogue/match":
             orderassist_routes.handle_catalogue_match(self)
         elif self.path == "/api/catalogue/complementary":

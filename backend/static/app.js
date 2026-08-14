@@ -214,9 +214,19 @@ const Icon = {
   thumbDown: html`<svg viewBox="0 0 20 20" width="14" height="14" fill="none"><path d="M13 11.5V4H5.8c-.7 0-1.3.5-1.4 1.2l-.9 5A1.5 1.5 0 005 12h3.5l-.6 3.2c-.15.8.5 1.5 1.3 1.5.4 0 .8-.25 1-.6L13 11.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M16 11.5h-3V4h3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>`,
 };
 
+// Voice input records audio and sends it to /api/stt (Mistral Voxtral)
+// rather than relying on the browser's own recogniser. webkitSpeechRecognition
+// is Chrome-only, silently missing in Firefox and most in-app webviews, and
+// ships the student's audio to Google instead of to us - so a large share of
+// students simply had no mic at all. MediaRecorder is available essentially
+// everywhere.
+//
+// The browser recogniser is kept as a fallback for when MediaRecorder or the
+// microphone is unavailable, so nobody who has voice input today loses it.
 function useSpeech() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const recRef = useRef(null);
+  const mediaRef = useRef(null);
   useEffect(() => {
     if (!SR) return;
     const r = new SR();
@@ -224,7 +234,42 @@ function useSpeech() {
     r.maxAlternatives = 1;
     recRef.current = r;
   }, []);
-  return { supported: !!SR, rec: recRef };
+  const canRecord = !!(navigator.mediaDevices && window.MediaRecorder);
+  return { supported: canRecord || !!SR, rec: recRef, media: mediaRef, canRecord };
+}
+
+// Records until stop() is called, then posts the blob to /api/stt. Resolves
+// with the transcript, or null on any failure - a failed transcription must
+// leave the student able to type, never surface as a broken page.
+async function recordAndTranscribe(mediaRef, apiKey, language, onStart) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const chunks = [];
+  const mr = new MediaRecorder(stream);
+  mediaRef.current = mr;
+  mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  const done = new Promise((resolve) => { mr.onstop = resolve; });
+  mr.start();
+  onStart && onStart();
+  await done;
+  stream.getTracks().forEach((t) => t.stop());
+  mediaRef.current = null;
+  if (!chunks.length) return null;
+  const blob = new Blob(chunks, { type: chunks[0].type || "audio/webm" });
+  try {
+    const res = await fetch("/api/stt", {
+      method: "POST",
+      headers: {
+        "Content-Type": blob.type,
+        "X-Audio-Language": language || "en",
+        ...(apiKey ? { "X-API-Key": apiKey } : {}),
+      },
+      body: blob,
+    });
+    if (!res.ok) return null;
+    return (await res.json()).text || null;
+  } catch {
+    return null;
+  }
 }
 
 // Indic languages get the self-hosted AI4Bharat voice (natural, not robotic).
@@ -572,7 +617,7 @@ function App() {
 
   const threadRef = useRef(null);
   const taRef = useRef(null);
-  const { supported: micSupported, rec } = useSpeech();
+  const { supported: micSupported, rec, media, canRecord } = useSpeech();
 
   // Set only while the LAST answer was a program-clarification prompt, so a
   // student who types "btech" instead of clicking the chip still gets their
@@ -704,6 +749,29 @@ function App() {
   }, []);
 
   const toggleMic = useCallback(() => {
+    // Server-side transcription when the browser can record, which is nearly
+    // everywhere. Falls through to the browser recogniser only when it
+    // cannot, so no one who has voice input today loses it.
+    if (canRecord) {
+      if (recording) {
+        if (media.current) media.current.stop();
+        return;
+      }
+      setRecording(true);
+      recordAndTranscribe(media, DEFAULT_API_KEY, TTS_LANG_MAP[lang] || "en",
+                          () => setHint("Listening… tap again when you're done."))
+        .then((text) => {
+          setRecording(false);
+          setHint("");
+          if (text) send(text);
+          else setHint("Couldn't catch that — try again or type it.");
+        })
+        .catch(() => {
+          setRecording(false);
+          setHint("Microphone unavailable — you can type instead.");
+        });
+      return;
+    }
     const r = rec.current;
     if (!r) return;
     if (recording) { r.stop(); return; }
@@ -716,7 +784,7 @@ function App() {
     };
     r.onerror = () => { setRecording(false); setHint("Couldn't hear that — try again or type."); };
     try { r.start(); setRecording(true); setHint("Listening… speak now."); } catch {}
-  }, [recording, lang, send, rec]);
+  }, [recording, lang, send, rec, canRecord, media]);
 
   const clearChat = () => {
     stopSpeaking();

@@ -187,6 +187,11 @@ MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY", "")
 MISTRAL_URL = os.environ.get("MISTRAL_URL", "https://api.mistral.ai/v1")
 MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-medium-latest")
 MISTRAL_MAX_TOKENS = int(os.environ.get("MISTRAL_MAX_TOKENS", "1500"))
+# Speech-to-text (see generation/speech.py). Voxtral handles Hindi and
+# Marathi; Mistral's TTS voices are English-only, so text-to-speech stays
+# with TTS_URL below.
+STT_MODEL = os.environ.get("STT_MODEL", "voxtral-mini-latest")
+STT_TIMEOUT = int(os.environ.get("STT_TIMEOUT", "60"))
 
 # --- Chat provider selection (see providers.py) ---
 # Which backend answers questions, and what to fall back to when it fails or is

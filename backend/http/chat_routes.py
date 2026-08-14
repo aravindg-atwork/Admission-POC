@@ -17,6 +17,7 @@ import urllib.request
 
 from .. import config, rag
 from ..core import programs, textclean
+from ..generation import speech
 from ..storage import apikeys, audiocache, faq, projects
 
 
@@ -224,3 +225,31 @@ def _proxy_tts(self, project_id):
         # service being down, and the Indic voice silently never played.
         print(f"[tts] proxy to {config.TTS_URL} failed: {exc!r}")
         self._json(503, {"error": "TTS service unavailable."})
+
+
+def handle_stt(self):
+    """POST /api/stt - raw audio in, transcript out.
+
+    Takes the audio body directly rather than multipart: the browser sends
+    one MediaRecorder blob and nothing else, so a parser here would only be
+    ceremony. The language hint rides in a header for the same reason.
+
+    Returns 200 with {"text": null} rather than an error when transcription
+    fails, because the caller's fallback is "let them type" - an error
+    status would surface as a broken page for something that is merely a
+    degraded convenience.
+    """
+    project_id = apikeys.resolve_active(self.headers.get("X-API-Key"))
+    if not project_id:
+        self._json(401, {"error": "Missing or inactive API key."})
+        return
+    audio = self._read_body()
+    if not audio:
+        self._json(400, {"error": "Audio body is required."})
+        return
+    language = self.headers.get("X-Audio-Language") or None
+    if language not in ("hi", "mr", "en", "ta", None):
+        language = None
+    content_type = self.headers.get("Content-Type") or "audio/webm"
+    text = speech.transcribe(audio, content_type, language)
+    self._json(200, {"text": text})
