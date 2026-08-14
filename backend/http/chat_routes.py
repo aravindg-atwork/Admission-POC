@@ -94,8 +94,15 @@ def handle_chat(self):
             project_id = named
             question = original_question
 
+    # The widget generates its own trace id so it can subscribe to
+    # /api/progress BEFORE asking, and watch the real pipeline run rather than
+    # a timed animation. Ignored unless it looks exactly like uuid4().hex -
+    # TraceCollector falls back to a server-generated id, which costs the
+    # student their progress stream but never their answer.
+    client_trace_id = body.get("traceId")
     try:
-        result = rag.answer(project_id, question, script_pref, ui_language, history)
+        result = rag.answer(project_id, question, script_pref, ui_language, history,
+                            trace_id=client_trace_id if isinstance(client_trace_id, str) else None)
         payload = {
             "answerText": result["answer"],
             "pageReferences": result["pages"],

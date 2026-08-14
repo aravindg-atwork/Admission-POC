@@ -20,7 +20,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import admin_routes, chat_routes, static, trace_routes
+from . import admin_routes, chat_routes, progress_routes, static, trace_routes
 from .. import config, prospectus_watch
 from ..orderassist import routes as orderassist_routes
 from ..storage import apikeys, projects
@@ -105,6 +105,8 @@ class Handler(BaseHTTPRequestHandler):
             admin_routes.handle_project_review_summary(self, m_review_summary.group(1))
         elif m_suggestions:
             admin_routes.handle_project_suggestions(self, m_suggestions.group(1))
+        elif self.path.split("?")[0] == "/api/progress":
+            progress_routes.handle_progress(self)
         elif self.path.startswith("/api/") or self.path.startswith("/admin/keys/") \
                 or self.path.startswith("/admin/projects/"):
             self._send(404, "Not found", "text/plain")

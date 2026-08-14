@@ -371,11 +371,114 @@ function formatAnswer(text) {
     <p key=${i} class="answer-para">${_boldKeyFigures(para, `p${i}`)}</p>`);
 }
 
+// The stages a student is shown, in pipeline order. Deliberately a FIXED
+// list rather than one row per event received: a stage that has not happened
+// yet is shown as pending, which is a promise about the pipeline's shape (it
+// always runs in this order), not a claim that any work has been done.
+//
+// Progress is monotonic - an event for stage N marks every earlier stage
+// complete too. That is what keeps the display truthful when a step emits
+// nothing: "routing" only records an event when there is a routing DECISION
+// to record, so waiting for it individually would leave the first row
+// spinning forever on the many questions that never need one. Retrieval
+// starting is itself proof that understanding finished.
+// Longest the question will wait for the progress stream to confirm it is
+// subscribed. Local, so it normally resolves in single-digit milliseconds;
+// this only bounds the case where /api/progress is slow or unreachable, and
+// expiring it costs the student nothing but the animation.
+const PROGRESS_READY_MS = 1200;
+
+const PROGRESS_STAGES = [
+  { step: "routing", label: "Understanding your question" },
+  { step: "retrieval", label: "Searching the prospectus" },
+  { step: "table_lookup", label: "Checking the tables" },
+  { step: "generation", label: "Writing your answer" },
+  { step: "validation", label: "Double-checking the details" },
+];
+
+function newTraceId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, "");
+  const b = new Uint8Array(16);
+  (window.crypto || {}).getRandomValues?.(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+// Reads /api/progress with fetch + a stream reader rather than EventSource,
+// because EventSource cannot send headers - it would have forced the API key
+// into the URL query string, and from there into access logs and browser
+// history. Resolves `ready` once the server confirms it is subscribed, so the
+// caller can hold the question back until the stream cannot miss its start.
+async function openProgress(traceId, apiKey, onStep) {
+  const res = await fetch(`/api/progress?traceId=${traceId}`, {
+    headers: { ...(apiKey ? { "X-API-Key": apiKey } : {}) },
+  });
+  if (!res.ok || !res.body) throw new Error(`progress ${res.status}`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let markReady;
+  const ready = new Promise((resolve) => { markReady = resolve; });
+  (async () => {
+    let buffer = "";
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let cut;
+        while ((cut = buffer.indexOf("\n\n")) >= 0) {
+          const frame = buffer.slice(0, cut);
+          buffer = buffer.slice(cut + 2);
+          const line = frame.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;                       // heartbeat comment
+          let event;
+          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+          if (event.step === "ready") markReady();
+          else onStep(event);
+        }
+      }
+    } catch {
+      // A dropped progress stream must never surface as a failed question.
+    } finally {
+      markReady();
+    }
+  })();
+  return { ready, cancel: () => reader.cancel().catch(() => {}) };
+}
+
+function StageBadge({ state, index }) {
+  if (state === "done")
+    return html`<span class="stage-badge done"><svg viewBox="0 0 24 24" width="13" height="13"
+      fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"
+      stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>`;
+  if (state === "active")
+    return html`<span class="stage-badge active"><span class="stage-ring"></span>${index + 1}</span>`;
+  return html`<span class="stage-badge pending">${index + 1}</span>`;
+}
+
+function ProgressRows({ reached, details }) {
+  return html`<div class="stage-list">
+    ${PROGRESS_STAGES.map((stage, i) => {
+      const state = i <= reached ? "done" : i === reached + 1 ? "active" : "pending";
+      const detail = details[stage.step];
+      return html`<div key=${stage.step} class="stage-row ${state}"
+                       style=${{ animationDelay: `${i * 70}ms` }}>
+        <${StageBadge} state=${state} index=${i} />
+        <span class="stage-label">${stage.label}</span>
+        ${detail ? html`<span class="stage-detail">${detail}</span>` : null}
+      </div>`;
+    })}
+  </div>`;
+}
+
 function Message({ m, lang, onReplayBrowser, onPickProgram, onFeedback }) {
   if (m.role === "user")
     return html`<div class="row user"><div class="bubble">${m.text}</div></div>`;
   if (m.role === "thinking")
-    return html`<div class="row bot"><div class="bubble"><span class="dots"><i></i><i></i><i></i></span></div></div>`;
+    return html`<div class="row bot"><div class="bubble ${m.reached >= 0 ? "thinking-wide" : ""}">
+      ${m.reached >= 0
+        ? html`<${ProgressRows} reached=${m.reached} details=${m.details || {}} />`
+        : html`<span class="dots"><i></i><i></i><i></i></span>`}
+    </div></div>`;
   if (m.role === "error")
     return html`<div class="row bot err"><div class="bubble">${m.text}</div></div>`;
 
@@ -653,12 +756,45 @@ function App() {
     setInput("");
     if (taRef.current) taRef.current.style.height = "auto";
     setSending(true);
+
+    // Watch the real pipeline. Everything here is best-effort: the progress
+    // stream is decoration, so any failure to open it, or any delay past
+    // PROGRESS_READY_MS, falls through to the plain thinking dots rather than
+    // holding up the student's actual question.
+    const traceId = newTraceId();
+    let progress = null;
+    const onStep = (event) => setMessages((m) => {
+      const last = m[m.length - 1];
+      if (!last || last.role !== "thinking") return m;
+      const index = PROGRESS_STAGES.findIndex((s) => s.step === event.step);
+      // final_answer arrives on every request including instant cache hits.
+      // Advancing on it when nothing else has arrived would flash a fully
+      // ticked five-row panel for one frame on an answer that took 300ms, so
+      // it only completes a panel already on screen.
+      const reached = event.step === "final_answer"
+        ? (last.reached >= 0 ? PROGRESS_STAGES.length - 1 : -1)
+        : index;
+      if (reached < 0) return m;
+      const details = { ...(last.details || {}) };
+      if (event.detail) details[event.step] = event.detail;
+      return [...m.slice(0, -1),
+              { ...last, reached: Math.max(last.reached ?? -1, reached), details }];
+    });
+    try {
+      progress = await openProgress(traceId, activeKey, onStep);
+      await Promise.race([progress.ready,
+                          new Promise((r) => setTimeout(r, PROGRESS_READY_MS))]);
+    } catch {
+      progress = null;
+    }
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(activeKey ? { "X-API-Key": activeKey } : {}) },
         body: JSON.stringify({
           question: q,
+          traceId,
           scriptPreference: nativeScript ? "native" : "auto",
           uiLanguage: TTS_LANG_MAP[lang] || "en",
           // Prior turns, so a follow-up resolves against what was already
@@ -705,6 +841,10 @@ function App() {
         : "Something went wrong reaching the assistant. Please try again.";
       setMessages((m) => [...m.slice(0, -1), { role: "error", text: msg }]);
     } finally {
+      // The server closes the stream on final_answer, but a question that
+      // failed or timed out never reaches that step - without this the reader
+      // would sit open until the route's own 300s cap.
+      progress?.cancel();
       setSending(false);
     }
     // `messages` is a real dependency now that history is sent - without it

@@ -12,6 +12,7 @@ Live/ephemeral only, by design - see hub.py's module docstring for the
 privacy note. Nothing here is ever written to disk.
 """
 
+import re
 import time
 import uuid
 
@@ -36,8 +37,26 @@ class TraceCollector:
     request, then everything at once.
     """
 
-    def __init__(self, project_id):
-        self.trace_id = uuid.uuid4().hex
+    # A client-supplied id has to be unguessable (it is the only thing
+    # authorising a progress subscription) and safe to echo into an SSE
+    # stream, so accept exactly what uuid4().hex looks like and nothing else.
+    _CLIENT_ID_RE = re.compile(r"\A[0-9a-f]{32}\Z")
+
+    def __init__(self, project_id, trace_id=None):
+        """`trace_id` lets the CALLER pick the id, which is what makes live
+        student-facing progress possible at all.
+
+        Server-generated ids are only known once the answer comes back, by
+        which time every step has already been published and the interesting
+        part is over. When the widget generates the id first, it can subscribe
+        before asking the question and watch the real pipeline run.
+
+        Anything not matching uuid4().hex is ignored rather than rejected -
+        a malformed id is not worth failing a student's question over, and
+        falling back to a server id just means they get no progress stream.
+        """
+        self.trace_id = (trace_id if trace_id and self._CLIENT_ID_RE.match(trace_id)
+                         else uuid.uuid4().hex)
         self.project_id = project_id
         self._events = []
 

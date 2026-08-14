@@ -31,7 +31,8 @@ from .helpers import (_add_nri_scope_caveat, _apply_script_pref, _build_retrieva
                        _UI_LANGUAGE_NAMES)
 
 
-def _build_context(project_id, question, script_pref, ui_language, history=None, route=None):
+def _build_context(project_id, question, script_pref, ui_language, history=None, route=None,
+                   trace_id=None):
     """Runs the language-detection/romanization/hint-building preamble once
     per request and returns the ctx object every guard (guards.py) and the
     pipeline (_pipeline below) read from. `reanswer` is dependency-injected
@@ -119,7 +120,7 @@ def _build_context(project_id, question, script_pref, ui_language, history=None,
         # Hinglish. See _english_reply_hint for the reproduction.
         hint = _english_reply_hint()
 
-    collector = trace_events.TraceCollector(project_id)
+    collector = trace_events.TraceCollector(project_id, trace_id)
 
     # Understand the message ONCE, before any guard runs (see router.py). None
     # on any failure, in which case every guard falls back to the deterministic
@@ -166,8 +167,11 @@ def _build_context(project_id, question, script_pref, ui_language, history=None,
         ui_language=ui_language, language=language, hint_language=hint_language,
         hint=hint, typed_romanized=typed_romanized, cloud_ok=cloud_ok, route=route,
         history=history or [],
+        # Same trace id on the way through a redirect, so a student watching
+        # progress sees one continuous run instead of a stream that goes quiet
+        # at the redirect and never delivers final_answer.
         reanswer=lambda pid: _answer(pid, effective_question, script_pref, ui_language,
-                                      history, route),
+                                      history, route, trace_id=collector.trace_id),
         trace=collector.record,
         # Surfaced so a caller can line an answer up with the trace that
         # produced it. Without it the console could only show a firehose of
@@ -177,8 +181,10 @@ def _build_context(project_id, question, script_pref, ui_language, history=None,
     )
 
 
-def _answer(project_id, question, script_pref, ui_language, history=None, route=None):
-    ctx = _build_context(project_id, question, script_pref, ui_language, history, route)
+def _answer(project_id, question, script_pref, ui_language, history=None, route=None,
+            trace_id=None):
+    ctx = _build_context(project_id, question, script_pref, ui_language, history, route,
+                         trace_id=trace_id)
     guard_response = guards.run_guards(ctx)
     result = guard_response if guard_response is not None else _pipeline(ctx)
     # Stamped in one place rather than in each of the many return points, so
@@ -504,7 +510,8 @@ def _pipeline(ctx):
             "source": source, "speakable": speakable, "faqId": faq_id}
 
 
-def answer(project_id, question, script_pref="auto", ui_language=None, history=None):
+def answer(project_id, question, script_pref="auto", ui_language=None, history=None,
+           trace_id=None):
     """Student -> intent -> FAQ cache -> RAG -> LLM -> answer.
 
     Returns {answer, pages, model, language, source, speakable}. `source` is
@@ -521,7 +528,8 @@ def answer(project_id, question, script_pref="auto", ui_language=None, history=N
     question text) for that project's own dashboard and cost panel.
     """
     t0 = time.time()
-    result = _answer(project_id, question, script_pref, ui_language, history)
+    result = _answer(project_id, question, script_pref, ui_language, history,
+                     trace_id=trace_id)
     stats.record(projects.stats_path(project_id), result["source"], result["model"],
                  result["language"], round((time.time() - t0) * 1000))
     return result
