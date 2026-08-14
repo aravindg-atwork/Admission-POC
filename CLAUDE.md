@@ -128,6 +128,17 @@ returns proper markdown tables. `OCR_ENABLED=true`.
 **Trace cards need `final_answer` to close.** Guards emit it via
 `run_guards`; without it the console shows "Thinking…" forever.
 
+**`storage/faq.py:_lock` must stay an `RLock`.** Every writer holds it across
+a read-modify-write and reads via `_load()`, which takes the same lock on its
+id-backfill path. As a plain `Lock` that is a self-deadlock that never
+releases, and since the lock is module-global it wedges FAQ writes for every
+project at once - including `add()` on ordinary chat traffic. It hides well:
+a warm, fully-backfilled file never triggers the backfill.
+
+**Redirect stdout with `python3 -u` when benchmarking.** Python block-buffers
+stdout to a file, so a long run shows an empty output file the whole time and
+looks hung when it is fine.
+
 ## Testing
 
 ```bash
@@ -147,12 +158,38 @@ Long runs: write output to the session scratchpad, not `/tmp` (it does not
 persist). Never `pkill -f` a pattern matching your own command — it kills the
 wrapper shell before the work starts.
 
+## Benchmark, 2026-08-14 (post-OCR)
+
+`14/14 correct, avg 9.0s`. Read the distribution, not the average:
+
+| | |
+|---|---|
+| 12 of 14 cases | 1.3-5.1s |
+| median | ~2.6s, inside the 1-3s target |
+| one outlier | 87.4s (btech-dairy admission fee) |
+| avg excluding it | 3.0s |
+
+The outlier did **not** reproduce - the same question on a cold cache ran
+1.55s and 2.12s immediately after. Treat it as provider tail latency, not a
+slow path to go optimise. What is unproven is **p95**, not the median.
+
+This means answer *quality* is at the ceiling of what this suite measures, so
+a stronger answer model is not the current bottleneck. Do not spend a new
+provider budget on chat quality on the strength of this number.
+
+But 14/14 is a narrow claim. The suite checks figures - fees, percentages,
+subject streams, and one refusal. It does **not** cover presentation, tone,
+follow-ups, multi-turn context, the seeded portal answers, or anything in
+Hindi/Marathi beyond digit normalisation. Those are exactly the areas the
+owner has raised repeatedly. A green suite here is not "the bot is good".
+
 ## Open
 
-- **Benchmark has no clean post-OCR number.** Last trustworthy result 13/14,
-  measured before OCR. Runs kept dying (see above).
-- **Latency unproven at target.** Goal is 1-3s. `mistral-small` spot-checks
-  are sub-second; not yet measured across the suite.
-- **`_assistant_scope` fix is uncommitted and unverified live.**
-- **Indic TTS broken** — needs the Docker service running or another provider.
+- **p95 latency unmeasured.** Median is in target; the tail is not
+  characterised, and a retry/timeout policy is the lever, not a better model.
+- **Indic TTS broken** — needs the Docker service running or another
+  provider. `gpt-4o-mini-tts` is the promising candidate (Mistral TTS was
+  rejected for being English-only); an OpenAI key was supplied 2026-08-14 but
+  had **zero credits**, so nothing was wired up.
 - Presentation/quality pass and `taste-skill` redesign of the Playground.
+- No suite covers presentation, multi-turn, or Indic answer quality.
