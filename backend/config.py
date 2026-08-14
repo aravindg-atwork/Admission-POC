@@ -324,6 +324,14 @@ ROUTER_FALLBACK_TIMEOUT = int(os.environ.get("ROUTER_FALLBACK_TIMEOUT", "35"))
 # pattern (FAQ_AUTOCACHE below).
 ORCHESTRATOR_ENABLED = os.environ.get("ORCHESTRATOR_ENABLED", "true").lower() == "true"
 VALIDATION_ENABLED = os.environ.get("VALIDATION_ENABLED", "true").lower() == "true"
+
+# Decide "am I eligible?" in core/eligibility.py instead of letting the model
+# compare the numbers inside its prose. Set false to revert to the behaviour
+# that failed four questions of the 2026-08-14 evaluation: measuring a 51%
+# aggregate against a rule the prospectus states on the subject combination,
+# and quoting 40% where B.V.Sc.'s reserved threshold is 47.50%.
+ELIGIBILITY_GUARD_ENABLED = os.environ.get(
+    "ELIGIBILITY_GUARD_ENABLED", "true").lower() == "true"
 # Deterministic checks (validate.deterministic_checks) always run when
 # VALIDATION_ENABLED is true and cost nothing; this second switch gates
 # ONLY the bounded LLM check + regeneration on top of them, so the

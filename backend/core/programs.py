@@ -78,7 +78,14 @@ def _normalize(text):
 # two Indic scripts the app supports would have left the identical bug
 # open for every Tamil-speaking student.
 _PROGRAM_ALIASES = {
-    "default": ("bvsc", "animalhusbandry", "बवहएसस", "बवएसस", "पशवदयकय",
+    # "veterinary"/"vet" added 2026-08-14: detect_program("veterinary")
+    # returned None, so "Can I apply for veterinary at MAFSU?" named no
+    # programme as far as the deterministic matcher was concerned, and the
+    # eligibility guard fell through to the router - which answered about
+    # B.Tech. (Dairy Technology). It is the word a student is most likely to
+    # use for this course, and now that M.V.Sc. is retired it is unambiguous.
+    "default": ("bvsc", "animalhusbandry", "veterinary", "vet",
+                "veterinaryscience", "बवहएसस", "बवएसस", "पशवदयकय",
                 "பவஎஸச", "கலநட"),
     "bfsc": ("bfsc", "fishery", "fisheries", "बएफएसस", "मतसय",
              "பஎஃபஎஸச", "மனவளம"),
@@ -388,6 +395,47 @@ def comparison_targets(text):
     if _words(text) & _ALL_PROGRAMS_WORDS:
         return list(PROGRAM_NAMES)
     return list(_UG_PROGRAMS)
+
+
+# Courses this university does not run, plus the shapes an unfamiliar degree
+# usually takes. Deliberately a list of COURSES: the refusal it gates must
+# never trigger on the institution's own name.
+_FOREIGN_COURSE_WORDS = {
+    "mba", "mbbs", "bds", "bams", "bhms", "bums", "bpt", "bsc", "msc", "ba",
+    "bcom", "mcom", "llb", "llm", "bca", "mca", "bba", "bpharm", "dpharm",
+    "bed", "med", "phd", "mvsc", "mtech", "be", "btech",
+    "engineering", "medicine", "medical", "nursing", "pharmacy", "law",
+    "agriculture", "horticulture", "forestry", "commerce", "arts", "management",
+}
+
+# Degree-shaped tokens: B.Arch, M.Plan, and anything else of that form we
+# have not enumerated. Matched only as a fallback, so an unlisted course is
+# still caught rather than silently answered from the wrong corpus.
+_DEGREE_SHAPE_RE = re.compile(r"\b[bm]\.\s?[a-z]{1,6}\.?\b", re.I)
+
+
+def mentions_foreign_course(text):
+    """Whether the text actually names a course, other than one of ours.
+
+    Corroboration for the unknown-programme refusal, which used to fire on
+    the router's say-so alone. The router is instructed to report False when
+    a message names no degree at all, but it read the UNIVERSITY's name as a
+    course and refused two of the most ordinary questions there are - "How do
+    I apply for MAFSU admission?" and "Where can I find the MAFSU
+    prospectus?" - with "I can't help with that course".
+
+    Refusing a question that is squarely in scope is a worse failure than the
+    one the refusal was built to prevent, and it hits far more students, so
+    the refusal now needs evidence in the student's own words.
+    """
+    if detect_programs_multi(text):
+        return False
+    words = _words(text)
+    if words & _FOREIGN_COURSE_WORDS:
+        return True
+    stripped = re.sub(r"\b(mafsu|maharashtra|university|college|institute)\b", " ",
+                      text or "", flags=re.I)
+    return bool(_DEGREE_SHAPE_RE.search(stripped))
 
 
 def comparison_is_explicit(text):

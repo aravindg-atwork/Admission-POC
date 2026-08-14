@@ -19,11 +19,12 @@ from . import citation, comparison
 from .helpers import (_apply_script_pref, _assistant_scope, _greeting_prompt, _injection_refusal,
                        _program_name, is_greeting)
 from .. import config
-from ..core import programs
+from ..core import eligibility, programs
 from ..core import textclean
 from ..core.intent import is_prompt_injection, needs_percentage_clarification
 from ..generation import embeddings, llm
 from ..storage import projects, vectorstore
+from ..prompts.system import ELIGIBILITY_FACTS_PROMPT, ELIGIBILITY_SYSTEM_PROMPT
 from ..prompts.canned import (_DISPUTE_PROMPT, _META_ACKNOWLEDGE_TEXT, _OFF_TOPIC_TASK_PROMPT,
                                _UNKNOWN_PROGRAMME_TEXT,
                                _PROGRAM_LIST_TEXT,
@@ -368,6 +369,154 @@ def _percentage_clarify_guard(ctx):
     return None
 
 
+def _eligibility_guard(ctx):
+    """Decide "am I eligible?" in code; let the model only phrase the verdict.
+
+    Runs BEFORE _percentage_clarify_guard, and only acts when the verdict is
+    genuinely determinable - returning None otherwise, so a student who cited
+    a bare "60%" still gets asked what it is of. The order matters the other
+    way round too: with clarify first, "I have 51% overall but only 45% in PCB
+    and English" was answered with "is that your overall score or those
+    subjects?", a question the student had already answered in the same
+    sentence.
+
+    Why it exists: the 2026-08-14 evaluation failed four of these, and every
+    failure was a comparison performed inside fluent prose rather than a
+    retrieval problem. Q25 measured a 51% aggregate against a rule the
+    prospectus states on the subject combination and told a student with 45%
+    in those subjects that they were eligible. Q13 and Q28 used 40% where
+    B.V.Sc. reserved is 47.50%. Q50 asserted no lower reserved threshold
+    exists at all, four questions before stating it correctly.
+
+    A verdict of "insufficient" deliberately returns None and lets the normal
+    pipeline answer - this guard replaces the arithmetic, not the assistant.
+    """
+    if not config.ELIGIBILITY_GUARD_ENABLED:
+        return None
+    original = getattr(ctx, "original_question", ctx.question)
+    project_id = ctx.project_id
+    # Scoped to a programme whose thresholds we hold. On the general widget a
+    # programme the student named routes here via target_programs; with none
+    # named there is nothing to evaluate against.
+    routed = _routed(ctx, "target_programs") or []
+    named = programs.detect_program(original)
+    if project_id == config.DEFAULT_PROJECT_ID:
+        # The student's OWN words first; the router only as a fallback. Taking
+        # routed[0] ahead of detect_program made this guard tell a student who
+        # asked about "veterinary" that they were not eligible for B.Tech.
+        # (Dairy Technology) because they had no Mathematics - a confident
+        # verdict about a course they never mentioned. Same corroboration rule
+        # the redirect guard already follows, and the same reason.
+        candidate = named or (routed[0] if len(routed) == 1 else None)
+    else:
+        candidate = project_id
+    # Threshold LOOKUPS ("what percentage do SC/ST/OBC candidates need?")
+    # carry no marks, so evaluate() would report insufficient and let them
+    # fall through to retrieval - which answered Q50 with "50%, and no
+    # separate lower threshold for these categories", turning eligible
+    # reserved-category students away four questions before stating the real
+    # 47.50% correctly. Answered from the table instead.
+    if eligibility.is_threshold_question(original):
+        rows = eligibility.thresholds_for(original, candidate)
+        if rows:
+            ctx.trace("eligibility", kind="threshold_lookup", rows=len(rows))
+            facts = _threshold_facts(rows)
+            spoken = llm.generate_scoped(
+                config.CHAT_PRIMARY, ELIGIBILITY_FACTS_PROMPT, facts + ctx.hint,
+                ctx.question, timeout=60, allow_cloud=ctx.cloud_ok)
+            if spoken is not None:
+                text, model = spoken
+                return {"answer": textclean.clean_for_display(text),
+                        "pages": sorted({r[4] for r in rows}),
+                        "model": model, "language": ctx.language,
+                        "source": "eligibility", "speakable": True}
+        return None
+
+    # Verdicts need a specific programme's thresholds; lookups did not.
+    if candidate not in eligibility.RULES:
+        return None
+
+    result = eligibility.evaluate(candidate, original)
+    if result["verdict"] not in ("eligible", "not_eligible"):
+        return None
+
+    ctx.trace("eligibility", verdict=result["verdict"], programme=result.get("programme"),
+              stated=result.get("stated"), required=result.get("required"),
+              reason=result.get("reason"))
+
+    facts = _eligibility_facts(result)
+    reply = llm.generate_scoped(
+        config.CHAT_PRIMARY, ELIGIBILITY_SYSTEM_PROMPT, facts + ctx.hint,
+        ctx.question, timeout=60, allow_cloud=ctx.cloud_ok)
+    if reply is None:
+        # Never fail the student's question because the phrasing call fell
+        # over - the verdict is already decided, so say it plainly.
+        return None
+    answer_text, model = reply
+    return {"answer": textclean.clean_for_display(answer_text),
+            "pages": [result.get("page")] if result.get("page") else [],
+            "model": model, "language": ctx.language,
+            "source": "eligibility", "speakable": True}
+
+
+def _threshold_facts(rows):
+    """The requirement table, written out for the model to say aloud.
+
+    Every programme is listed when the question did not pin one down, because
+    the reserved threshold really does differ between them - 47.50% for
+    B.V.Sc. against 40% for the other two - so any single figure would be
+    wrong for two thirds of the people asking.
+    """
+    lines = ["FACTS (already verified against the prospectus, state exactly these "
+             "and introduce no other number):"]
+    for label, category, percent, subjects, page in rows:
+        lines.append(f"- {label}, {category} category: {percent}% in {subjects}, "
+                     f"taken together.")
+    lines.append("The percentage is on those subjects TAKEN TOGETHER, not on the "
+                 "overall 12th aggregate - say so, because students routinely "
+                 "assume it is their overall percentage.")
+    if len({r[0] for r in rows}) > 1:
+        lines.append("They did not say which programme, and the requirement is not "
+                     "the same for all of them, so give each one rather than "
+                     "picking a single figure.")
+    lines.append("Do not say the prospectus fails to specify a reserved-category "
+                 "requirement - it specifies one, and it is listed above.")
+    return "\n".join(lines)
+
+
+def _eligibility_facts(result):
+    """The computed verdict, written out as facts for the model to phrase.
+
+    Deliberately states the verdict as already-decided rather than handing
+    over the numbers and asking for a conclusion - handing over the numbers
+    is what produced the wrong answers this replaces.
+    """
+    programme = result.get("programme")
+    if result["reason"] == "subjects":
+        return (f"VERDICT (already decided, state exactly this): the student is NOT "
+                f"eligible for {programme}. Reason: {programme} requires "
+                f"{result['required_subjects']}, and they are missing: "
+                f"{', '.join(result['missing'])}. Tell them this plainly and say what "
+                f"the requirement is. Do not soften it into a maybe.")
+    verdict = "IS eligible for" if result["verdict"] == "eligible" else "is NOT eligible for"
+    lines = [
+        f"VERDICT (already decided, state exactly this): the student {verdict} "
+        f"{programme} on the marks they gave.",
+        f"Their stated marks in {result['required_subjects']}: {result['stated']}%.",
+        f"The requirement for the {result['category']} category: {result['required']}%.",
+    ]
+    if result.get("category_assumed"):
+        lines.append("They did not state a category, so this used the Unreserved "
+                     "requirement - say so, and mention the reserved requirement is "
+                     "lower, so they can correct you if they are in a reserved category.")
+    if result["verdict"] == "eligible" and result.get("entrance"):
+        lines.append(f"Meeting this threshold is only the eligibility bar - they must "
+                     f"also have {result['entrance']}. Mention that, briefly.")
+    lines.append("Lead with the verdict in the first sentence. Do not re-derive it, "
+                 "do not hedge it, and do not quote any other percentage.")
+    return "\n".join(lines)
+
+
 def _comparison_guard(ctx):
     question = ctx.question
     script_pref = ctx.script_pref
@@ -515,7 +664,18 @@ def _unknown_programme_guard(ctx):
     # Corroboration, same principle as the redirect guard: if the student
     # actually named one of ours, this is not a foreign course whatever the
     # router thinks.
-    if programs.detect_program(getattr(ctx, "original_question", ctx.question)):
+    original = getattr(ctx, "original_question", ctx.question)
+    if programs.detect_program(original):
+        return None
+    # Second corroboration: the student must actually have named a course.
+    # The router read "MAFSU" - the university itself - as a foreign course
+    # and this guard refused "How do I apply for MAFSU admission?" and "Where
+    # can I find the MAFSU prospectus?", two of the most ordinary questions a
+    # student asks, in 0.8s each. Turning away in-scope questions is a worse
+    # and far more frequent failure than the wrong-corpus answer this guard
+    # exists to prevent, so it now needs evidence in the student's own words.
+    if not programs.mentions_foreign_course(original):
+        ctx.trace("routing", decision="unknown_programme_declined_no_course_named")
         return None
     names = ", ".join(programs.PROGRAM_NAMES.values())
     lang = _clarify_language(ctx)
@@ -572,6 +732,7 @@ GUARDS = [
     _meta_correction_guard,
     _off_topic_guard,
     _program_list_guard,
+    _eligibility_guard,
     _percentage_clarify_guard,
     _comparison_guard,
     _program_redirect_guard,

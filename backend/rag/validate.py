@@ -145,6 +145,25 @@ def check_and_regenerate(question, context_text, reply, model, system_prompt, us
     if not reasons:
         return reply, model, [], False
 
+    # topic_mismatch alone does NOT buy an LLM call any more. Measured from
+    # the review logs on 2026-08-14: it was the flag on 37 of 40 escalations
+    # for `default`, 26 of 28 for bfsc, 16 of 17 for btech-dairy - and across
+    # all three projects the escalation it paid for produced exactly one
+    # regeneration each. So it was spending an LLM round trip on ~93% of
+    # answers to confirm they were fine, which is where 40-390s response
+    # times were going.
+    #
+    # It is a keyword-overlap heuristic (faq.answer_addresses_question) built
+    # for matching cached questions, not for grading answers. A direct answer
+    # shares FEWER words with its question than a padded one, so the work
+    # making answers direct ("lead with the fact, no restating the question")
+    # pushed this check's false-positive rate up rather than down.
+    #
+    # Still recorded in `reasons` so the review log keeps seeing it - it is
+    # weak evidence, not no evidence, and it costs nothing to log.
+    if all(r.startswith("topic_mismatch") for r in reasons):
+        return reply, model, reasons, False
+
     passed, why = llm_check(question, context_text, reply)
     if passed:
         return reply, model, reasons, False

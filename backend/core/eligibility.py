@@ -221,6 +221,55 @@ def eligible_programmes(subjects):
     return [pid for pid in RULES if subject_verdict(pid, subjects)[0]]
 
 
+_ASKS_THRESHOLD_RE = re.compile(
+    r"\b(what|how much|how many|minimum|min|required|require|need|needed|"
+    r"cut ?off|cutoff|criteria|eligibility)\b", re.I)
+_THRESHOLD_SUBJECT_RE = re.compile(
+    r"\b(percent|percentage|%|marks|score|aggregate|cut ?off|cutoff)\b", re.I)
+
+
+def is_threshold_question(text):
+    """Asking what the requirement IS, rather than whether they meet it.
+
+    Separated from evaluate() because these carry no marks of their own, so
+    evaluate() correctly reports "insufficient" and they fall through to
+    retrieval - which is where Q50 went wrong. Asked "what percentage is
+    required for SC/ST/OBC candidates?", the pipeline answered "50%... the
+    guidelines do not list a separate lower threshold for these categories",
+    four questions before stating the real 47.50% correctly elsewhere. That
+    is a false rule stated with confidence, and it turns eligible students
+    away.
+    """
+    if not text:
+        return False
+    facts = extract(text)
+    if facts["subject_percent"] is not None or facts["overall_percent"] is not None:
+        return False          # they cited their own marks - that is a verdict
+    return bool(_ASKS_THRESHOLD_RE.search(text)
+                and _THRESHOLD_SUBJECT_RE.search(text))
+
+
+def thresholds_for(text, project_id=None):
+    """The requirement(s) this question is actually asking about.
+
+    Returns a list of (label, category, percent, subject_label, page). When no
+    programme is pinned down, every programme is returned rather than one
+    picked - the reserved threshold genuinely differs (47.50% for B.V.Sc.,
+    40% for the other two), so answering with a single figure is wrong however
+    it is phrased.
+    """
+    facts = extract(text)
+    category = facts["category"] or "both"
+    ids = [project_id] if project_id in RULES else list(RULES)
+    out = []
+    for pid in ids:
+        rule = RULES[pid]
+        for name in (("unreserved", "reserved") if category == "both" else (category,)):
+            out.append((rule["label"], name, rule[name],
+                        rule["subject_label"], rule["page"]))
+    return out
+
+
 def evaluate(project_id, text):
     """Verdict for a self-situation question, or a reason it cannot be given.
 
