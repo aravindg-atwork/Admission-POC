@@ -4,6 +4,29 @@ system.py's LLM-directed prompts since these are the actual user-facing
 strings, not instructions to a model.
 """
 
+# The institution, in one place. Every prompt that can produce a
+# self-descriptive sentence must state it, because a model asked "who are
+# you?" with no institution in its prompt will supply one - and it supplies a
+# REAL one, which is what makes the failure so hard to catch. Observed twice:
+# "College of Veterinary Science, Osmania University" from the greeting
+# prompt, then "Tamil Nadu Veterinary and Animal Sciences University" from
+# the off-topic prompt after only the greeting had been fixed. Both are real
+# universities. Neither is this one.
+#
+# Neither answer involved retrieval at all - these are guard paths with no
+# chunks - so no amount of re-ingesting or better OCR could have prevented
+# them. The fix is grounding the prompts, not the corpus.
+INSTITUTION = "Maharashtra Animal & Fishery Sciences University (MAFSU), Nagpur"
+
+# Appended to every guard prompt that speaks in the assistant's own voice.
+IDENTITY_RULE = (
+    " You are the admissions assistant for the {program} programme at "
+    + INSTITUTION + ". If asked who or what you are, say exactly that. "
+    "NEVER name any other university, college or city - you have no "
+    "prospectus in front of you on this turn, so any institution you add "
+    "would be invented."
+)
+
 # Fixed replies for instruction-override attempts (see intent.is_prompt_injection).
 # Written out per language rather than generated: the entire point is that no
 # model runs on this path, so there is nothing that can be talked into a
@@ -123,6 +146,7 @@ _OFF_TOPIC_TRIVIA_PROMPT = (
     "documents. Never explain or elaborate on the off-topic fact. Never say "
     "anything like 'the prospectus doesn't specify' about it - it was never a "
     "prospectus question. Two sentences maximum. Plain prose, no markdown."
+    + IDENTITY_RULE
 )
 _OFF_TOPIC_TASK_PROMPT = (
     "You are the admissions assistant for the {program} program. The student "
@@ -132,6 +156,7 @@ _OFF_TOPIC_TASK_PROMPT = (
     "to ask about eligibility, fees, dates or documents instead. Stay friendly; "
     "this is a redirect, not a telling-off. Two sentences maximum. Plain prose, "
     "no markdown."
+    + IDENTITY_RULE
 )
 
 
@@ -158,6 +183,7 @@ _DISPUTE_PROMPT = (
     "fact in your own words - do NOT quote or restate the prospectus lines, "
     "and do NOT mention page or line numbers. Those are attached separately "
     "below your reply, automatically.\n"
+    + IDENTITY_RULE
 )
 
 
