@@ -31,7 +31,7 @@ from .helpers import (_add_nri_scope_caveat, _apply_script_pref, _build_retrieva
                        _UI_LANGUAGE_NAMES)
 
 
-def _build_context(project_id, question, script_pref, ui_language, history=None):
+def _build_context(project_id, question, script_pref, ui_language, history=None, route=None):
     """Runs the language-detection/romanization/hint-building preamble once
     per request and returns the ctx object every guard (guards.py) and the
     pipeline (_pipeline below) read from. `reanswer` is dependency-injected
@@ -125,7 +125,14 @@ def _build_context(project_id, question, script_pref, ui_language, history=None)
     # on any failure, in which case every guard falls back to the deterministic
     # keyword logic it used before this existed - the router is an upgrade to
     # routing quality, never a new single point of failure.
-    route = router.classify(question, history, cloud_ok)
+    # `route` is passed in only by a redirect re-answering the SAME message
+    # under another programme (see reanswer below). Re-classifying there cost
+    # a second model call per redirected question and let the router disagree
+    # with itself between the two passes - the outer call deciding "bfsc" and
+    # the inner one, reading a rewritten question, deciding something else.
+    reused_route = route is not None
+    if route is None:
+        route = router.classify(question, history, cloud_ok)
     collector.record("intent_router", **(
         {"available": False, "reason": "unavailable - using keyword fallback"} if route is None
         else {"available": True, "intent": route["intent"],
@@ -134,7 +141,11 @@ def _build_context(project_id, question, script_pref, ui_language, history=None)
               "needsProgramClarification": route["needs_program_clarification"],
               "selfScoreAmbiguous": route["self_score_ambiguous"],
               "confidence": route["confidence"],
-              "resolvedQuestion": route["resolved_question"]}))
+              "resolvedQuestion": route["resolved_question"],
+              # Flagged so the console does not present a carried-over
+              # verdict as a fresh classification - a redirected question
+              # produces two trace cards but only one model call.
+              "reused": reused_route}))
 
     # Swap in the router's standalone rewrite as the question the PIPELINE
     # works from - retrieval, the FAQ cache key and generation all get "how
@@ -155,13 +166,14 @@ def _build_context(project_id, question, script_pref, ui_language, history=None)
         ui_language=ui_language, language=language, hint_language=hint_language,
         hint=hint, typed_romanized=typed_romanized, cloud_ok=cloud_ok, route=route,
         history=history or [],
-        reanswer=lambda pid: _answer(pid, effective_question, script_pref, ui_language),
+        reanswer=lambda pid: _answer(pid, effective_question, script_pref, ui_language,
+                                      history, route),
         trace=collector.record,
     )
 
 
-def _answer(project_id, question, script_pref, ui_language, history=None):
-    ctx = _build_context(project_id, question, script_pref, ui_language, history)
+def _answer(project_id, question, script_pref, ui_language, history=None, route=None):
+    ctx = _build_context(project_id, question, script_pref, ui_language, history, route)
     guard_response = guards.run_guards(ctx)
     if guard_response is not None:
         return guard_response

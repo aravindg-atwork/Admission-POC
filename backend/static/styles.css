@@ -568,3 +568,17 @@ table.keys tr:last-child td { border-bottom: none; }
   color: var(--ink-2); white-space: pre-wrap; word-break: break-word;
   max-height: 320px; overflow: auto;
 }
+
+/* Trace as a workflow: phases down the card, not a flat 15-row log. */
+.trace-card.running { border-color: var(--accent); }
+.trace-body { border-top: 1px solid var(--border); }
+.trace-phase { display: flex; gap: 10px; padding: 8px 14px 4px; }
+.trace-phase + .trace-phase { border-top: 1px dashed var(--border); }
+.trace-phase-label {
+  flex: 0 0 62px; padding-top: 3px;
+  font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.trace-phase .trace-rail { flex: 1; min-width: 0; border-top: none; padding: 0 0 4px; }
+.trace-phase .trace-rail::before { left: -8px; top: 6px; bottom: 6px; }
+.trace-guard-list { margin-left: 16px; padding-left: 8px; border-left: 1px solid var(--border); }

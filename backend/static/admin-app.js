@@ -366,6 +366,7 @@ function TraceEventRow({ event }) {
       <div class="trace-row"><span class="trace-dot routing"></span>
         <span class="trace-label">${label}</span>
         <span class="pill src">${detail.intent}</span>
+        ${detail.reused ? html`<span class="pill" title="Carried over from the redirecting request - no second model call">reused</span>` : ""}
         ${detail.confidence === "low" ? html`<span class="pill guard-fired">low confidence</span>` : ""}
         ${(detail.targetPrograms || []).length ? html`<span class="pill program">${detail.targetPrograms.join(", ")}</span>` : ""}
         ${detail.isComparison ? html`<span class="pill">comparison</span>` : ""}
@@ -458,6 +459,47 @@ function TraceStep({ event }) {
     </div>`;
 }
 
+// Which phase of the pipeline a step belongs to. The trace is a workflow,
+// not a flat log, and reading it as one was the whole point of building it -
+// but 15 undifferentiated rows, ten of which just say "passed", buries the
+// two or three that actually decided the answer.
+const _PHASES = [
+  { id: "understand", label: "Understand", steps: ["intent_router"] },
+  { id: "route", label: "Route", steps: ["guard", "model_routing", "routing"] },
+  { id: "retrieve", label: "Retrieve", steps: ["cache_lookup", "retrieval", "table_lookup"] },
+  { id: "answer", label: "Answer", steps: ["generation", "validation", "provenance", "citation", "final_answer"] },
+];
+
+function _phaseOf(step) {
+  const hit = _PHASES.find((p) => p.steps.includes(step));
+  return hit ? hit.id : "answer";
+}
+
+// The guards that did nothing, folded into one line. Ten rows of "passed" is
+// noise; what matters is that they all passed, and WHICH one fired when one
+// does. Expandable, so nothing is actually hidden.
+function GuardSummary({ events }) {
+  const [open, setOpen] = useState(false);
+  const fired = events.filter((e) => e.detail && e.detail.fired);
+  const passed = events.length - fired.length;
+  if (events.length === 0) return null;
+  return html`
+    <div class="trace-step">
+      <div class="trace-step-head clickable" onClick=${() => setOpen(!open)}>
+        <div class="trace-row">
+          <span class="trace-check">${Icon.check}</span>
+          <span class="trace-label">${passed} guard${passed === 1 ? "" : "s"} passed</span>
+          ${fired.map((e) => html`<span class="pill guard-fired" key=${e.detail.name}>
+            ${(e.detail.name || "").replace(/^_/, "").replace(/_guard$/, "").replace(/_/g, " ")} fired</span>`)}
+        </div>
+        <span class="trace-step-toggle">${open ? "\u2212" : "+"}</span>
+      </div>
+      ${open ? html`<div class="trace-guard-list">
+        ${events.map((e, i) => html`<${TraceStep} key=${i} event=${e} />`)}
+      </div>` : ""}
+    </div>`;
+}
+
 function TraceCard({ trace, programNames }) {
   const [open, setOpen] = useState(true);
   const [, tick] = useState(0);
@@ -469,17 +511,37 @@ function TraceCard({ trace, programNames }) {
   const firstTs = trace.events[0] && trace.events[0].ts;
   const lastTs = trace.events[trace.events.length - 1] && trace.events[trace.events.length - 1].ts;
   const elapsed = firstTs ? (trace.done ? lastTs - firstTs : Date.now() / 1000 - firstTs) : 0;
+  const final = trace.events.find((e) => e.step === "final_answer");
+
+  // Group into phases, keeping arrival order inside each.
+  const grouped = _PHASES.map((phase) => ({
+    phase,
+    events: trace.events.filter((e) => _phaseOf(e.step) === phase.id),
+  })).filter((g) => g.events.length > 0);
+
   return html`
-    <div class="card trace-card">
+    <div class=${"card trace-card" + (trace.done ? "" : " running")}>
       <div class="trace-card-head" onClick=${() => setOpen(!open)}>
         <span class="pill program">${(programNames && programNames[trace.projectId]) || trace.projectId}</span>
         ${trace.done
           ? html`<span class="trace-status" style=${{ animation: "fade-in 300ms ease-out both" }}>Thought for ${elapsed.toFixed(1)}s</span>`
           : html`<span class="trace-status shimmer-text">Thinking…</span>`}
-        <span class="muted">${trace.events.length} steps</span>
+        ${final ? html`<span class="pill src">${final.detail.source}</span>` : ""}
         <span class="trace-toggle" style=${{ transform: open ? "rotate(0)" : "rotate(-90deg)" }}>▾</span>
       </div>
-      ${open ? html`<div class="trace-rail">${trace.events.map((e, i) => html`<${TraceStep} key=${i} event=${e} />`)}</div>` : ""}
+      ${open ? html`<div class="trace-body">
+        ${grouped.map(({ phase, events }) => html`
+          <div class="trace-phase" key=${phase.id}>
+            <div class="trace-phase-label">${phase.label}</div>
+            <div class="trace-rail">
+              ${phase.id === "route"
+                ? html`
+                    <${GuardSummary} events=${events.filter((e) => e.step === "guard")} />
+                    ${events.filter((e) => e.step !== "guard").map((e, i) => html`<${TraceStep} key=${i} event=${e} />`)}`
+                : events.map((e, i) => html`<${TraceStep} key=${i} event=${e} />`)}
+            </div>
+          </div>`)}
+      </div>` : ""}
     </div>`;
 }
 
