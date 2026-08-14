@@ -117,8 +117,7 @@ _NUMERIC_FIELD = re.compile(r"^[-–]$|^[0-9][0-9,./%-]*$|^Rs\.?[0-9]")
 
 
 def _numeric_column_count(line):
-    fields = [f for f in re.split(r" {2,}", line.strip()) if f]
-    return sum(1 for f in fields if _NUMERIC_FIELD.match(f))
+    return sum(1 for f in _fields(line) if _NUMERIC_FIELD.match(f))
 
 
 def is_table_page(text):
@@ -145,8 +144,25 @@ def is_table_page(text):
 _COLUMN_CODE = re.compile(r"^[A-Z][A-Za-z]{0,2}(?:/[A-Z][A-Za-z]{0,2})*$")
 
 
+# A markdown table row, as produced by OCR: "| 2 | Tuition Fee | 27500 | ... |".
+# The separator row "|---|---|" is structure, not data.
+_MD_ROW = re.compile(r"^\s*\|.*\|\s*$")
+_MD_SEPARATOR = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
+
+
 def _fields(line):
-    return [f for f in re.split(r" {2,}", line.strip()) if f]
+    """Cells of a row, from either extractor.
+
+    pypdf reconstructs columns with runs of spaces; OCR emits real markdown
+    pipes. Splitting only on whitespace scored every markdown row as zero
+    columns, so an OCR'd fee grid was not recognised as a table at all and
+    chunked as prose - which would have split it away from its header row and
+    thrown away the whole benefit of OCR.
+    """
+    stripped = line.strip()
+    if _MD_ROW.match(stripped) and not _MD_SEPARATOR.match(stripped):
+        return [f.strip() for f in stripped.strip("|").split("|") if f.strip()]
+    return [f for f in re.split(r" {2,}", stripped) if f]
 
 
 # Column headings of a single-level fee grid: "1st Year", "2 nd year",

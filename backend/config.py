@@ -192,6 +192,13 @@ MISTRAL_MAX_TOKENS = int(os.environ.get("MISTRAL_MAX_TOKENS", "1500"))
 # with TTS_URL below.
 STT_MODEL = os.environ.get("STT_MODEL", "voxtral-mini-latest")
 STT_TIMEOUT = int(os.environ.get("STT_TIMEOUT", "60"))
+# Document OCR (see ocr.py). Off by default: it is a paid call over a whole
+# prospectus, and pypdf remains a working extractor. Turn it on when table
+# fidelity matters more than ingest cost - which it does here, because
+# pypdf loses the label-to-figure association in fee grids.
+OCR_ENABLED = os.environ.get("OCR_ENABLED", "false").lower() == "true"
+OCR_MODEL = os.environ.get("OCR_MODEL", "mistral-ocr-latest")
+OCR_TIMEOUT = int(os.environ.get("OCR_TIMEOUT", "600"))
 
 # --- Chat provider selection (see providers.py) ---
 # Which backend answers questions, and what to fall back to when it fails or is
