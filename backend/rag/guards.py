@@ -16,7 +16,7 @@ formed answer dict, or None to fall through to the next guard.
 """
 
 from . import citation, comparison
-from .helpers import (_apply_script_pref, _greeting_prompt, _injection_refusal,
+from .helpers import (_apply_script_pref, _assistant_scope, _greeting_prompt, _injection_refusal,
                        _program_name, is_greeting)
 from .. import config
 from ..core import programs
@@ -201,7 +201,7 @@ def _dispute_guard(ctx):
         return None
 
     context = "\n".join(f'Page {h["page"]}, line {h["line"]}: {h["text"]}' for h in hits)
-    prompt = _DISPUTE_PROMPT.format(program=_program_name(ctx.project_id)) + llm.LANGUAGE_RULE
+    prompt = _DISPUTE_PROMPT.format(program=_assistant_scope(ctx.project_id)) + llm.LANGUAGE_RULE
     user_prompt = (
         f"You previously told the student: {prior}\n\n"
         f"They are now disputing it. These are the exact lines from the prospectus:\n{context}\n\n"
@@ -284,7 +284,7 @@ def _off_topic_guard(ctx):
     if intent not in ("off_topic_trivia", "off_topic_task"):
         return None
     prompt = (_OFF_TOPIC_TRIVIA_PROMPT if intent == "off_topic_trivia"
-              else _OFF_TOPIC_TASK_PROMPT).format(program=_program_name(ctx.project_id))
+              else _OFF_TOPIC_TASK_PROMPT).format(program=_assistant_scope(ctx.project_id))
     result = llm.generate_scoped(config.GREETING_PROVIDER, prompt + llm.LANGUAGE_RULE,
                                   ctx.question + ctx.hint, ctx.question,
                                   timeout=20, allow_cloud=ctx.cloud_ok)

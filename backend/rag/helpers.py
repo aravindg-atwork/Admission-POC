@@ -13,6 +13,7 @@ import re
 from ..core import glossary, programs, transliterate
 from ..prompts.canned import _INJECTION_REFUSAL_TEMPLATES
 from ..prompts.system import GREETING_PROMPT_BASE, SYSTEM_PROMPT_BASE
+from .. import config
 from ..generation import llm
 
 
@@ -31,8 +32,29 @@ def _system_prompt(project_id):
     return SYSTEM_PROMPT_BASE.format(program=_program_name(project_id)) + llm.LANGUAGE_RULE
 
 
+def _assistant_scope(project_id):
+    """What the assistant should say it covers, when describing ITSELF.
+
+    Not the same question as _program_name, which answers "whose prospectus
+    am I retrieving from". The default project does double duty: it is both
+    the B.V.Sc. corpus AND the general entry point every student lands on
+    when no programme has been chosen, so _program_name returns
+    "B.V.Sc. & A.H." for it. Feeding that into a greeting made the general
+    widget introduce itself as the B.V.Sc. assistant and keep steering
+    there - reported directly: "why are you only mentioning bvsc?".
+
+    Answers stay scoped to the retrieved corpus, which is correct. Only the
+    self-description widens, because on the shared entry point the honest
+    answer to "what are you" is all three programmes.
+    """
+    if project_id == config.DEFAULT_PROJECT_ID:
+        names = list(programs.PROGRAM_NAMES.values())
+        return ", ".join(names[:-1]) + " and " + names[-1]
+    return _program_name(project_id)
+
+
 def _greeting_prompt(project_id):
-    return GREETING_PROMPT_BASE.format(program=_program_name(project_id)) + llm.LANGUAGE_RULE
+    return GREETING_PROMPT_BASE.format(program=_assistant_scope(project_id)) + llm.LANGUAGE_RULE
 
 
 def _injection_refusal(project_id, ui_language):
