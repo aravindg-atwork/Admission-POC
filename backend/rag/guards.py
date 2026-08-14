@@ -422,7 +422,15 @@ def _eligibility_guard(ctx):
     # undergraduate-figures-for-a-postgraduate-question trap the retired-
     # programme refusal exists to prevent, reintroduced by a fast path that
     # never asked whose requirement was being requested.
-    if _routed(ctx, "unknown_programme") or programs.mentions_foreign_course(original):
+    # Deterministic check only, NOT the router's opinion. Deferring to
+    # _routed("unknown_programme") here made this whole path intermittent: the
+    # router occasionally flags an ordinary B.V.Sc. eligibility question as a
+    # foreign course, and when it did, the verdict was skipped and the slow
+    # retrieval path answered instead - the same question resolving in 1.8s
+    # with the right figure on one run and 140.8s with the wrong one on the
+    # next. mentions_foreign_course covers every retired programme on its own
+    # (tested both directions), so nothing is lost by not asking the router.
+    if programs.mentions_foreign_course(original):
         return None
 
     if eligibility.is_threshold_question(original):
