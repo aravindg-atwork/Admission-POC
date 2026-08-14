@@ -823,8 +823,24 @@ def list_entries(faq_path):
 
 
 def clear(faq_path):
+    """Drop auto-cached answers, KEEP hand-curated seeds.
+
+    Seeds are authored content, not disposable cache: tools/seed_faq*.py
+    exists precisely because some questions cannot be answered well from
+    retrieval alone. "How to Register?" is the standing example - it means
+    portal signup to most students and academic registration to the
+    prospectus, and the seeded answer covers both rather than picking a
+    winner.
+
+    This used to wipe everything. During a day of debugging, repeated
+    admin cache-clears silently deleted every seed, and "How to Register?"
+    quietly reverted to the retrieval-only answer - the academic half alone,
+    accurate in isolation and wrong for the question nearly everyone is
+    actually asking. Nothing failed loudly; the answers just got worse.
+    """
     with _lock:
-        _save(faq_path, [])
+        kept = [e for e in _load(faq_path) if e.get("seeded")]
+        _save(faq_path, kept)
 
 
 # Curated seeds and explicit clears are administrative actions, not hot-path
