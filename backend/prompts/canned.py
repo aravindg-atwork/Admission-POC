@@ -179,3 +179,21 @@ _PROGRAM_LIST_TEXT = {
     "mr": "आम्ही {count} अभ्यासक्रम देतो. तुम्हाला कोणत्यात रस आहे ते सांगा, आणि "
           "मी त्याबद्दल काहीही सांगू शकतो - पात्रता, शुल्क, तारखा किंवा कागदपत्रे.",
 }
+
+
+# Reply when a student names a course this university does not run - see
+# guards.py's _unknown_programme_guard. Fixed text, no retrieval, no model:
+# the whole failure is the assistant answering anyway, and retrieval's best
+# match is never empty, so a question about an absent course comes back
+# looking just like one about a present course.
+_UNKNOWN_PROGRAMME_TEXT = {
+    "en": "I only cover admissions for {programmes}, so I can't help with "
+          "that course. If you meant one of these, tell me which and I'll "
+          "answer straight away.",
+    "hi": "मैं केवल {programmes} के प्रवेश के बारे में बता सकता हूँ, इसलिए उस "
+          "पाठ्यक्रम में मदद नहीं कर पाऊँगा। अगर आपका मतलब इनमें से किसी एक से "
+          "है, तो बताइए और मैं तुरंत जवाब दूँगा।",
+    "mr": "मी फक्त {programmes} च्या प्रवेशाबद्दल सांगू शकतो, त्यामुळे त्या "
+          "अभ्यासक्रमात मदत करू शकणार नाही. यापैकी एखादा अभिप्रेत असल्यास सांगा, "
+          "मी लगेच उत्तर देईन.",
+}

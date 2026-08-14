@@ -25,6 +25,7 @@ from ..core.intent import is_prompt_injection, needs_percentage_clarification
 from ..generation import embeddings, llm
 from ..storage import projects, vectorstore
 from ..prompts.canned import (_DISPUTE_PROMPT, _META_ACKNOWLEDGE_TEXT, _OFF_TOPIC_TASK_PROMPT,
+                               _UNKNOWN_PROGRAMME_TEXT,
                                _PROGRAM_LIST_TEXT,
                                _OFF_TOPIC_TRIVIA_PROMPT, _PERCENTAGE_CLARIFY_TEXT,
                                _PROGRAM_CLARIFY_TEXT)
@@ -476,6 +477,39 @@ def _program_redirect_guard(ctx):
     return None
 
 
+def _unknown_programme_guard(ctx):
+    """The student named a course this university's assistant does not cover.
+
+    Answered from a fixed list, with no retrieval and no model call, because
+    the failure being fixed is the assistant answering ANYWAY. Asked "what is
+    the fee for the MBA programme" it replied "Rs. 62,635 for unreserved
+    category" - B.V.Sc.'s admission fee, quoted fluently under the name of a
+    course MAFSU does not run. Nothing in the reply hinted it was about a
+    different degree.
+
+    That is the same family as the Ph.D. figure served under B.V.Sc.'s
+    heading: retrieval always returns its best match, and "best match" is
+    never empty, so a question about something absent from the corpus comes
+    back looking exactly like a question about something present in it.
+
+    Runs after the programme-redirect guard so a question naming one of OUR
+    programmes is routed there first, and only a genuinely foreign course
+    reaches this.
+    """
+    if not _routed(ctx, "unknown_programme"):
+        return None
+    # Corroboration, same principle as the redirect guard: if the student
+    # actually named one of ours, this is not a foreign course whatever the
+    # router thinks.
+    if programs.detect_program(getattr(ctx, "original_question", ctx.question)):
+        return None
+    names = ", ".join(programs.PROGRAM_NAMES.values())
+    lang = _clarify_language(ctx)
+    text = _UNKNOWN_PROGRAMME_TEXT.get(lang, _UNKNOWN_PROGRAMME_TEXT["en"]).format(programmes=names)
+    return {"answer": text, "pages": [], "model": "guard", "language": ctx.language,
+            "source": "unknown-programme", "speakable": True}
+
+
 def _program_clarify_guard(ctx):
     project_id = ctx.project_id
     question = ctx.question
@@ -527,6 +561,7 @@ GUARDS = [
     _percentage_clarify_guard,
     _comparison_guard,
     _program_redirect_guard,
+    _unknown_programme_guard,
     _program_clarify_guard,
 ]
 

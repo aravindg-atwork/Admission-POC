@@ -86,6 +86,8 @@ Fields:
 
 "target_programs": ids they want information ABOUT. A programme named as their OWN completed degree is not a target ("I finished my B.V.Sc., can I do M.V.Sc.?" -> ["mvsc"]). A programme named to DENY it is not a target ("I didn't say I want bfsc" -> []). One named earlier still counts if they are still asking about it. [] if none.
 
+"unknown_programme": true when the message names a degree or course that is NOT in the id list above - MBA, MBBS, B.E., B.Sc. Agriculture, law, anything. The assistant covers only the programmes listed, and a fee quoted from one of those under the name of a course we do not run is worse than saying we do not run it. False when they name one of ours, or none at all.
+
 "is_comparison": true if several programmes are weighed against each other, or they ask which programmes satisfy a condition.
 
 "needs_program_clarification": true ONLY if the answer differs per programme, they named none, it is not a comparison, and no earlier turn settled it. Portal mechanics (register, password, uploads) are false.
@@ -183,6 +185,7 @@ def _validate(data, question):
         "resolved_question": resolved,
         "target_programs": target,
         "is_comparison": bool(data.get("is_comparison")),
+        "unknown_programme": bool(data.get("unknown_programme")),
         "needs_program_clarification": bool(data.get("needs_program_clarification")),
         "self_score_ambiguous": bool(data.get("self_score_ambiguous")),
         "confidence": "low" if data.get("confidence") == "low" else "high",
