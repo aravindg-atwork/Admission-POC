@@ -180,6 +180,14 @@ NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "nvidia/llama-3.3-nemotron-super-4
 NVIDIA_FAST_MODEL = os.environ.get("NVIDIA_FAST_MODEL", "meta/llama-3.1-8b-instruct")
 NVIDIA_MAX_TOKENS = int(os.environ.get("NVIDIA_MAX_TOKENS", "4096"))
 
+# --- Mistral AI (OpenAI-shaped) ---
+# Separate account with its own limits, so benchmarking and experiments do
+# not drain the quota the working configuration runs on.
+MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY", "")
+MISTRAL_URL = os.environ.get("MISTRAL_URL", "https://api.mistral.ai/v1")
+MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-medium-latest")
+MISTRAL_MAX_TOKENS = int(os.environ.get("MISTRAL_MAX_TOKENS", "1500"))
+
 # --- Chat provider selection (see providers.py) ---
 # Which backend answers questions, and what to fall back to when it fails or is
 # unavailable. Config rather than code because the choice is genuinely open:

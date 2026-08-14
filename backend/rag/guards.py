@@ -421,11 +421,26 @@ def _program_redirect_guard(ctx):
     # looks unattributed. Reproduced: "what is the application fee for bvsc"
     # answered with "Which program are you asking about?".
     original = getattr(ctx, "original_question", question)
+    # A redirect moves the answer to ANOTHER programme's prospectus, so it
+    # demands evidence in the text - not the router's word alone. The router
+    # returned target_programs=['bfsc'] for "which subjects do I need in
+    # 12th", a question naming no programme whatsoever, and the guard duly
+    # sent a request made on the B.TECH key to B.F.Sc., which answered
+    # "Physics, Chemistry, Biology and English" - correct for B.F.Sc.,
+    # wrong for B.Tech (Mathematics), and indistinguishable from a real
+    # answer. A scoped widget must never be hijacked to another programme
+    # by a hallucinated target.
+    #
+    # detect_program is the corroboration: it only fires on an alias
+    # actually present in what the student typed. The router still decides
+    # WHICH programme when several are named or the wording is oblique; it
+    # just cannot conjure one out of nothing.
+    detected = programs.detect_program(original)
     routed_targets = _routed(ctx, "target_programs")
-    if routed_targets and len(routed_targets) == 1:
+    if routed_targets and len(routed_targets) == 1 and detected:
         named_program = routed_targets[0]
     else:
-        named_program = programs.detect_program(original)
+        named_program = detected
     if named_program and named_program != project_id:
         # Explicitly names a DIFFERENT program than the one this request is
         # currently scoped to ("what is the B.Tech Dairy fee" typed into the

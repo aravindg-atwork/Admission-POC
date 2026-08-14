@@ -363,11 +363,56 @@ class NvidiaProvider:
         return answer, f"{self.name}:{model}"
 
 
+class MistralProvider:
+    """Mistral AI - OpenAI-shaped, same surface as Groq/Hetzner/NVIDIA.
+
+    Added 2026-08-14 on a separate account with its own generous limits, so
+    experimentation and benchmarking do not eat the quota the working
+    configuration depends on - which is exactly how this project ended up
+    with Sarvam at HTTP 402 and Groq at its daily token ceiling on the same
+    afternoon.
+
+    Measured before adopting, on the live 2026-27 index: ministral-8b 1.5s,
+    mistral-small 1.2s, mistral-medium 2.0s average, all answering the
+    B.Tech subject question correctly (Mathematics, not Biology) and
+    replying in Devanagari to Hindi and Marathi.
+
+    One real quirk: these models answer Indic questions using Devanagari
+    NUMERALS (५०% rather than 50%). That is arguably better for the reader,
+    but it means any check comparing against ASCII digits will score a
+    correct answer as wrong - which it did on the first run here.
+    """
+
+    name = "mistral"
+    is_cloud = False
+
+    def configured(self):
+        return bool(config.MISTRAL_API_KEY)
+
+    def chat(self, system_prompt, user_prompt, timeout, question="", model=None, temperature=None, **_):
+        model = model or config.MISTRAL_MODEL
+        user_prompt += _SCRIPT_REMINDER.get(detect_script(question), "")
+        payload = {
+            "model": model,
+            "temperature": config.CHAT_TEMPERATURE if temperature is None else temperature,
+            "max_tokens": config.MISTRAL_MAX_TOKENS,
+            "messages": _messages(system_prompt, user_prompt),
+        }
+        headers = {"Authorization": f"Bearer {config.MISTRAL_API_KEY}"}
+        url = config.MISTRAL_URL.rstrip("/") + "/chat/completions"
+        result = _post(url, payload, headers, timeout)
+        answer = clean(result["choices"][0]["message"].get("content"))
+        if not answer:
+            raise ValueError("mistral returned no answer content")
+        return answer, "mistral:" + model
+
+
 _REGISTRY = {p.name: p for p in (
     SarvamProvider(), OllamaProvider(), SelfHostedProvider(), HetznerProvider(),
     GroqProvider(),
     NvidiaProvider("nvidia", "NVIDIA_MODEL"),
     NvidiaProvider("nvidia-fast", "NVIDIA_FAST_MODEL"),
+    MistralProvider(),
 )}
 
 

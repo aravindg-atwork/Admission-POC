@@ -101,9 +101,19 @@ _QUERY_TOPICS = (
     ("quota", ("quota", "quotas", "reservation", "reservations", "reserved",
                 "category", "categories", "ews", "obc",
                 "आरक्षण", "कोटा")),
+    # Subject/stream words belong here: "which subjects do I need in 12th" is
+    # an eligibility question in every sense except vocabulary, and without
+    # them it got no topic boost at all. Measured on B.Tech (Dairy): the
+    # authoritative eligibility sentence sat at rank 6, below NRI
+    # instructions and the syllabus, and the answer came back "Physics,
+    # Chemistry, Biology and English" - B.V.Sc.'s subject list. B.Tech
+    # requires MATHEMATICS. A student could have sat the wrong subjects.
     ("eligibility", ("eligibility", "eligible", "criteria", "qualify",
                       "qualifying", "percentage", "marks", "cutoff",
-                      "पात्रता", "गुण")),
+                      "subject", "subjects", "stream", "physics", "chemistry",
+                      "biology", "mathematics", "maths", "pcb", "pcm",
+                      "12th", "xii", "hsc", "minimum", "aggregate", "score",
+                      "पात्रता", "गुण", "विषय")),
     ("seats", ("seat", "seats", "intake", "capacity", "vacancy", "vacancies",
                 "जागा")),
     ("dates", ("date", "dates", "deadline", "last", "schedule", "when",
@@ -116,16 +126,27 @@ _QUERY_TOPICS = (
 def query_topic(text):
     """The section topic a question is asking about, or None when unclear.
 
+    Scored by how many markers each topic matches, not first-match-wins.
+    Ordering alone was too crude: "what is the minimum percentage needed for
+    unreserved CATEGORY" matched quota on the single word "category" and
+    stopped there, so a question about the eligibility threshold boosted the
+    RESERVATION OF SEATS section and the answer came back "the prospectus
+    does not specify" - about a figure printed on page 5. Counting matches
+    lets the more specific reading win, and ties still fall back to
+    declaration order.
+
     None is common and fine - it simply means no boost is applied and
     retrieval behaves exactly as it did before topics existed.
     """
     words = _terms(text or "")
     if not words:
         return None
+    best, best_score = None, 0
     for topic, markers in _QUERY_TOPICS:
-        if words & set(markers):
-            return topic
-    return None
+        score = len(words & set(markers))
+        if score > best_score:
+            best, best_score = topic, score
+    return best
 
 
 def _cosine(a, b):
