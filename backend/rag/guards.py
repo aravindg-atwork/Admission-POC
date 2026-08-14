@@ -416,6 +416,15 @@ def _eligibility_guard(ctx):
     # separate lower threshold for these categories", turning eligible
     # reserved-category students away four questions before stating the real
     # 47.50% correctly. Answered from the table instead.
+    # Never answer a threshold lookup about a programme we do not serve. This
+    # branch quoted B.V.Sc.'s 47.5% at "what is the minimum percentage
+    # required for Ph.D. admission?" and at an M.V.Sc. question - the exact
+    # undergraduate-figures-for-a-postgraduate-question trap the retired-
+    # programme refusal exists to prevent, reintroduced by a fast path that
+    # never asked whose requirement was being requested.
+    if _routed(ctx, "unknown_programme") or programs.mentions_foreign_course(original):
+        return None
+
     if eligibility.is_threshold_question(original):
         rows = eligibility.thresholds_for(original, candidate)
         if rows:
@@ -659,13 +668,27 @@ def _unknown_programme_guard(ctx):
     programmes is routed there first, and only a genuinely foreign course
     reaches this.
     """
-    if not _routed(ctx, "unknown_programme"):
+    # Either signal is enough. The router flags Ph.D. reliably but not
+    # M.V.Sc. - too close in shape to B.V.Sc. - so three M.V.Sc. questions
+    # were answered from the B.V.Sc. corpus, one of them explaining the
+    # undergraduate migration procedure under the heading of a postgraduate
+    # degree. Requiring the router's agreement meant the deterministic check
+    # could only ever narrow this guard, never trigger it, which is the wrong
+    # way round for a refusal whose job is to catch what routing missed.
+    original_text = getattr(ctx, "original_question", ctx.question)
+    if not (_routed(ctx, "unknown_programme")
+            or programs.mentions_foreign_course(original_text)):
         return None
     # Corroboration, same principle as the redirect guard: if the student
     # actually named one of ours, this is not a foreign course whatever the
     # router thinks.
     original = getattr(ctx, "original_question", ctx.question)
-    if programs.detect_program(original):
+    # "Naming one of ours" does not cancel a postgraduate marker. "Can I apply
+    # for M.V.Sc. if my veterinary degree is from another university?" names
+    # B.V.Sc. via "veterinary" - as the student's OWN prior degree - and that
+    # match used to cancel the refusal, so the question was answered with
+    # B.V.Sc.'s undergraduate migration procedure under an M.V.Sc. heading.
+    if programs.detect_program(original) and not programs.mentions_foreign_course(original):
         return None
     # Second corroboration: the student must actually have named a course.
     # The router read "MAFSU" - the university itself - as a foreign course

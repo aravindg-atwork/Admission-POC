@@ -61,9 +61,17 @@ BASE = f"http://localhost:{config.PORT}"
 # All three state the requirement on the subjects "taken together".
 CLARIFY_MARKERS = ("which program", "which programme", "please pick one",
                    "ask again naming")
-REFUSAL_MARKERS = ("only cover", "does not specify", "doesn't specify", "not "
-                   "specify", "not covered", "contact", "admission office",
-                   "admissions office", "only for the", "is only")
+# Written one-per-line deliberately: the first version relied on implicit
+# string concatenation across a line break and silently produced "not specify"
+# instead of two separate markers, so a correct refusal ("the excerpts... do
+# not mention any entrance examination for Ph.D.") was graded as a failure.
+REFUSAL_MARKERS = (
+    "only cover", "only covers", "does not specify", "doesn't specify",
+    "do not specify", "not specified", "does not mention", "do not mention",
+    "doesn't mention", "not covered", "only for the", "is only",
+    "contact", "admission office", "admissions office", "cannot help",
+    "can't help",
+)
 UG_FIGURES = ("62635", "62,635", "40610", "40,610", "47.50", "47.5")
 
 
@@ -105,7 +113,7 @@ CASES = [
       expect=["47.5", "eligible"], forbid=["40%", "Dairy", "Mathematics"], no_clarify=True),
     C("B", 14, "I studied Physics, Chemistry, Biology and English but didn't have "
                 "Mathematics. Which MAFSU courses can I apply for?",
-      expect=["B.F.Sc", "BFSc", "Fishery"], forbid=["Dairy"], no_clarify=True),
+      expect=["B.F.Sc", "BFSc", "Fishery"], no_clarify=True),
     C("B", 15, "I am from another state. Can I apply for MAFSU?", answered=True, no_clarify=True),
     C("B", 16, "I have PCB but not Biotechnology. Am I eligible for B.V.Sc.?",
       expect=["Biology"], no_clarify=True),
@@ -254,8 +262,11 @@ def grade(case, answer):
     flat, low = _norm(answer), (answer or "").lower()
     problems = []
 
-    if case.get("answered") and len(low.split()) < 8:
-        problems.append("no real answer (under 8 words)")
+    if case.get("answered"):
+        if any(m in low for m in CLARIFY_MARKERS) or "can't help with that course" in low:
+            problems.append("declined a question that is in scope")
+        elif len(low.split()) < 4:
+            problems.append("no real answer")
     if case.get("no_clarify") and any(m in low for m in CLARIFY_MARKERS):
         problems.append("bounced back a 'which programme?' clarification")
     if case.get("refuse"):

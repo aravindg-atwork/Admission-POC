@@ -189,6 +189,21 @@ def threshold(project_id, category):
     return rule["reserved"] if category == "reserved" else rule["unreserved"]
 
 
+# A subject only counts as the STUDENT'S when they say it is theirs. Without
+# this, "Is Mathematics compulsory for B.Tech. Dairy Technology?" was read as
+# a student who had studied Mathematics and nothing else, and answered "You
+# are not eligible for B.Tech. (Dairy Technology)" - a personal verdict on a
+# general question, delivered to someone who never described their subjects.
+_OWN_SUBJECTS_RE = re.compile(
+    r"\b(i\s+(?:have|had|studied|took|did|am|completed|passed)|my\s+\w+|i'?ve|"
+    r"i\s+didn'?t|i\s+do\s+not|with\s+p\.?c\.?[bm]|instead\s+of)\b", re.I)
+
+
+def describes_own_subjects(text):
+    """Whether the student is telling us what THEY studied."""
+    return bool(_OWN_SUBJECTS_RE.search(text or ""))
+
+
 def subject_verdict(project_id, subjects):
     """Whether the subjects the student studied satisfy this programme.
 
@@ -284,7 +299,11 @@ def evaluate(project_id, text):
     category = facts["category"]
     required = threshold(project_id, category or "unreserved")
 
-    subjects_ok, missing = subject_verdict(project_id, facts["subjects"])
+    # Only judge subjects the student claims as their own - see
+    # describes_own_subjects. A question that merely NAMES a subject is asking
+    # what the rule is, not asking to be assessed against it.
+    own = facts["subjects"] if describes_own_subjects(text) else set()
+    subjects_ok, missing = subject_verdict(project_id, own)
     if subjects_ok is False:
         return {"verdict": "not_eligible", "reason": "subjects",
                 "missing": sorted(missing), "programme": rule["label"],

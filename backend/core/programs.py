@@ -411,6 +411,14 @@ _FOREIGN_COURSE_WORDS = {
 # Degree-shaped tokens: B.Arch, M.Plan, and anything else of that form we
 # have not enumerated. Matched only as a fallback, so an unlisted course is
 # still caught rather than silently answered from the wrong corpus.
+# Postgraduate/doctoral programmes, all retired from this deployment on
+# 2026-08-14. Written to tolerate the dots and spacing students actually type
+# (Ph.D., PhD, Ph D, M.V.Sc., MVSc, M.Tech, M Tech).
+_PG_MARKER_RE = re.compile(
+    r"\b(ph\.?\s?d\.?|m\.?\s?v\.?\s?sc\.?|m\.?\s?tech\.?|m\.?\s?sc\.?|"
+    r"m\.?\s?f\.?\s?sc\.?|post[\s-]?graduate|masters?\s+(?:degree|programme|program)|"
+    r"doctoral|doctorate)\b", re.I)
+
 _DEGREE_SHAPE_RE = re.compile(r"\b[bm]\.\s?[a-z]{1,6}\.?\b", re.I)
 
 
@@ -428,6 +436,15 @@ def mentions_foreign_course(text):
     one the refusal was built to prevent, and it hits far more students, so
     the refusal now needs evidence in the student's own words.
     """
+    # Postgraduate markers decide FIRST, before the "is it one of ours?"
+    # check, because two of them collide with our own aliases: "M.Tech. Dairy
+    # Technology" contains "dairy" and so read as the B.Tech. programme, and
+    # "M.V.Sc." shares its tail with "B.V.Sc.". Matched by regex rather than
+    # word tokens because _words() splits "Ph.D." into "ph" and "d", so the
+    # plain word list never saw a Ph.D. question at all - which is how a
+    # Ph.D. question came back quoting B.V.Sc.'s 47.5%.
+    if _PG_MARKER_RE.search(text or ""):
+        return True
     if detect_programs_multi(text):
         return False
     words = _words(text)
