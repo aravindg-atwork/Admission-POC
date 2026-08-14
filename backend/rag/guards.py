@@ -388,6 +388,20 @@ def _comparison_guard(ctx):
     routed_comparison = _routed(ctx, "is_comparison")
     is_comparison = (routed_comparison if routed_comparison is not None
                      else programs.needs_comparison(question))
+    # On a programme-scoped widget, only compare when the student named the set
+    # themselves. Otherwise they are already inside one programme and a
+    # cross-programme answer is a scope leak rather than extra helpfulness:
+    # "can I apply if I took Biology instead of Maths?" on the B.Tech widget
+    # came back covering all three and led with B.V.Sc. The router is not the
+    # thing to fix - reading a Biology/Maths contrast as a comparison is
+    # defensible - so the scope check sits downstream of it and applies
+    # whichever source set the flag.
+    if is_comparison and ctx.project_id != config.DEFAULT_PROJECT_ID:
+        if not programs.comparison_is_explicit(
+                getattr(ctx, "original_question", question)):
+            ctx.trace("routing", decision="comparison_declined_scoped",
+                      projectId=ctx.project_id)
+            is_comparison = False
     if is_comparison:
         # Prefer the programs the router says are actually being asked about -
         # it excludes ones named only as the student's own prior degree, or

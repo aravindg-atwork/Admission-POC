@@ -388,3 +388,20 @@ def comparison_targets(text):
     if _words(text) & _ALL_PROGRAMS_WORDS:
         return list(PROGRAM_NAMES)
     return list(_UG_PROGRAMS)
+
+
+def comparison_is_explicit(text):
+    """True when the text itself names the set to compare.
+
+    comparison_targets() falls back to the three UG programmes when a question
+    reads as a comparison but names nothing. That default is right on the
+    general widget and wrong on a programme-scoped one: a student already
+    inside the B.Tech widget asking "can I apply if I took Biology instead of
+    Maths?" is asking about B.Tech, but needs_comparison sees the contrast and
+    comparison_targets then supplies all three, so the reply opens on B.V.Sc.
+
+    Same discipline the redirect path already follows - act on a programme the
+    student actually named, never on one merely inferred.
+    """
+    return (len(detect_programs_multi(text)) >= 2
+            or bool(_words(text) & _ALL_PROGRAMS_WORDS))
