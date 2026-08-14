@@ -102,6 +102,10 @@ def handle_chat(self):
             "language": result["language"],
             "source": result["source"],
             "speakable": result["speakable"],
+            # Lets the console line this answer up with its own trace card
+            # instead of guessing which of the live feed's cards was this
+            # request (see the Playground inspector).
+            "traceId": result.get("traceId"),
         }
         if result.get("clarifyOptions"):
             payload["clarifyOptions"] = result["clarifyOptions"]

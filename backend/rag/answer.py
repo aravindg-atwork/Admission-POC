@@ -169,15 +169,22 @@ def _build_context(project_id, question, script_pref, ui_language, history=None,
         reanswer=lambda pid: _answer(pid, effective_question, script_pref, ui_language,
                                       history, route),
         trace=collector.record,
+        # Surfaced so a caller can line an answer up with the trace that
+        # produced it. Without it the console could only show a firehose of
+        # every request and leave the operator to guess which card was
+        # theirs - see the Playground inspector.
+        trace_id=collector.trace_id,
     )
 
 
 def _answer(project_id, question, script_pref, ui_language, history=None, route=None):
     ctx = _build_context(project_id, question, script_pref, ui_language, history, route)
     guard_response = guards.run_guards(ctx)
-    if guard_response is not None:
-        return guard_response
-    return _pipeline(ctx)
+    result = guard_response if guard_response is not None else _pipeline(ctx)
+    # Stamped in one place rather than in each of the many return points, so
+    # a guard reply and a full pipeline reply are equally traceable.
+    result.setdefault("traceId", ctx.trace_id)
+    return result
 
 
 def _pipeline(ctx):

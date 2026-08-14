@@ -395,7 +395,8 @@ def _comparison_guard(ctx):
         # back to comparison_targets' own default (the three UG programs).
         routed_targets = _routed(ctx, "target_programs") or []
         target_programs = (routed_targets if len(routed_targets) >= 2
-                           else programs.comparison_targets(question))
+                           else programs.comparison_targets(
+                               getattr(ctx, "original_question", question)))
         ctx.trace("routing", decision="comparison", targetPrograms=target_programs)
         return comparison._answer_comparison(target_programs, question,
                                    script_pref, ui_language, language, hint_language,
@@ -411,11 +412,20 @@ def _program_redirect_guard(ctx):
     # detect_program: it already excludes a program named only as the
     # student's own completed degree, or named in order to deny it. Exactly
     # one target means "this question is about that program".
+    # Detected against what the student ACTUALLY typed, never ctx.question.
+    # ctx.question is the router's rewrite, and the router is instructed to
+    # strip the programme name out of it (it belongs in target_programs).
+    # So when the router also returns an empty target list - which it does,
+    # observed, for a message containing the literal word "bvsc" - the
+    # programme has been erased from both places at once and the question
+    # looks unattributed. Reproduced: "what is the application fee for bvsc"
+    # answered with "Which program are you asking about?".
+    original = getattr(ctx, "original_question", question)
     routed_targets = _routed(ctx, "target_programs")
-    if routed_targets is not None:
-        named_program = routed_targets[0] if len(routed_targets) == 1 else None
+    if routed_targets and len(routed_targets) == 1:
+        named_program = routed_targets[0]
     else:
-        named_program = programs.detect_program(question)
+        named_program = programs.detect_program(original)
     if named_program and named_program != project_id:
         # Explicitly names a DIFFERENT program than the one this request is
         # currently scoped to ("what is the B.Tech Dairy fee" typed into the
@@ -462,6 +472,17 @@ def _program_clarify_guard(ctx):
         # per program) stays default-only: on any other project, a bare "how
         # much is the fee" is unambiguous in context - it means that
         # project's fee - so there is nothing to clarify.
+        # Deterministic veto: if the question literally names a programme,
+        # never ask which programme it is about, whatever the router thinks.
+        # Observed - "what is the application fee for bvsc" came back with
+        # "Which program are you asking about?" because the router returned
+        # an empty target list for a message containing the word bvsc, and
+        # its clarify flag was trusted over plain evidence sitting in the
+        # text. Asking someone to name something they just named is the
+        # single most irritating failure this assistant has, and the keyword
+        # matcher is exactly right about this narrow question.
+        if programs.detect_program(getattr(ctx, "original_question", question)):
+            return None
         routed_needs = _routed(ctx, "needs_program_clarification")
         needs_clarify = (routed_needs if routed_needs is not None
                          else programs.needs_program_clarification(question))
