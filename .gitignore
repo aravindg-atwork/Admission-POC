@@ -59,3 +59,6 @@ demo-bundle*.zip
 
 # Local admin token - never in the repo (config reads ADMIN_TOKEN from .env)
 admin-token.txt
+
+# Local backup of superseded prospectuses - large binaries, not repo content
+data/_prospectus_backup_*/

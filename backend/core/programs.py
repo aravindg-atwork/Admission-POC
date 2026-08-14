@@ -18,13 +18,15 @@ import unicodedata
 
 # Canonical display names, also used to label the disambiguation options
 # shown to the student (see server.py's clarification response and app.js).
+# Undergraduate only, from 2026-27. The postgraduate and doctoral projects
+# (M.V.Sc., Ph.D., M.Tech. Dairy) were retired 2026-08-14 - the assistant is
+# scoped to UG admissions. Their aliases are gone too: leaving them would let
+# a question naming a retired programme route to a project that no longer
+# exists, which fails far less clearly than not recognising the name at all.
 PROGRAM_NAMES = {
     "default": "B.V.Sc. & A.H.",
     "bfsc": "B.F.Sc.",
     "btech-dairy": "B.Tech. (Dairy Technology)",
-    "mvsc": "M.V.Sc.",
-    "phd": "Ph.D.",
-    "mtech-dairy": "M.Tech. (Dairy)",
 }
 
 
@@ -80,11 +82,10 @@ _PROGRAM_ALIASES = {
                 "பவஎஸச", "கலநட"),
     "bfsc": ("bfsc", "fishery", "fisheries", "बएफएसस", "मतसय",
              "பஎஃபஎஸச", "மனவளம"),
-    "btech-dairy": ("btech", "बटक", "படக"),
-    "mvsc": ("mvsc", "masterofveterinary", "एमवहएसस", "एमवएसस", "எமவஎஸச"),
-    "phd": ("phd", "doctorate", "doctoral", "पएचड", "डकटरट",
-            "பஎசட", "மனவர"),
-    "mtech-dairy": ("mtech", "masteroftechnology", "एमटक", "எமடக"),
+    # "dairy"/"dairytechnology" are unambiguous again now that M.Tech.
+    # (Dairy) is retired - they were excluded only because two dairy
+    # programmes existed and a bare "dairy" could not choose between them.
+    "btech-dairy": ("btech", "dairy", "dairytechnology", "बटक", "படக"),
 }
 
 
@@ -315,6 +316,10 @@ def is_bare_program_reply(text):
 # below). A 12th-marks eligibility question has no bearing on the three
 # postgraduate/doctoral programs, so defaulting to all six would only add
 # noise to the answer, not real coverage.
+# Every programme is undergraduate now, so this and PROGRAM_NAMES are the
+# same set - kept as its own name because comparison_targets' intent ("the
+# sensible default set for a generic question") is not the same statement as
+# "all programmes", and they will diverge again if a PG programme returns.
 _UG_PROGRAMS = ("default", "bfsc", "btech-dairy")
 
 # Word-level co-occurrence, not phrase matching: a trigger word ("which",

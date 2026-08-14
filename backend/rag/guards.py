@@ -334,7 +334,7 @@ def _program_list_guard(ctx):
 
     names = list(programs.PROGRAM_NAMES.values())
     lang = _clarify_language(ctx)
-    lead = _PROGRAM_LIST_TEXT.get(lang, _PROGRAM_LIST_TEXT["en"])
+    lead = _PROGRAM_LIST_TEXT.get(lang, _PROGRAM_LIST_TEXT["en"]).format(count=len(names))
     body = lead + "\n\n" + "\n".join(names)
     options = [{"projectId": pid, "label": name}
                for pid, name in programs.PROGRAM_NAMES.items()]

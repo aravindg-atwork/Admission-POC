@@ -164,13 +164,18 @@ _DISPUTE_PROMPT = (
 # Answer to "what programmes do you offer?" - see guards.py's
 # _program_list_guard. The list itself comes from programs.PROGRAM_NAMES, so
 # it cannot drift out of step with the projects that actually exist.
+# {count} is filled from programs.PROGRAM_NAMES at call time, never written
+# out as a word. It said "six programmes" for a fortnight after the three
+# postgraduate projects were retired, because the number was baked into the
+# sentence while the list beneath it came from the registry - the reply
+# contradicted itself in the same breath.
 _PROGRAM_LIST_TEXT = {
-    "en": "We offer six programmes. Tell me which one you're interested in "
-          "and I'll answer anything about it - eligibility, fees, dates or "
-          "documents.",
-    "hi": "हम छह कार्यक्रम प्रदान करते हैं। मुझे बताइए आप किसमें रुचि रखते हैं, "
-          "और मैं उसके बारे में कुछ भी बता सकता हूँ - पात्रता, शुल्क, तारीखें "
-          "या दस्तावेज़।",
-    "mr": "आम्ही सहा अभ्यासक्रम देतो. तुम्हाला कोणत्यात रस आहे ते सांगा, आणि मी "
-          "त्याबद्दल काहीही सांगू शकतो - पात्रता, शुल्क, तारखा किंवा कागदपत्रे.",
+    "en": "We offer {count} programmes. Tell me which one you're interested "
+          "in and I'll answer anything about it - eligibility, fees, dates "
+          "or documents.",
+    "hi": "हम {count} कार्यक्रम प्रदान करते हैं। मुझे बताइए आप किसमें रुचि रखते "
+          "हैं, और मैं उसके बारे में कुछ भी बता सकता हूँ - पात्रता, शुल्क, "
+          "तारीखें या दस्तावेज़।",
+    "mr": "आम्ही {count} अभ्यासक्रम देतो. तुम्हाला कोणत्यात रस आहे ते सांगा, आणि "
+          "मी त्याबद्दल काहीही सांगू शकतो - पात्रता, शुल्क, तारखा किंवा कागदपत्रे.",
 }
