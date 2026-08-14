@@ -134,8 +134,20 @@ def _build_context(project_id, question, script_pref, ui_language, history=None,
     reused_route = route is not None
     if route is None:
         route = router.classify(question, history, cloud_ok)
+    # Say WHY it is unavailable, not just that it is. An open circuit breaker
+    # and a one-off provider timeout look identical in the trace otherwise,
+    # and they call for opposite responses: the first means the assistant is
+    # running on its keyword floor for the next two minutes and every answer
+    # in that window should be read in that light; the second is noise.
+    _router_status = router.status()
     collector.record("intent_router", **(
-        {"available": False, "reason": "unavailable - using keyword fallback"} if route is None
+        {"available": False,
+         "reason": ("degraded - all routing providers failing, keyword fallback "
+                    f"for another {_router_status['secondsRemaining']:.0f}s"
+                    if _router_status["degraded"]
+                    else "disabled" if not _router_status["enabled"]
+                    else "unavailable - using keyword fallback"),
+         "degraded": _router_status["degraded"]} if route is None
         else {"available": True, "intent": route["intent"],
               "targetPrograms": route["target_programs"],
               "isComparison": route["is_comparison"],

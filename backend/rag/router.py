@@ -315,6 +315,32 @@ def _breaker_is_open():
         return False
 
 
+def status():
+    """Whether routing is currently degraded, for callers that must SAY so.
+
+    An open breaker is invisible from outside: classify() returns None, every
+    guard quietly drops to its keyword fallback, and the reply looks ordinary.
+    During the 2026-08-14 evaluation this turned refusals into "which
+    programme?" prompts with nothing anywhere indicating the assistant was
+    running on its deterministic floor, which made a routing outage
+    indistinguishable from a logic bug for the better part of an hour - and
+    leaves every measurement taken during one unattributable after the fact.
+
+    Degraded routing is a legitimate mode, not a fault to hide. It just has to
+    be visible.
+    """
+    with _breaker_lock:
+        open_until = _breaker["open_until"]
+        failures = _breaker["failures"]
+    remaining = max(0.0, open_until - time.time())
+    return {
+        "enabled": bool(config.ROUTER_ENABLED),
+        "degraded": remaining > 0,
+        "secondsRemaining": round(remaining, 1),
+        "consecutiveFailures": failures,
+    }
+
+
 def _breaker_record(success):
     with _breaker_lock:
         if success:
