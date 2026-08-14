@@ -545,34 +545,6 @@ function TraceCard({ trace, programNames }) {
     </div>`;
 }
 
-function LiveTraceFeed({ token, programNames }) {
-  const [traces, setTraces] = useState({});
-  const [order, setOrder] = useState([]);
-
-  useEffect(() => {
-    if (!token) return;
-    const es = new EventSource(`/admin/trace/stream?token=${encodeURIComponent(token)}`);
-    es.onmessage = (e) => {
-      let event;
-      try { event = JSON.parse(e.data); } catch { return; }
-      setTraces((prev) => {
-        const existing = prev[event.traceId] || { traceId: event.traceId, projectId: event.projectId, events: [], done: false };
-        return { ...prev, [event.traceId]: { ...existing, events: [...existing.events, event], done: existing.done || event.step === "final_answer" } };
-      });
-      setOrder((prev) => (prev.includes(event.traceId) ? prev : [event.traceId, ...prev]).slice(0, 15));
-    };
-    es.onerror = () => {}; // browser auto-reconnects; nothing to surface
-    return () => es.close();
-  }, [token]);
-
-  return html`
-    <div class="live-trace">
-      <div class="section-h">Live reasoning trace <span class="muted" style=${{fontWeight:400}}>— every real question, system-wide</span></div>
-      ${order.length === 0 ? html`<div class="empty-hint">Waiting for a question to come in…</div>` : ""}
-      ${order.map((tid) => html`<${TraceCard} key=${tid} trace=${traces[tid]} programNames=${programNames} />`)}
-    </div>`;
-}
-
 // ---------- Prompts: the master system prompts, byte-for-byte (Request 3.1) ----------
 function PromptsPanel({ token, projectId }) {
   const [prompts, setPrompts] = useState(null);
@@ -602,159 +574,176 @@ function PromptsPanel({ token, projectId }) {
     </div>`;
 }
 
-// ---------- Try It (legacy name kept as internal function name for the composer half) ----------
-function TesterPanel({ keys, token, projectName, projectId, programNames }) {
+// ---------- Playground ----------
+// Replaces the old Live tester, which had a structural flaw: its trace panel
+// showed EVERY request hitting the backend, so you could not tell which card
+// belonged to the message you just sent. Answers now carry a traceId (see
+// http/chat_routes.py), so each reply owns its trace and the inspector shows
+// that one - with a deliberate switch to the system-wide feed when you want
+// to watch real student traffic instead.
+function Playground({ keys, token, projectName, programNames }) {
   const active = keys.filter((k) => k.active);
   const [keyVal, setKeyVal] = useState("");
+  const [lang, setLang] = useState("en-IN");
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [lang, setLang] = useState("en-IN");
-  const [speakOn, setSpeakOn] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [ttsBusy, setTtsBusy] = useState(false);
+  const [selected, setSelected] = useState(null);   // traceId being inspected
+  const [feedMode, setFeedMode] = useState("mine"); // "mine" | "all"
+  const [traces, setTraces] = useState({});
+  const [order, setOrder] = useState([]);
   const [hint, setHint] = useState("");
   const threadRef = useRef(null);
-  const { supported: micSupported, rec } = useSpeechRecognition();
-  // Mirrors the student widget's own follow-up handling (see app.js) so the
-  // tester reproduces real behavior rather than a subtly different one -
-  // answering a clarification here must resolve exactly as it does live.
   const pendingClarifyRef = useRef(null);
+  const mineRef = useRef({});   // traceIds this playground produced
 
   useEffect(() => { if (!keyVal && active.length) setKeyVal(active[0].key); }, [keys]);
   useEffect(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight; }, [messages]);
-  useEffect(() => () => stopSpeaking(), []);
 
-  const doSpeak = (text) => {
-    if (!speakOn) return;
-    setTtsBusy(true);
-    speak(text, lang, keyVal, {
-      onStart: () => setHint("Generating voice…"),
-      onEnd: () => { setTtsBusy(false); setHint(""); },
-      onError: () => setHint("Voice service unavailable — using device voice instead."),
-    });
-  };
+  // One subscription for both modes - filtering happens at render, so
+  // switching views never drops events that already arrived.
+  useEffect(() => {
+    if (!token) return;
+    const es = new EventSource(`/admin/trace/stream?token=${encodeURIComponent(token)}`);
+    es.onmessage = (e) => {
+      let ev; try { ev = JSON.parse(e.data); } catch { return; }
+      setTraces((prev) => {
+        const cur = prev[ev.traceId] || { traceId: ev.traceId, projectId: ev.projectId, events: [], done: false };
+        return { ...prev, [ev.traceId]: { ...cur, events: [...cur.events, ev], done: cur.done || ev.step === "final_answer" } };
+      });
+      setOrder((prev) => (prev.includes(ev.traceId) ? prev : [ev.traceId, ...prev]).slice(0, 40));
+    };
+    es.onerror = () => {};
+    return () => es.close();
+  }, [token]);
 
   const send = async (text) => {
     const q = (text || input).trim();
     if (!q || busy) return;
-    if (!keyVal) { alert("No active key selected. Generate or activate one in the API Keys tab first."); return; }
-    const pendingClarification = pendingClarifyRef.current;
+    if (!keyVal) { setHint("Pick an active key first — see the API Keys tab."); return; }
+    const pending = pendingClarifyRef.current;
     pendingClarifyRef.current = null;
     setMessages((m) => [...m, { role: "user", text: q }, { role: "thinking" }]);
-    setInput("");
-    setBusy(true);
+    setInput(""); setBusy(true); setHint("");
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-API-Key": keyVal },
-        // uiLanguage matters: without it the backend has no explicit
-        // language signal from the client (see rag/helpers.py's
-        // _english_reply_hint), so the tester was not reproducing what the
-        // real widget - which always sends it - actually does.
         body: JSON.stringify({
           question: q,
           uiLanguage: TTS_LANG_MAP[lang] || "en",
-          // Prior turns, so the router can resolve a follow-up ("btech")
-          // against what was already asked. Only real exchanged text - the
-          // transient thinking/error placeholders carry no meaning.
-          history: messages
-            .filter((x) => (x.role === "user" || x.role === "bot") && x.text)
-            .slice(-8)
-            .map((x) => ({ role: x.role === "user" ? "user" : "assistant", text: x.text })),
-          ...(pendingClarification ? { pendingClarification } : {}),
+          history: messages.filter((x) => (x.role === "user" || x.role === "bot") && x.text)
+            .slice(-8).map((x) => ({ role: x.role === "user" ? "user" : "assistant", text: x.text })),
+          ...(pending ? { pendingClarification: pending } : {}),
         }),
       });
-      if (res.status === 401) { setMessages((m) => [...m.slice(0, -1), { role: "err", text: "401 Unauthorized — that key is inactive or invalid." }]); return; }
+      if (res.status === 401) {
+        setMessages((m) => [...m.slice(0, -1), { role: "err", text: "401 — that key is inactive or invalid." }]);
+        return;
+      }
       const d = await res.json();
       if (d.clarifyOptions) pendingClarifyRef.current = { originalQuestion: q };
-      setMessages((m) => [...m.slice(0, -1), { role: "bot", text: d.answerText, pages: d.pageReferences, model: d.model, source: d.source, clarifyOptions: d.clarifyOptions || null }]);
-      doSpeak(d.answerText);
-    } catch { setMessages((m) => [...m.slice(0, -1), { role: "err", text: "Request failed. Check that the backend is running." }]); }
-    finally { setBusy(false); }
+      if (d.traceId) { mineRef.current[d.traceId] = true; setSelected(d.traceId); }
+      setMessages((m) => [...m.slice(0, -1), {
+        role: "bot", text: d.answerText, source: d.source, model: d.model,
+        traceId: d.traceId || null, clarifyOptions: d.clarifyOptions || null,
+        program: (d.answeredForProgram || {}).label || null,
+      }]);
+    } catch {
+      setMessages((m) => [...m.slice(0, -1), { role: "err", text: "Request failed — is the backend running?" }]);
+    } finally { setBusy(false); }
   };
 
-  const toggleMic = () => {
-    const r = rec.current;
-    if (!r) return;
-    if (recording) { r.stop(); return; }
-    r.lang = lang;
-    r.onresult = (e) => setInput(e.results[0][0].transcript);
-    r.onend = () => { setRecording(false); setHint(""); };
-    r.onerror = () => { setRecording(false); setHint("Couldn't hear that — try again or type."); };
-    try { r.start(); setRecording(true); setHint("Listening… speak now."); } catch {}
-  };
+  const visible = order.filter((id) => feedMode === "all" || mineRef.current[id]);
+  const inspected = selected && traces[selected] ? traces[selected] : null;
 
   return html`
-    <div class="panel live-panel">
-      <h1>Live</h1>
-      <p class="lead">Send a question through a selected key, and watch every guard, retrieval, and generation step happen on the right - the same live feed shows every OTHER real question hitting the backend right now too, not just this one.</p>
-      <div class="live-split">
-        <div class="live-tester">
-          <div class="testing-as">
-            <span class="testing-as-label">Testing as</span>
-            <span class="testing-as-program">${projectName}</span>
-            <span class="muted">answers come from this program's prospectus only</span>
-          </div>
-          <div class="tester-ctrl">
-            <label>Test with key</label>
-            <select class="sel" value=${keyVal} onChange=${(e) => setKeyVal(e.target.value)}>
-              ${active.length === 0 ? html`<option value="">No active keys</option>` : active.map((k) => html`<option key=${k.id} value=${k.key}>${k.label}</option>`)}
-            </select>
-            <div class="tester-tools">
-              <select class="sel" value=${lang} onChange=${(e) => setLang(e.target.value)} aria-label="Voice language">
-                ${VOICE_LANGS.map((l) => html`<option key=${l.code} value=${l.code}>${l.label}</option>`)}
-              </select>
-              <button class=${"icon-btn" + (speakOn ? " on" : "")} title="Read answers aloud"
-                      onClick=${() => { setSpeakOn(!speakOn); if (speakOn) { stopSpeaking(); setTtsBusy(false); setHint(""); } }}>
-                ${ttsBusy ? html`<span class="dots" style=${{ padding: 0 }}><i></i><i></i><i></i></span>` : Icon.speaker}
-              </button>
-            </div>
-          </div>
-          <div class="tester-thread" ref=${threadRef}>
-            ${messages.length === 0 && html`<div class="empty" style=${{margin:"auto"}}><h2 style=${{fontFamily:"var(--font-display)",fontSize:"1.1rem",margin:"0 0 6px"}}>Ask the prospectus</h2><p style=${{color:"var(--ink-2)",fontSize:14}}>Pick an active key above, then ask by typing or speaking.</p></div>`}
+    <div class="pg">
+      <div class="pg-head">
+        <div>
+          <h1>Playground</h1>
+          <p class="lead">Ask as a student would, and watch exactly how the answer was reached.</p>
+        </div>
+        <div class="pg-controls">
+          <span class="pg-target" title="Answers come from this programme's prospectus only">${projectName}</span>
+          <select class="sel" value=${keyVal} onChange=${(e) => setKeyVal(e.target.value)}>
+            ${active.length === 0
+              ? html`<option value="">No active keys</option>`
+              : active.map((k) => html`<option key=${k.id} value=${k.key}>${k.label}</option>`)}
+          </select>
+          <select class="sel" value=${lang} onChange=${(e) => setLang(e.target.value)} aria-label="Language">
+            ${VOICE_LANGS.map((l) => html`<option key=${l.code} value=${l.code}>${l.label}</option>`)}
+          </select>
+        </div>
+      </div>
+
+      <div class="pg-split">
+        <section class="pg-chat">
+          <div class="pg-thread" ref=${threadRef}>
+            ${messages.length === 0 && html`
+              <div class="pg-empty">
+                <h2>Ask anything a student would</h2>
+                <p>Every answer links to the reasoning behind it.</p>
+                <div class="pg-suggestions">
+                  ${["What is the application fee?", "Am I eligible with 60%?", "What documents do I need?"]
+                    .map((q) => html`<button class="chip" key=${q} onClick=${() => send(q)}>${q}</button>`)}
+                </div>
+              </div>`}
             ${messages.map((m, i) => {
-              if (m.role === "user") return html`<div class="row user" key=${i}><div class="bubble">${m.text}</div></div>`;
-              if (m.role === "thinking") return html`<div class="row bot" key=${i}><div class="bubble"><span class="dots"><i></i><i></i><i></i></span></div></div>`;
-              if (m.role === "err") return html`<div class="row bot err" key=${i}><div class="bubble">${m.text}</div></div>`;
-              // Program-clarification prompt: same chips the student widget
-              // shows (see app.js's Message). Without these the tester had no
-              // way to answer "which program?" except typing the name, which
-              // is exactly the path that used to lose the original question.
-              if (m.clarifyOptions) return html`<div class="row bot" key=${i}><div>
-                <div class="bubble">${m.text}</div>
-                <div class="chips" style=${{marginTop:8}}>
-                  ${m.clarifyOptions.map((o) => html`
-                    <button class="chip" key=${o.projectId} disabled=${busy}
-                            onClick=${() => send(o.label)}>${o.label}</button>`)}
-                </div></div></div>`;
-              return html`<div class="row bot" key=${i}><div><div class="bubble">${m.text}</div>
-                <div class="meta">
-                  ${/* Page pills removed alongside the student widget's (see
-                        app.js) so the tester keeps showing what a student
-                        actually sees. Retrieved pages remain visible in the
-                        Live trace's Retrieval step, which is the right place
-                        for them in an operator console. */ ""}
-                  ${m.source === "faq-cache" ? html`<span class="pill cache">⚡ instant</span>` : m.model && html`<span class="pill src">${m.model.replace("sarvam:", "")}</span>`}
-                  <button class="mini-btn" title="Read aloud" onClick=${() => doSpeak(m.text)}>${Icon.play}</button>
-                </div></div></div>`;
+              if (m.role === "user") return html`<div class="pg-msg user" key=${i}><div class="pg-bubble">${m.text}</div></div>`;
+              if (m.role === "thinking") return html`<div class="pg-msg bot" key=${i}><div class="pg-bubble"><span class="dots"><i></i><i></i><i></i></span></div></div>`;
+              if (m.role === "err") return html`<div class="pg-msg bot" key=${i}><div class="pg-bubble err">${m.text}</div></div>`;
+              const isSel = m.traceId && m.traceId === selected;
+              return html`
+                <div class="pg-msg bot" key=${i}>
+                  <div class=${"pg-bubble" + (isSel ? " selected" : "")}>${m.text}</div>
+                  <div class="pg-meta">
+                    ${m.program ? html`<span class="pill program">${m.program}</span>` : ""}
+                    <span class="pill">${m.source}</span>
+                    ${m.traceId ? html`<button class="pg-inspect" onClick=${() => setSelected(m.traceId)}>
+                      ${isSel ? "inspecting" : "inspect"}</button>` : ""}
+                  </div>
+                  ${m.clarifyOptions ? html`<div class="chips" style=${{ marginTop: 8 }}>
+                    ${m.clarifyOptions.map((o) => html`<button class="chip" key=${o.projectId} disabled=${busy}
+                        onClick=${() => send(o.label)}>${o.label}</button>`)}
+                  </div>` : ""}
+                </div>`;
             })}
           </div>
-          <div class="tester-bar">
-            ${micSupported && html`<button class=${"mic" + (recording ? " rec" : "")} title="Speak your question" onClick=${toggleMic}>${Icon.mic}</button>`}
-            <input placeholder="Ask about admissions…" value=${input} onInput=${(e) => setInput(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && send()} />
-            <button class="btn primary" disabled=${busy} onClick=${() => send()}>Send</button>
+          <div class="pg-composer">
+            <input placeholder="Ask about admissions…" value=${input}
+                   onInput=${(e) => setInput(e.target.value)}
+                   onKeyDown=${(e) => e.key === "Enter" && send()} />
+            <button class="btn primary" disabled=${busy} onClick=${() => send()}>${busy ? "…" : "Send"}</button>
           </div>
-          <p class="hint">${hint}</p>
-        </div>
-        <${LiveTraceFeed} token=${token} programNames=${programNames} />
+          ${hint ? html`<p class="hint">${hint}</p>` : ""}
+        </section>
+
+        <aside class="pg-inspector">
+          <div class="pg-inspector-head">
+            <span class="pg-inspector-title">Reasoning</span>
+            <div class="pg-seg">
+              <button class=${feedMode === "mine" ? "on" : ""} onClick=${() => setFeedMode("mine")}>This session</button>
+              <button class=${feedMode === "all" ? "on" : ""} onClick=${() => setFeedMode("all")}>All traffic</button>
+            </div>
+          </div>
+          <div class="pg-inspector-body">
+            ${inspected && feedMode === "mine"
+              ? html`<${TraceCard} trace=${inspected} programNames=${programNames} />`
+              : visible.length === 0
+                ? html`<div class="pg-inspector-empty">
+                    ${feedMode === "mine" ? "Send a question to see how it was answered." : "Waiting for traffic…"}
+                  </div>`
+                : visible.map((id) => html`<${TraceCard} key=${id} trace=${traces[id]} programNames=${programNames} />`)}
+          </div>
+        </aside>
       </div>
     </div>`;
 }
 
 // ---------- Sidebar: nav + projects + auth, one shell ----------
 const TABS = [
-  { id: "tester", label: "Live", icon: Icon.chat },
+  { id: "tester", label: "Playground", icon: Icon.chat },
   { id: "prompts", label: "Prompts", icon: Icon.doc },
   { id: "dashboard", label: "Dashboard", icon: Icon.dashboard },
   { id: "cost", label: "Cost", icon: Icon.coin },
@@ -983,9 +972,9 @@ function App() {
         ${!selectedProjectId && html`<div class="panel"><h1>No project selected</h1><p class="lead">Connect with the admin token, then pick a project from the sidebar or drag the Admission Assistant agent onto "+ New project".</p></div>`}
         ${selectedProjectId && tab === "dashboard" && html`<${Dashboard} token=${token} projectId=${selectedProjectId} />`}
         ${selectedProjectId && tab === "keys" && html`<${KeysPanel} token=${token} projectId=${selectedProjectId} keys=${projectKeys} err=${err} onChange=${() => refresh()} />`}
-        ${selectedProjectId && tab === "tester" && html`<${TesterPanel} keys=${projectKeys} token=${token}
+        ${selectedProjectId && tab === "tester" && html`<${Playground} keys=${projectKeys} token=${token}
            projectName=${(projects.find((p) => p.id === selectedProjectId) || {}).name || selectedProjectId}
-           projectId=${selectedProjectId} programNames=${programNames} />`}
+           programNames=${programNames} />`}
         ${selectedProjectId && tab === "prompts" && html`<${PromptsPanel} token=${token} projectId=${selectedProjectId} />`}
         ${selectedProjectId && tab === "cost" && html`<${Cost} token=${token} projectId=${selectedProjectId} onChange=${() => refresh()} />`}
         ${selectedProjectId && tab === "flagged" && html`<${FlaggedPanel} token=${token} projectId=${selectedProjectId} />`}
