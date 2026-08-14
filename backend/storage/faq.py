@@ -49,7 +49,20 @@ from pathlib import Path
 from .. import config
 from ..core.lang import detect_script
 
-_lock = threading.Lock()
+# RLock, not Lock, and that distinction is load-bearing. Every writer here
+# (add, seed, clear, apply_feedback, resolve_flag) reads the current entries
+# via _load() while holding the lock - read-modify-write is the whole point of
+# holding it. But _load() itself takes the lock on one path: the needs_id
+# backfill that rewrites entries predating feedback support. A plain Lock is
+# not reentrant, so that second acquisition by the SAME thread blocks on a lock
+# that thread already owns, forever, and never releases it.
+#
+# The failure is nastier than a hung request. The lock is module-global across
+# every project, so one deadlocked thread wedges all FAQ writes server-wide -
+# and because the backfill only fires for entries lacking an id, it stays
+# invisible until an older cache file is touched. Observed as admin cache-clears
+# hanging on two projects while a third had just succeeded.
+_lock = threading.RLock()
 _dirty = set()
 _last_flush = {}
 
