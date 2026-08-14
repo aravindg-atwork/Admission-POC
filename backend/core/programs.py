@@ -359,10 +359,27 @@ def needs_comparison(text):
     return _matches(words, _COMPARISON_TRIGGER_WORDS) and _matches(words, _COMPARISON_NOUN_WORDS)
 
 
+# Said explicitly, "all" means all six - not the UG default. Asked "for all
+# course is this fee same?" the answer covered three programmes and closed
+# with "the same across all three", which is not what was asked and quietly
+# leaves the postgraduate programmes unanswered.
+_ALL_PROGRAMS_WORDS = {"all", "every", "each", "सर्व", "सभी", "प्रत्येक"}
+
+
 def comparison_targets(text):
-    """Which projects a comparison answer should pull from: the programs
-    explicitly named (2+), or the three undergraduate programs by default.
-    Only meaningful when needs_comparison(text) is already True.
+    """Which projects a comparison answer should pull from: the programmes
+    explicitly named (2+), every programme when the question says "all", or
+    the three undergraduate programmes by default. Only meaningful when
+    needs_comparison(text) is already True.
+
+    The UG default exists because a 12th-marks eligibility question has no
+    bearing on the postgraduate and doctoral programmes, so including them
+    adds noise rather than coverage. That reasoning does not survive the
+    word "all", which is a direct request for the full set.
     """
     named = detect_programs_multi(text)
-    return named if len(named) >= 2 else list(_UG_PROGRAMS)
+    if len(named) >= 2:
+        return named
+    if _words(text) & _ALL_PROGRAMS_WORDS:
+        return list(PROGRAM_NAMES)
+    return list(_UG_PROGRAMS)

@@ -26,7 +26,10 @@ from ..storage import projects, vectorstore
 #  13 - chunks tagged with their prospectus SECTION and a derived topic
 #       (fees/quota/eligibility/seats/dates/documents/process/academics),
 #       so retrieval can favour the right part of the document
-PIPELINE_VERSION = "13"
+#  14 - chunk topic can be overridden by its CONTENT, so a fact stated far
+#       from its heading (the application fee, under "important
+#       instructions") is tagged for what it says, not where it sits
+PIPELINE_VERSION = "14"
 
 
 def ingest(project_id, pdf_path):

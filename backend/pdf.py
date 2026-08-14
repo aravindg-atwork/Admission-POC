@@ -466,6 +466,33 @@ def _topic_for(heading):
     return "general"
 
 
+
+# Content beats section. A chunk's SECTION is a good default, but some facts
+# live nowhere near the heading that describes them: the application fee is
+# stated under "7. IMPORTANT INSTRUCTIONS TO CANDIDATES", so section-tagging
+# filed it as "process" while a question about it boosted "fees" - actively
+# ranking the ANNEXURE-III admission-fee tables ABOVE the one chunk holding
+# the answer. Observed: a comparison answered "the application fee is not
+# explicitly mentioned for B.V.Sc." one message after quoting it correctly.
+#
+# Application and admission fees are separated deliberately. They are
+# different amounts for different things (Rs. 1,000 to apply; Rs. 62,635 to
+# join) and share the word "fee", which is exactly how they get confused.
+_CONTENT_TOPIC_RULES = (
+    ("application_fee", ("application fee", "application fees")),
+    ("fees", ("admission fee", "admission fees", "college fees", "fee structure",
+               "hostel fees", "tuition fee")),
+)
+
+
+def _content_topic(text):
+    lowered = " ".join((text or "").split()).lower()
+    for topic, phrases in _CONTENT_TOPIC_RULES:
+        if any(ph in lowered for ph in phrases):
+            return topic
+    return None
+
+
 def _page_sections(pages):
     """{page_number: (heading, topic)} with the heading carried FORWARD.
 
@@ -551,7 +578,7 @@ def chunk_pages(pages):
         heading, topic = sections.get(chunk["page"], ("", "general"))
         chunk.setdefault("kind", "")
         chunk["section"] = heading
-        chunk["topic"] = topic
+        chunk["topic"] = _content_topic(chunk["text"]) or topic
     return chunks
 
 

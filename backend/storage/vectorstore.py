@@ -91,6 +91,10 @@ _TOPIC_WEIGHT = 0.12
 # student's question instead. Deliberately deterministic and free - the intent
 # router already costs a call, and this must work when it is unavailable.
 _QUERY_TOPICS = (
+    # Checked before the general fee rule: "application fee" must not boost
+    # the admission-fee tables, which is what happened when both shared one
+    # topic (see pdf.py's _CONTENT_TOPIC_RULES).
+    ("application_fee", ("application",)),
     ("fees", ("fee", "fees", "cost", "costs", "payment", "payments", "refund",
                "deposit", "charges", "tuition", "hostel",
                "शुल्क", "फी", "फीस")),
