@@ -788,6 +788,18 @@ def _program_clarify_guard(ctx):
         # matcher is exactly right about this narrow question.
         if programs.detect_program(getattr(ctx, "original_question", question)):
             return None
+        # Router first, deterministic as the fallback - the original order,
+        # restored after trying it the other way round on 2026-08-16 and
+        # measuring the damage. The reasoning for flipping it was real (the
+        # router said no clarification was needed for "what is the fee?",
+        # which plainly differs per programme) but it generalised two cases
+        # into a rule: needs_program_clarification is a broad TOPIC word list
+        # containing "documents", "apply", "fee" and "merit list", so making
+        # it sufficient on its own turned six answerable questions in section
+        # D into "which programme are you asking about?" in under a second.
+        # 9/14 -> 6/12. The router's nuance is worth more than the word list's
+        # recall here; the fan-out guard below is what actually fixes the
+        # general-question case.
         routed_needs = _routed(ctx, "needs_program_clarification")
         needs_clarify = (routed_needs if routed_needs is not None
                          else programs.needs_program_clarification(question))
@@ -801,6 +813,38 @@ def _program_clarify_guard(ctx):
             return {"answer": text, "pages": [], "model": "guard", "language": language,
                     "source": "clarify-program", "speakable": True, "clarifyOptions": options}
     return None
+
+
+def _general_fanout_guard(ctx):
+    """A general question on the entry point: answer from ALL programmes.
+
+    Runs after _program_clarify_guard, so anything that genuinely differs per
+    programme still gets asked about rather than answered three ways.
+
+    This exists because of the 2026-08-16 split. Before it, `default` held the
+    B.V.Sc. corpus, so "can a student who passed 12th from another board
+    apply?" was answered - from B.V.Sc. alone, silently, whichever programme
+    the student actually wanted. After the split `default` holds no corpus, so
+    the same question reached an empty store and got "no prospectus has been
+    uploaded yet", which is worse: the first answer was at least true for a
+    third of askers.
+
+    Neither is acceptable when the honest answer is "the same for all three".
+    So the question fans out across every programme's corpus and is answered
+    once. Reuses the comparison path, which already retrieves per project,
+    checks provenance and redacts figures it cannot source - built for
+    "compare A and B", and a general question is the degenerate case of it.
+    """
+    if ctx.project_id != config.DEFAULT_PROJECT_ID:
+        return None
+    original = getattr(ctx, "original_question", ctx.question)
+    if programs.detect_program(original):
+        return None          # names a programme - the redirect guard owns it
+    targets = list(programs.PROGRAM_NAMES)
+    ctx.trace("routing", decision="general_fanout", targetPrograms=targets)
+    return comparison._answer_comparison(
+        targets, ctx.question, ctx.script_pref, ctx.ui_language, ctx.language,
+        ctx.hint_language, ctx.hint, ctx.typed_romanized, ctx.cloud_ok, ctx.trace)
 
 
 GUARDS = [
@@ -820,6 +864,7 @@ GUARDS = [
     _program_redirect_guard,
     _unknown_programme_guard,
     _program_clarify_guard,
+    _general_fanout_guard,
 ]
 
 

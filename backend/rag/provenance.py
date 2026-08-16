@@ -234,11 +234,32 @@ def redact(reply, bad_pids, program_names):
         return reply
     marks.sort()
 
+    # A programme's "segment" has to actually be a segment. When a reply names
+    # every programme in ONE sentence - "you can apply for B.V.Sc. & A.H.,
+    # B.F.Sc. and B.Tech. (Dairy Technology)" - consecutive names sit a comma
+    # apart, and replacing that span splices the caveat into the middle of the
+    # list: "...for B.V.Sc. & A.H., B.F.Sc., this isn't clearly stated in the
+    # prospectus excerpts - please confirm... and B.Tech. (Dairy Technology)."
+    # Observed the moment general questions started fanning out across all
+    # three programmes rather than arriving as per-programme comparisons.
+    #
+    # Below this width the text between two programme names is punctuation,
+    # not a claim, so there is nothing to redact there - the caveat goes at the
+    # end of the reply instead, where it still reaches the student and still
+    # reads as a sentence.
+    _MIN_SEGMENT_CHARS = 60
+
     spans = []
+    trailing = []
     for index, (start, pid) in enumerate(marks):
         if pid not in bad_pids:
             continue
         end = marks[index + 1][0] if index + 1 < len(marks) else len(reply)
+        if end - start < _MIN_SEGMENT_CHARS:
+            name = program_names.get(pid, pid)
+            if name not in trailing:
+                trailing.append(name)
+            continue
         # Hand back this span's tail (the next program's own lead-in, e.g.
         # "\n\nFor ") by cutting at the last sentence end or line break.
         chunk = reply[start:end]
@@ -248,6 +269,11 @@ def redact(reply, bad_pids, program_names):
     out = reply
     for start, end, pid in reversed(spans):
         out = out[:start] + _REDACTION.format(name=program_names.get(pid, pid)) + out[end:]
+    for name in trailing:
+        # "For " supplies the lead-in the segmented form gets from the reply
+        # itself - without it the appended caveat starts mid-clause ("B.F.Sc.,
+        # this isn't clearly stated...") and reads as a fragment.
+        out = out.rstrip() + " For " + _REDACTION.format(name=name).strip()
     return out
 
 
