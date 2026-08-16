@@ -10,6 +10,7 @@ answer.py both get them from here rather than importing each other.
 
 import re
 
+from ..core import vocabulary
 from ..core import glossary, programs, transliterate
 from ..prompts.canned import _INJECTION_REFUSAL_TEMPLATES
 from ..prompts.system import GREETING_PROMPT_BASE, SYSTEM_PROMPT_BASE
@@ -346,7 +347,15 @@ def _build_retrieval_text(question, language, hint_language, ui_language):
     """
     if language == "latin":
         boost = _english_eligibility_boost(question)
-        return f"{question} {boost}" if boost else question
+        base = f"{question} {boost}" if boost else question
+        # Bridge the student's words to the prospectus's own wording before
+        # the lexical half of retrieval ever runs. Measured gap: "what
+        # percentage is required for SC/ST/OBC candidates?" never retrieved
+        # the chunk holding "47.50% marks in case of Reserved category",
+        # because the document does not contain SC, ST or OBC - which is the
+        # retrieval half of the Q50 wrong answer. Additive, so a question that
+        # already retrieved correctly keeps every signal it had.
+        return vocabulary.expand(base)
     # llm.translate_to_english's own docstring/history documents that naming
     # the source language measurably improves translation accuracy - but that
     # only fires when the passed language resolves to hi/mr/ta (see

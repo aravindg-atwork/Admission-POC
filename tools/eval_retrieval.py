@@ -47,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend import config  # noqa: E402
 from backend.generation import embeddings  # noqa: E402
+from backend.rag.helpers import _build_retrieval_text  # noqa: E402
 from backend.storage import projects, vectorstore  # noqa: E402
 
 # (project, question, verbatim string from that project's prospectus)
@@ -114,8 +115,16 @@ def main():
             unscored.append((project_id, question, needle))
             continue
 
+        # Mirror the pipeline exactly (see answer.py's retrieval block): the
+        # vector comes from the question as typed, but the LEXICAL half gets
+        # _build_retrieval_text, which appends formal-prospectus anchor words
+        # for eligibility-style questions. The first version of this harness
+        # passed the raw question as query_text and so measured a weaker
+        # retrieval than the system actually performs - a measurement tool
+        # that does not run the real path reports a number about nothing.
         vector = embeddings.embed([question])[0]
-        hits = vectorstore.search(store, vector, top_k=args.k, query_text=question)
+        retrieval_text = _build_retrieval_text(question, "latin", None, "en")
+        hits = vectorstore.search(store, vector, top_k=args.k, query_text=retrieval_text)
         # Matched on CONTENT, not identity: search() deliberately returns
         # copies of the entries so a per-query score cannot leak into the
         # shared cached store, so `entry is hit` never matches and the first
