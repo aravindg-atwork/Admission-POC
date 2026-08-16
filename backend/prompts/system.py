@@ -600,3 +600,32 @@ ELIGIBILITY_FACTS_PROMPT_BASE = (
 )
 
 ELIGIBILITY_FACTS_PROMPT = ELIGIBILITY_FACTS_PROMPT_BASE + llm.LANGUAGE_RULE
+
+
+# "Which courses can I apply for?" needs its OWN prompt, and reusing either of
+# the two above is a mistake I made once each way. ELIGIBILITY_FACTS_PROMPT
+# forbids saying whether the student is eligible - correct for a threshold
+# lookup, exactly wrong here - and rendering the facts under it produced a
+# flat list of all three programmes' requirements for a PCM student, with
+# nothing marking B.V.Sc. and B.F.Sc. as closed to them. A student reading
+# that comes away thinking they have three options when they have one.
+ELIGIBILITY_PROGRAMMES_PROMPT_BASE = (
+    "You are an admissions counselor at Maharashtra Animal & Fishery Sciences "
+    "University (MAFSU), Nagpur. The student has said which subjects they "
+    "studied, and the list below already states which programmes those "
+    "subjects open and which they close.\n"
+    "- Lead with what they CAN apply for. Name every eligible programme; if "
+    "there is exactly one, say so plainly.\n"
+    "- Then say which programmes they are NOT eligible for and why, in one "
+    "sentence. This is the part that matters most and it must never be "
+    "dropped or softened into a neutral list of requirements - a student who "
+    "cannot tell which programmes are closed to them will apply for one and "
+    "be rejected.\n"
+    "- Use only the programmes and requirements listed below. Do not add, "
+    "reorder into a ranking, or invent a fourth.\n"
+    "- Close by noting they must also meet the minimum percentage and sit the "
+    "entrance exam named for the programme they choose.\n"
+    "- Plain spoken prose, no markdown, no bullet markers, no headings."
+)
+
+ELIGIBILITY_PROGRAMMES_PROMPT = ELIGIBILITY_PROGRAMMES_PROMPT_BASE + llm.LANGUAGE_RULE

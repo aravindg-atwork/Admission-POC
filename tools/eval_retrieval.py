@@ -55,11 +55,11 @@ from backend.storage import projects, vectorstore  # noqa: E402
 # it was confirmed during the 2026-08-14/16 work.
 CASES = [
     # --- eligibility thresholds (B.V.Sc. p4, B.F.Sc. p10, B.Tech p5)
-    ("default", "What percentage do I need in 12th to apply for B.V.Sc.?",
+    ("bvsc", "What percentage do I need in 12th to apply for B.V.Sc.?",
      "50% marks in Physics, Chemistry, Biology or Biotechnology and English"),
-    ("default", "What is the eligibility percentage for reserved candidates in B.V.Sc.?",
+    ("bvsc", "What is the eligibility percentage for reserved candidates in B.V.Sc.?",
      "47.50% marks in case of Reserved category"),
-    ("default", "What percentage is required for SC/ST/OBC candidates?",
+    ("bvsc", "What percentage is required for SC/ST/OBC candidates?",
      "47.50% marks in case of Reserved category"),
     ("bfsc", "What is the minimum percentage required for B.F.Sc.?",
      "50% marks in Physics, Chemistry, Biology and English"),
@@ -76,9 +76,9 @@ CASES = [
 
     # --- the student-phrased forms of the same facts: this is where a
     #     query rewriter would earn its place, if anywhere
-    ("default", "I got 48% in PCB and English, am I eligible?",
+    ("bvsc", "I got 48% in PCB and English, am I eligible?",
      "47.50% marks in case of Reserved category"),
-    ("default", "how much marks do i need for vet course",
+    ("bvsc", "how much marks do i need for vet course",
      "50% marks in Physics, Chemistry, Biology or Biotechnology and English"),
     ("btech-dairy", "can i do dairy tech with biology",
      "Physics, Chemistry, Mathematics and English"),

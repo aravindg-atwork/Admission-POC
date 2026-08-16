@@ -24,7 +24,7 @@ import unicodedata
 # a question naming a retired programme route to a project that no longer
 # exists, which fails far less clearly than not recognising the name at all.
 PROGRAM_NAMES = {
-    "default": "B.V.Sc. & A.H.",
+    "bvsc": "B.V.Sc. & A.H.",
     "bfsc": "B.F.Sc.",
     "btech-dairy": "B.Tech. (Dairy Technology)",
 }
@@ -84,7 +84,7 @@ _PROGRAM_ALIASES = {
     # eligibility guard fell through to the router - which answered about
     # B.Tech. (Dairy Technology). It is the word a student is most likely to
     # use for this course, and now that M.V.Sc. is retired it is unambiguous.
-    "default": ("bvsc", "animalhusbandry", "veterinary", "vet",
+    "bvsc": ("bvsc", "animalhusbandry", "veterinary", "vet",
                 "veterinaryscience", "बवहएसस", "बवएसस", "पशवदयकय",
                 "பவஎஸச", "கலநட"),
     "bfsc": ("bfsc", "fishery", "fisheries", "बएफएसस", "मतसय",
@@ -327,7 +327,11 @@ def is_bare_program_reply(text):
 # same set - kept as its own name because comparison_targets' intent ("the
 # sensible default set for a generic question") is not the same statement as
 # "all programmes", and they will diverge again if a PG programme returns.
-_UG_PROGRAMS = ("default", "bfsc", "btech-dairy")
+# Project ids, and "default" is deliberately NOT among them: it is the
+# general entry point with no corpus of its own since the 2026-08-16
+# split. Leaving it here would reintroduce exactly the bug the split
+# removed - a question naming no programme answering from B.V.Sc.
+_UG_PROGRAMS = ("bvsc", "bfsc", "btech-dairy")
 
 # Word-level co-occurrence, not phrase matching: a trigger word ("which",
 # "all", "compare"...) AND a course/program noun must both appear SOMEWHERE

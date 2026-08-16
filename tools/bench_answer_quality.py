@@ -48,23 +48,23 @@ CASES = [
     # guard look like a quality problem.
 
     # --- application fee: identical across programmes (BVSc p.16, BFSc p.18, BTech p.16)
-    ("default", "what is the application fee for bvsc", ["1000", "700"], []),
+    ("bvsc", "what is the application fee", ["1000", "700"], []),
     ("bfsc", "what is the application fee", ["1000", "700"], []),
     ("btech-dairy", "what is the application fee", ["1000", "700"], []),
 
     # --- admission fee: DIFFERENT per programme. The contamination trap.
-    ("default", "what is the admission fee for bvsc", ["62635", "62,635"], ["40610", "40,610"]),
+    ("bvsc", "what is the admission fee", ["62635", "62,635"], ["40610", "40,610"]),
     ("bfsc", "what is the admission fee", ["40610", "40,610"], ["62635", "62,635"]),
     ("btech-dairy", "what is the admission fee", ["40610", "40,610"], ["62635", "62,635"]),
 
     # --- eligibility percentage (BVSc p.4, BFSc p.10, BTech p.5)
-    ("default", "what is the minimum percentage needed for bvsc unreserved category", ["50"], []),
+    ("bvsc", "what is the minimum percentage needed for unreserved category", ["50"], []),
     ("bfsc", "what is the minimum percentage needed for unreserved category", ["50"], []),
     ("btech-dairy", "what is the minimum percentage needed for unreserved category", ["50"], []),
 
     # --- subject stream differs: BTech needs Mathematics, BVSc/BFSc need Biology
     ("btech-dairy", "which subjects do I need in 12th", ["Mathematics"], ["Biology"]),
-    ("default", "which subjects do I need in 12th for bvsc", ["Biology"], ["Mathematics"]),
+    ("bvsc", "which subjects do I need in 12th", ["Biology"], ["Mathematics"]),
 
     # --- routed from the default widget to another programme: the redirect path
     ("default", "what is the admission fee for btech dairy", ["40610", "40,610"], ["62635", "62,635"]),

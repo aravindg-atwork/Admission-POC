@@ -156,8 +156,13 @@ CASES = [
     C("C", 32, "I studied PCB in 12th. Can you tell me all the MAFSU undergraduate "
                 "courses for which I am eligible?",
       expect=["B.F.Sc", "BFSc", "Fishery"], forbid=["only"], no_clarify=True),
+    # Must NOT forbid "B.V.Sc" outright: the correct answer names it in order
+    # to say it is CLOSED to a PCM student, which is the most important
+    # sentence in the reply. Forbidding the word punishes the right answer -
+    # the same assertion bug this suite already had on Q14 with "Dairy".
     C("C", 33, "I studied PCM. Which MAFSU courses can I apply for?",
-      expect=["Dairy", "B.Tech"], forbid=["B.V.Sc"], no_clarify=True),
+      expect=["Dairy", "B.Tech"], forbid=["not eligible for B.Tech"],
+      no_clarify=True),
     C("C", 34, "What are the minimum marks and entrance exam requirements for all "
                 "three undergraduate courses?",
       expect=["47.5"], no_clarify=True),

@@ -33,7 +33,7 @@ import re
 # SUBJECT COMBINATION, never on the overall aggregate. Conflating the two is
 # what made Q25 tell an ineligible student to apply.
 RULES = {
-    "default": {
+    "bvsc": {
         "label": "B.V.Sc. & A.H.",
         "unreserved": 50.0,
         "reserved": 47.50,
@@ -283,6 +283,30 @@ def thresholds_for(text, project_id=None):
             out.append((rule["label"], name, rule[name],
                         rule["subject_label"], rule["page"]))
     return out
+
+
+_WHICH_PROGRAMMES_RE = re.compile(
+    r"\b(which|what|all)\b[^?]{0,60}\b(courses?|programmes?|programs?|degrees?|"
+    r"options?)\b", re.I)
+_APPLY_RE = re.compile(
+    r"\b(apply|eligible|eligibility|qualify|can i (do|join|take)|opt for)\b", re.I)
+
+
+def is_which_programmes_question(text):
+    """"Which courses can I apply for?" - answerable from subjects alone.
+
+    A whole family the assistant kept getting wrong by answering with ONE
+    programme: a PCB student was told B.V.Sc. was "the only undergraduate
+    course" they were eligible for (B.F.Sc. also takes PCB), and a PCM student
+    was sent to B.V.Sc., which requires Biology and which they cannot enter.
+    eligible_programmes() has always computed this correctly; nothing asked it.
+
+    Requires the student to have described their OWN subjects - otherwise
+    there is nothing to match against and clarification is the right response.
+    """
+    if not text or not describes_own_subjects(text):
+        return False
+    return bool(_WHICH_PROGRAMMES_RE.search(text) and _APPLY_RE.search(text))
 
 
 def evaluate(project_id, text):

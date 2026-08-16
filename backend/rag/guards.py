@@ -24,7 +24,8 @@ from ..core import textclean
 from ..core.intent import is_prompt_injection, needs_percentage_clarification
 from ..generation import embeddings, llm
 from ..storage import projects, vectorstore
-from ..prompts.system import ELIGIBILITY_FACTS_PROMPT, ELIGIBILITY_SYSTEM_PROMPT
+from ..prompts.system import (ELIGIBILITY_FACTS_PROMPT, ELIGIBILITY_PROGRAMMES_PROMPT,
+                              ELIGIBILITY_SYSTEM_PROMPT)
 from ..prompts.canned import (_DISPUTE_PROMPT, _META_ACKNOWLEDGE_TEXT, _OFF_TOPIC_TASK_PROMPT,
                                _UNKNOWN_PROGRAMME_TEXT,
                                _PROGRAM_LIST_TEXT,
@@ -410,6 +411,28 @@ def _eligibility_guard(ctx):
         candidate = named or (routed[0] if len(routed) == 1 else None)
     else:
         candidate = project_id
+    # "Which courses can I apply for?" - answered from the student's own
+    # subjects against all three programmes, before anything programme-scoped
+    # runs. This family kept collapsing to a single programme: a PCB student
+    # was told B.V.Sc. was "the only" course open to them when B.F.Sc. also
+    # takes PCB, and a PCM student was sent to B.V.Sc., which requires Biology.
+    if eligibility.is_which_programmes_question(original):
+        matches = eligibility.eligible_programmes(original_subjects(original))
+        if matches:
+            ctx.trace("eligibility", kind="which_programmes",
+                      programmes=matches)
+            spoken = llm.generate_scoped(
+                config.CHAT_PRIMARY, ELIGIBILITY_PROGRAMMES_PROMPT,
+                _which_programmes_facts(matches) + ctx.hint,
+                ctx.question, timeout=60, allow_cloud=ctx.cloud_ok)
+            if spoken is not None:
+                text, model = spoken
+                return {"answer": textclean.clean_for_display(text),
+                        "pages": sorted({eligibility.RULES[m]["page"] for m in matches}),
+                        "model": model, "language": ctx.language,
+                        "source": "eligibility", "speakable": True}
+        return None
+
     # Threshold LOOKUPS ("what percentage do SC/ST/OBC candidates need?")
     # carry no marks, so evaluate() would report insufficient and let them
     # fall through to retrieval - which answered Q50 with "50%, and no
@@ -474,6 +497,34 @@ def _eligibility_guard(ctx):
             "pages": [result.get("page")] if result.get("page") else [],
             "model": model, "language": ctx.language,
             "source": "eligibility", "speakable": True}
+
+
+def original_subjects(text):
+    """The subjects the student says they studied."""
+    return eligibility.extract(text)["subjects"]
+
+
+def _which_programmes_facts(matches):
+    """Which programmes their subjects open, and which they close, as facts.
+
+    Names the programmes they are NOT eligible for too: "which can I apply
+    for" is really "where do I stand", and a student who studied PCM needs to
+    know B.V.Sc. is closed to them more than they need a list of one.
+    """
+    eligible = [eligibility.RULES[m] for m in matches]
+    excluded = [r for pid, r in eligibility.RULES.items() if pid not in matches]
+    lines = ["FACTS (already checked against the prospectus, state exactly these):"]
+    for rule in eligible:
+        lines.append(f"- ELIGIBLE for {rule['label']}, which requires "
+                     f"{rule['subject_label']} and {rule['entrance']}.")
+    for rule in excluded:
+        lines.append(f"- NOT eligible for {rule['label']}: it requires "
+                     f"{rule['subject_label']}, which their subjects do not cover.")
+    lines.append("List every programme above. Do not say one of them is the ONLY "
+                 "option unless exactly one is listed as eligible.")
+    lines.append("This is about subjects only - they still need the minimum "
+                 "percentage and the entrance exam, so say that briefly at the end.")
+    return "\n".join(lines)
 
 
 def _threshold_facts(rows):

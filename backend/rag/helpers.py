@@ -22,11 +22,18 @@ from ..generation import llm
 # would call itself the "B.V.Sc. & A.H." assistant even while correctly
 # answering from, say, the M.V.Sc. prospectus. Built per-call now instead of
 # once at import time, from programs.PROGRAM_NAMES.
-_DEFAULT_PROGRAM_NAME = "B.V.Sc. & A.H."
+# The fallback for a project id that names no specific programme - which,
+# since the 2026-08-16 split, is exactly what "default" is: the general entry
+# point, holding no corpus. It used to fall back to "B.V.Sc. & A.H.", so every
+# prompt built on the general widget introduced itself as the veterinary
+# assistant and answered as one. That default is the whole reason a PCM
+# student was told to apply for B.V.Sc. and a question about NEET vs MHT-CET
+# came back covering only the two MHT-CET programmes.
+_GENERAL_PROGRAM_NAME = "MAFSU undergraduate admissions"
 
 
 def _program_name(project_id):
-    return programs.PROGRAM_NAMES.get(project_id, _DEFAULT_PROGRAM_NAME)
+    return programs.PROGRAM_NAMES.get(project_id, _GENERAL_PROGRAM_NAME)
 
 
 def _system_prompt(project_id):
