@@ -42,6 +42,7 @@ RULES = {
         "either": {"biology", "biotechnology"},
         "subject_label": "Physics, Chemistry, Biology or Biotechnology and English",
         "entrance": "NEET-UG-2026",
+        "entrance_key": "neet",
         "page": 4,
     },
     "bfsc": {
@@ -52,6 +53,7 @@ RULES = {
         "either": set(),
         "subject_label": "Physics, Chemistry, Biology and English",
         "entrance": "MHT-CET 2026",
+        "entrance_key": "cet",
         "page": 10,
     },
     "btech-dairy": {
@@ -62,6 +64,7 @@ RULES = {
         "either": set(),
         "subject_label": "Physics, Chemistry, Mathematics and English",
         "entrance": "MHT-CET 2026",
+        "entrance_key": "cet",
         "page": 5,
     },
 }
@@ -180,6 +183,82 @@ def extract(text):
 
     return {"subject_percent": subject_percent, "overall_percent": overall_percent,
             "category": category, "subjects": subjects}
+
+
+# The entrance exam is not a soft preference: every prospectus makes admission
+# itself depend on it. B.F.Sc. p10 and B.Tech. (D.T.) p5 both say the candidate
+# "should have also appeared for Common Entrance Test (MHT-CET 2026)", and
+# B.V.Sc. p4 says admission "shall be made on the basis of his/her inter-se
+# merit in the NEET-UG-2026 qualifying score". Without the exam there is no
+# merit score to admit on.
+#
+# Q19 is what the absence of this check cost: "I didn't appear for MHT-CET. Can
+# I still get admission to B.F.Sc.?" was answered "Yes, you can still get
+# admission..." and then, in the same reply, "you must also appear for
+# MHT-CET". This module's docstring has listed that failure since it was
+# written, but nothing here ever read the "entrance" field, so the question
+# went to plain RAG with nothing constraining it - and a model asked to weigh
+# strong marks against a missed exam leads with the marks.
+#
+# Only NEGATED mentions count, and only for the exam THIS programme admits on.
+# Both halves matter: "Do I need to appear for MHT-CET?" is a question about
+# the rule rather than a claim to have skipped it, and a B.F.Sc. applicant who
+# missed NEET has missed an exam B.F.Sc. does not use.
+#
+# Bare "no" is deliberately NOT a negation marker here. "There is no exemption
+# from MHT-CET" and "No candidate is admitted without MHT-CET" both contain a
+# negation next to the exam name while asserting the exact opposite of what
+# this function is looking for.
+_ENTRANCE_NEGATION = (
+    r"(?:did|do|does|have|has|had|am|is|are|was|were|will|would|can|could|"
+    r"shall|should)\s*n[o']?t|never|without|missed|skipped"
+)
+_NOT_APPEARED_RE = re.compile(
+    r"\b(?:" + _ENTRANCE_NEGATION + r")\b"
+    r"(?:\W+\w+){0,3}?\W+"
+    r"(neet|mht[\s.\-]*cet|mh[\s.\-]*cet|cet)\b",
+    re.I,
+)
+# Sentences that negate an EXEMPTION rather than the student's attendance.
+# Checked before the negation scan because "no exemption from MHT-CET" matches
+# the shape above exactly - the negation attaches to the waiver, not the exam.
+_EXEMPTION_RE = re.compile(
+    r"\b(exemption|exempt|waiver|waived|relaxation|excused)\b", re.I)
+
+# The student has to be talking about THEMSELVES. Same discipline
+# describes_own_subjects already applies to subjects, and for the same reason:
+# "No candidate is admitted without MHT-CET" contains a negation next to the
+# exam name but states the rule rather than a personal circumstance, and
+# answering it with "you are not eligible" is the same class of error as
+# delivering a personal verdict on a general subject question.
+_FIRST_PERSON_RE = re.compile(r"\b(i|i'?m|i'?ve|my|me|mine)\b", re.I)
+
+
+def _named_entrance_key(token):
+    """Which exam a matched token names: 'neet', 'cet', or None."""
+    squashed = re.sub(r"[^a-z]", "", token.lower())
+    if "neet" in squashed:
+        return "neet"
+    if "cet" in squashed:
+        return "cet"
+    return None
+
+
+def missing_entrance_exam(project_id, text):
+    """The exam this programme admits on, when the student says they did not
+    sit it. None otherwise - including when they missed a DIFFERENT exam.
+
+    Returns the display name ("MHT-CET 2026") so the caller can name it back.
+    """
+    rule = RULES.get(project_id)
+    if not rule or not text:
+        return None
+    if _EXEMPTION_RE.search(text) or not _FIRST_PERSON_RE.search(text):
+        return None
+    for match in _NOT_APPEARED_RE.finditer(text):
+        if _named_entrance_key(match.group(1)) == rule["entrance_key"]:
+            return rule["entrance"]
+    return None
 
 
 def threshold(project_id, category):
@@ -391,6 +470,16 @@ def evaluate(project_id, text):
     rule = RULES.get(project_id)
     if not rule:
         return {"verdict": "insufficient", "reason": "unknown_programme"}
+
+    # Before anything to do with marks. A missed entrance exam is disqualifying
+    # on its own, and checking it first is what stops strong marks from leading
+    # the answer - the Q19 failure was an opening "Yes, you can still get
+    # admission" with the exam requirement appended as a contradiction.
+    missed = missing_entrance_exam(project_id, text)
+    if missed:
+        return {"verdict": "not_eligible", "reason": "entrance_exam",
+                "entrance": missed, "programme": rule["label"],
+                "page": rule["page"]}
 
     facts = extract(text)
     category = facts["category"]

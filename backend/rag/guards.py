@@ -596,6 +596,22 @@ def _eligibility_facts(result):
     is what produced the wrong answers this replaces.
     """
     programme = result.get("programme")
+    if result["reason"] == "entrance_exam":
+        # Phrased hardest of the three. The failure being replaced (Q19) was
+        # not a wrong figure but a self-contradiction - "Yes, you can still get
+        # admission" followed by "you must also appear for MHT-CET" - which is
+        # what a model produces when it weighs strong marks against a missed
+        # exam instead of being told the verdict. So the No is stated first and
+        # every escape route is closed explicitly.
+        return (f"VERDICT (already decided, state exactly this): the student is NOT "
+                f"eligible for {programme}. Reason: they have said they did not "
+                f"appear for {result['entrance']}, and admission to {programme} is "
+                f"made on the basis of that examination - there is no admission "
+                f"without it. Lead with a clear 'No' in the very first sentence. Do "
+                f"NOT say they can still get admission. Do NOT offer 12th marks, "
+                f"subjects, or any other route as a way around it. You may close "
+                f"with one short sentence about appearing for {result['entrance']} "
+                f"for the next admission cycle.")
     if result["reason"] == "subjects":
         return (f"VERDICT (already decided, state exactly this): the student is NOT "
                 f"eligible for {programme}. Reason: {programme} requires "

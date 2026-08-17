@@ -231,6 +231,152 @@ class PercentageScopeReply(unittest.TestCase):
             "am I eligible?")
 
 
+class EntranceExam(unittest.TestCase):
+    """Q19 — the contradiction.
+
+    "I didn't appear for MHT-CET. Can I still get admission to B.F.Sc.?" was
+    answered "Yes, you can still get admission... you must also appear for
+    MHT-CET." This module's docstring has named Q19 as one of the four failures
+    it exists to fix since it was written, but `evaluate()` never had an
+    entrance-exam check — `RULES` carried an unused "entrance" field and the
+    question fell through to plain RAG with nothing deterministic constraining
+    it.
+
+    Grounded in the prospectuses, not in the assistant's own output:
+      B.F.Sc.       p10  "the candidate should have also appeared for Common
+                          Entrance Test (MHT-CET 2026)"
+      B.Tech. (DT)  p5   same clause
+      B.V.Sc.       p4   "admission ... shall be made on the basis of his/her
+                          inter-se merit in the NEET-UG-2026 qualifying score"
+
+    Without the exam there is no merit score to admit on, so this is a real
+    disqualifier rather than a soft preference.
+    """
+
+    def test_q19_missing_mht_cet_disqualifies_bfsc(self):
+        self.assertEqual(
+            eligibility.missing_entrance_exam(
+                "bfsc", "I didn't appear for MHT-CET. Can I still get admission to B.F.Sc.?"),
+            "MHT-CET 2026")
+
+    def test_q20_without_neet_disqualifies_bvsc(self):
+        self.assertEqual(
+            eligibility.missing_entrance_exam(
+                "bvsc", "Can I get B.V.Sc. admission without NEET if I have high 12th marks?"),
+            "NEET-UG-2026")
+
+    def test_btech_dairy_also_requires_mht_cet(self):
+        self.assertEqual(
+            eligibility.missing_entrance_exam(
+                "btech-dairy", "I have not appeared for MHT-CET"),
+            "MHT-CET 2026")
+
+    def test_the_wrong_exam_is_not_a_disqualifier(self):
+        """B.F.Sc. is admitted on MHT-CET, so not sitting NEET says nothing
+        about it. Treating any missed exam as disqualifying would turn away a
+        student who is perfectly eligible.
+        """
+        self.assertIsNone(
+            eligibility.missing_entrance_exam("bfsc", "I didn't appear for NEET"))
+        self.assertIsNone(
+            eligibility.missing_entrance_exam("bvsc", "I didn't appear for MHT-CET"))
+
+    def test_phrasing_variants(self):
+        for text in ("I did not appear for MHT-CET",
+                     "I haven't appeared for MHT-CET",
+                     "I never took MHT-CET",
+                     "I missed the MHT-CET exam",
+                     "I am not appearing for MHT-CET",
+                     "Can I apply without MHT-CET?"):
+            self.assertEqual(
+                eligibility.missing_entrance_exam("bfsc", text), "MHT-CET 2026", text)
+
+    def test_a_student_who_did_appear_is_not_disqualified(self):
+        for text in ("I appeared for MHT-CET",
+                     "I have given MHT-CET",
+                     "I wrote MHT-CET and scored 90 percentile"):
+            self.assertIsNone(eligibility.missing_entrance_exam("bfsc", text), text)
+
+    def test_asking_whether_the_exam_is_needed_is_not_a_claim(self):
+        """"Do I need to appear for MHT-CET?" is a question about the rule, not
+        a statement that they skipped it. Answering it with "you are not
+        eligible" would be the same class of error as delivering a personal
+        verdict on a general subject question.
+        """
+        for text in ("Do I need to appear for MHT-CET?",
+                     "Is MHT-CET compulsory for B.F.Sc.?",
+                     "When is the MHT-CET exam?"):
+            self.assertIsNone(eligibility.missing_entrance_exam("bfsc", text), text)
+
+    def test_a_negation_about_something_else_does_not_fire(self):
+        """The trap in a keyword negation list: these sentences contain a
+        negation AND the exam name, but assert the exam IS required. Two
+        separate guards catch them — an exemption is being negated, and the
+        sentence is about candidates in general rather than the student.
+        """
+        for text in ("There is no exemption from MHT-CET",
+                     "There is no waiver for MHT-CET",
+                     "No candidate is admitted without MHT-CET",
+                     "Students cannot be admitted without MHT-CET"):
+            self.assertIsNone(eligibility.missing_entrance_exam("bfsc", text), text)
+
+    def test_the_claim_must_be_about_the_student(self):
+        """Mirrors describes_own_subjects: a general statement of the rule is
+        not a personal circumstance to deliver a verdict on.
+        """
+        self.assertIsNone(
+            eligibility.missing_entrance_exam(
+                "bfsc", "Are candidates admitted who did not appear for MHT-CET?"))
+        self.assertEqual(
+            eligibility.missing_entrance_exam(
+                "bfsc", "I did not appear for MHT-CET"),
+            "MHT-CET 2026")
+
+    def test_unknown_programme_has_no_entrance_rule(self):
+        self.assertIsNone(eligibility.missing_entrance_exam("mvsc", "I didn't appear for NEET"))
+
+    def test_every_rule_declares_which_exam_it_admits_on(self):
+        for pid, rule in eligibility.RULES.items():
+            self.assertIn("entrance_key", rule, pid)
+            self.assertTrue(rule["entrance"], pid)
+
+
+class EvaluateEntranceExam(unittest.TestCase):
+    """The verdict, end to end."""
+
+    def test_q19_is_now_a_deterministic_refusal(self):
+        result = eligibility.evaluate(
+            "bfsc", "I didn't appear for MHT-CET. Can I still get admission to B.F.Sc.?")
+        self.assertEqual(result["verdict"], "not_eligible")
+        self.assertEqual(result["reason"], "entrance_exam")
+        self.assertEqual(result["entrance"], "MHT-CET 2026")
+
+    def test_q20_is_now_a_deterministic_refusal(self):
+        result = eligibility.evaluate(
+            "bvsc", "Can I get B.V.Sc. admission without NEET if I have high 12th marks?")
+        self.assertEqual(result["verdict"], "not_eligible")
+        self.assertEqual(result["reason"], "entrance_exam")
+
+    def test_the_verdict_carries_its_source_page(self):
+        result = eligibility.evaluate("bfsc", "I didn't appear for MHT-CET")
+        self.assertEqual(result["page"], eligibility.RULES["bfsc"]["page"])
+
+    def test_a_missed_exam_outranks_good_marks(self):
+        """The whole failure mode: strong marks made the answer open with
+        "Yes", and the exam requirement was appended afterwards as a
+        contradiction.
+        """
+        result = eligibility.evaluate(
+            "bfsc", "I didn't appear for MHT-CET but I have 90% in PCB and English")
+        self.assertEqual(result["verdict"], "not_eligible")
+        self.assertEqual(result["reason"], "entrance_exam")
+
+    def test_the_wrong_exam_does_not_change_an_ordinary_verdict(self):
+        result = eligibility.evaluate(
+            "bfsc", "I didn't appear for NEET but I have 90% in PCB and English")
+        self.assertEqual(result["verdict"], "eligible")
+
+
 class Evaluate(unittest.TestCase):
     """The verdict itself."""
 
