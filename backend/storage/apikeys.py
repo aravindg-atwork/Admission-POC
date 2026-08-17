@@ -13,6 +13,7 @@ import secrets
 import threading
 from datetime import datetime, timezone
 
+from . import atomic
 from .. import config
 
 _lock = threading.Lock()
@@ -25,8 +26,9 @@ def _load():
 
 
 def _save(keys):
-    config.KEYS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    config.KEYS_PATH.write_text(json.dumps(keys, indent=2), encoding="utf-8")
+    # Atomic: a truncated write here revokes every integration's credential at
+    # once, and the file is rewritten on ordinary traffic.
+    atomic.write_json(config.KEYS_PATH, keys, indent=2)
 
 
 def _new_entry(label, project_id):

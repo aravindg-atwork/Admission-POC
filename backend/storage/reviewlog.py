@@ -13,6 +13,8 @@ import json
 import threading
 import time
 
+from . import atomic
+
 _lock = threading.Lock()
 _CAP = 500  # bounds file growth; old entries age out, same idea as stats.py's _RECENT_CAP
 
@@ -26,8 +28,7 @@ def append(review_log_path, record):
         entries = load(review_log_path)
         entries.append({**record, "ts": time.time()})
         entries = entries[-_CAP:]
-        review_log_path.parent.mkdir(parents=True, exist_ok=True)
-        review_log_path.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic.write_json(review_log_path, entries, ensure_ascii=False, indent=2)
 
 
 def load(review_log_path):

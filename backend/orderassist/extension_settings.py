@@ -12,6 +12,7 @@ import json
 import threading
 from copy import deepcopy
 
+from ..storage import atomic
 from .. import config
 
 _lock = threading.Lock()
@@ -37,7 +38,7 @@ def _save(settings):
             diff[k] = v
         elif k not in config.DEFAULT_EXTENSION_SETTINGS:
             diff[k] = v
-    config.EXTENSION_SETTINGS_PATH.write_text(json.dumps(diff, indent=2), encoding="utf-8")
+    atomic.write_json(config.EXTENSION_SETTINGS_PATH, diff, indent=2)
 
 
 def get_settings():

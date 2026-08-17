@@ -14,7 +14,7 @@ import shutil
 import threading
 from datetime import datetime, timezone
 
-from . import apikeys
+from . import apikeys, atomic
 from .. import config
 
 _lock = threading.Lock()
@@ -27,8 +27,9 @@ def _load():
 
 
 def _save(projects):
-    config.PROJECTS_REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    config.PROJECTS_REGISTRY_PATH.write_text(json.dumps(projects, indent=2), encoding="utf-8")
+    # Atomic: without this registry no project resolves, so a truncated write
+    # takes the whole service down rather than degrading one corner of it.
+    atomic.write_json(config.PROJECTS_REGISTRY_PATH, projects, indent=2)
 
 
 def _dir(project_id):

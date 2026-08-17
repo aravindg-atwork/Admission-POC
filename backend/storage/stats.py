@@ -13,6 +13,8 @@ import json
 import threading
 import time
 
+from . import atomic
+
 _lock = threading.Lock()
 _RECENT_CAP = 25
 _LATENCY_CAP = 200
@@ -48,8 +50,7 @@ def _load(stats_path):
 
 
 def _save(stats_path, d):
-    stats_path.parent.mkdir(parents=True, exist_ok=True)
-    stats_path.write_text(json.dumps(d), encoding="utf-8")
+    atomic.write_json(stats_path, d)
 
 
 def record(stats_path, source, model, language, latency_ms):

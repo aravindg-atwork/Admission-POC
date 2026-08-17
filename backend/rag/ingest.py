@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from .. import ocr, pdf
 from ..generation import embeddings
-from ..storage import projects, vectorstore
+from ..storage import atomic, projects, vectorstore
 
 # Bump whenever extraction or chunking changes in a way that makes an existing
 # index stale (see ingest). Mixed into the content hash so already-ingested
@@ -179,10 +179,11 @@ def ingest(project_id, pdf_path):
              for c, v in zip(chunks, vectors)]
     vectorstore.save(projects.store_path(project_id), store)
 
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps({
+    # After vectorstore.save above: the manifest is what marks that store as
+    # current, so it must never land before the store it describes.
+    atomic.write_json(manifest_path, {
         "hash": content_hash, "pagesProcessed": len(pages), "chunksIndexed": len(chunks),
         "embeddedAt": datetime.now(timezone.utc).isoformat(),
-    }), encoding="utf-8")
+    })
 
     return {"pagesProcessed": len(pages), "chunksIndexed": len(chunks), "skipped": False}

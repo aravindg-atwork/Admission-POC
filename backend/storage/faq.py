@@ -46,6 +46,7 @@ import time
 import unicodedata
 from pathlib import Path
 
+from . import atomic
 from .. import config
 from ..core.lang import detect_script
 
@@ -284,9 +285,8 @@ def add_learned_discriminator(group, canonical, word, evidence):
         "id": entry_id, "group": group, "canonical": canonical, "word": word,
         "evidence": evidence, "added_at": time.time(),
     })
-    path = config.LEARNED_DISCRIMINATORS_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic.write_json(config.LEARNED_DISCRIMINATORS_PATH, entries,
+                      ensure_ascii=False, indent=2)
     return entry_id
 
 
@@ -303,8 +303,8 @@ def remove_learned_discriminator(entry_id):
     kept = [e for e in entries if e.get("id") != entry_id]
     if len(kept) == len(entries):
         return False
-    path = config.LEARNED_DISCRIMINATORS_PATH
-    path.write_text(json.dumps(kept, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic.write_json(config.LEARNED_DISCRIMINATORS_PATH, kept,
+                      ensure_ascii=False, indent=2)
     return True
 
 
@@ -499,11 +499,10 @@ def _load(faq_path):
 
 
 def _save(faq_path, entries):
-    faq_path.parent.mkdir(parents=True, exist_ok=True)
     # "_norm" is a runtime aid, not part of the on-disk format - strip it so the
     # file stays readable and doesn't drift if the vectors are ever regenerated.
     payload = [{k: v for k, v in e.items() if k != "_norm"} for e in entries]
-    faq_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic.write_json(faq_path, payload, ensure_ascii=False, indent=2)
     # Keep serving from memory rather than forcing the next match() to re-read
     # what we just wrote, and re-key on the new mtime.
     _cache[str(faq_path)] = (faq_path.stat().st_mtime, entries)
@@ -731,7 +730,7 @@ def apply_feedback(faq_path, flagged_path, entry_id, liked):
             # resolution workflow (added 2026-08-12) - see resolve_flag below.
             "resolution": "open", "resolution_note": "", "resolved_at": None,
         })
-        flagged_path.write_text(json.dumps(flagged, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic.write_json(flagged_path, flagged, ensure_ascii=False, indent=2)
 
         if protected:
             _stage(faq_path, entries)
@@ -768,7 +767,7 @@ def resolve_flag(flagged_path, flag_id, resolution, note=""):
         entry["resolution"] = resolution
         entry["resolution_note"] = note
         entry["resolved_at"] = time.time() if resolution != "open" else None
-        flagged_path.write_text(json.dumps(flagged, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic.write_json(flagged_path, flagged, ensure_ascii=False, indent=2)
         return True
 
 
@@ -796,7 +795,7 @@ def load_flagged(flagged_path):
             entry.setdefault("resolved_at", None)
             changed = True
     if changed:
-        flagged_path.write_text(json.dumps(flagged, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic.write_json(flagged_path, flagged, ensure_ascii=False, indent=2)
     return flagged
 
 

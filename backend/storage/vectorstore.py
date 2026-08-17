@@ -8,6 +8,7 @@ caller passes the project's own store_path (see projects.py).
 import json
 import threading
 
+from . import atomic
 from .. import config
 
 # path -> (mtime, entries). The store was being re-read and JSON-parsed on every
@@ -192,8 +193,11 @@ def load(store_path):
 
 
 def save(store_path, entries):
-    store_path.parent.mkdir(parents=True, exist_ok=True)
-    store_path.write_text(json.dumps(entries), encoding="utf-8")
+    # Atomic: this file holds the whole corpus's embeddings, produced by paid
+    # calls over every prospectus. A truncated write during a re-ingest loses
+    # them with no cheap way back (see HANDOFF: the vector stores are the one
+    # thing that must be copied by hand between machines).
+    atomic.write_json(store_path, entries)
     with _cache_lock:
         _cache.pop(str(store_path), None)
 

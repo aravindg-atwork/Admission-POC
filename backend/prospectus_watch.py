@@ -25,7 +25,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 from . import config, rag
-from .storage import projects
+from .storage import atomic, projects
 
 
 def _post(url, payload, timeout):
@@ -59,9 +59,7 @@ def _load_state(project_id):
 
 
 def _save_state(project_id, state):
-    path = projects.watch_state_path(project_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    atomic.write_json(projects.watch_state_path(project_id), state, indent=2)
 
 
 def check_and_refresh(project_id):
