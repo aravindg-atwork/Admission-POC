@@ -20,7 +20,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import admin_routes, chat_routes, progress_routes, static, trace_routes
+from . import (admin_routes, chat_routes, health_routes, progress_routes, static,
+               trace_routes)
 from .. import config, prospectus_watch
 from ..orderassist import routes as orderassist_routes
 from ..storage import apikeys, atomic, projects
@@ -79,7 +80,12 @@ class Handler(BaseHTTPRequestHandler):
         m_review_summary = re.match(r"^/admin/projects/([^/]+)/review-summary$", self.path)
         m_suggestions = re.match(r"^/admin/projects/([^/]+)/suggestions$", self.path)
 
-        if self.path == "/" or self.path.startswith("/?") or self.path == "/index.html":
+        if self.path == "/healthz":
+            # First branch, and unauthenticated: a supervisor must be able to
+            # ask "are you alive?" without a credential, and the answer must
+            # not depend on any upstream being up (see health_routes).
+            health_routes.handle_healthz(self)
+        elif self.path == "/" or self.path.startswith("/?") or self.path == "/index.html":
             static.serve_index(self)
         elif self.path == "/admin" or self.path.startswith("/admin?"):
             static.serve_static(self, "admin.html")
