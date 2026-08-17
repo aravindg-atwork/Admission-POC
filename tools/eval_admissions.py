@@ -50,7 +50,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend import config  # noqa: E402
-from backend.storage import apikeys  # noqa: E402
+from backend.storage import apikeys, faq, projects  # noqa: E402
 
 BASE = f"http://localhost:{config.PORT}"
 
@@ -298,7 +298,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--section", help="run only this section letter")
     ap.add_argument("--show", action="store_true", help="print every answer")
+    ap.add_argument("--keep-cache", action="store_true",
+                    help="do NOT clear caches first (measures cached behaviour)")
     args = ap.parse_args()
+
+    # Clear EVERY project's cache, not just the entry point's. A question
+    # asked on `default` is answered from whichever programme it routes to,
+    # and its answer is cached there - so clearing only `default` leaves the
+    # real answers in place and the suite silently measures the cache instead
+    # of the pipeline. That is not hypothetical: an eligibility question that
+    # answers correctly in 1.0s on a clean cache kept "failing" for several
+    # runs because one earlier bad answer was still cached under `bvsc`.
+    if not args.keep_cache:
+        for project in projects.list_projects():
+            faq.clear(projects.faq_path(project["id"]))
 
     keys = [k for k in apikeys.list_keys(config.DEFAULT_PROJECT_ID) if k.get("active")]
     if not keys:

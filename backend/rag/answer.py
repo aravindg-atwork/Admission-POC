@@ -488,6 +488,7 @@ def _pipeline(ctx):
         # after shipping it. Non-English replies still get the free
         # deterministic pass (unsupported_number/topic_mismatch), just
         # without the LLM escalation/regeneration on top.
+        flagged = False
         if config.VALIDATION_ENABLED:
             if language == "latin" and not typed_romanized:
                 nri_postprocess = lambda r: _add_nri_scope_caveat(question, top, r)  # noqa: E731
@@ -498,6 +499,7 @@ def _pipeline(ctx):
                 reasons = validate.deterministic_checks(question, context, reply)
                 regenerated = False
             trace("validation", reasons=reasons, regenerated=regenerated)
+            flagged = bool(reasons) and not regenerated
             if reasons:
                 reviewlog.append(projects.review_log_path(project_id), {
                     "kind": "validation_regenerated" if regenerated else "validation_flag",
@@ -511,7 +513,19 @@ def _pipeline(ctx):
     # above) - entries with no verified figure (open-ended answers) skip that
     # extra check and stay on the fast path.
     faq_id = None
-    if config.FAQ_AUTOCACHE:
+    # A FLAGGED answer is never cached. Without this, one bad answer produced
+    # in a bad moment becomes the permanent answer: traced 2026-08-17, where
+    # "I got 48% in PCB and English... reserved category?" was answered
+    # correctly in ~1.0s by the eligibility guard on a clean cache, but a
+    # single earlier run that took 71.6s down the retrieval path wrote its
+    # wrong answer here - and every later ask was then served that wrong
+    # answer from cache, indistinguishable from a pipeline that had regressed.
+    # Hours of this session's "intermittency" were that, not randomness.
+    #
+    # Deliberately keyed on `flagged` rather than `reasons`: a regenerated
+    # answer had reasons too, and it was rewritten precisely so it could be
+    # trusted. Caching that one is the point of regenerating it.
+    if config.FAQ_AUTOCACHE and not flagged:
         faq_id = faq.add(projects.faq_path(project_id), question, reply, pages, query_vector,
                           cache_tags, verified=verified)
 
