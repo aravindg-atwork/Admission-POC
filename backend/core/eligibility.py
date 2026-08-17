@@ -204,6 +204,79 @@ def describes_own_subjects(text):
     return bool(_OWN_SUBJECTS_RE.search(text or ""))
 
 
+# Added 2026-08-17 to close a gap found live: a student who answers
+# _percentage_clarify_guard's "is that your overall score or those
+# subjects?" was being handled as a brand-new, context-free message - the
+# router's history-based follow-up resolution does not reliably reattach the
+# scope word to the ORIGINAL question's percentage, and one live test fanned
+# out across all three programmes instead of answering the specific one
+# actually asked about. http/chat_routes.py uses these the same way it
+# already uses programs.is_bare_program_reply for the program-clarify
+# prompt: recognise a short, topic-free reply to OUR OWN question and
+# recombine it with the question that is still pending, rather than trust
+# free-form multi-turn resolution for something this narrow.
+_SCOPE_REPLY_OVERALL = ("overall", "aggregate", "total", "12th percentage", "12th score")
+_SCOPE_REPLY_SUBJECT = ("subject", "pcb", "pcm", "combination", "those subjects", "these subjects")
+
+
+def describes_percentage_scope(text):
+    """Which scope a reply names ("overall" or "subject"), or None if it
+    names neither. Does not by itself mean the message is a BARE reply -
+    see is_bare_scope_reply, which adds the "carries no question of its
+    own" check before a caller treats this as answering the clarification.
+    """
+    low = (text or "").lower()
+    if any(cue in low for cue in _SCOPE_REPLY_OVERALL):
+        return "overall"
+    if any(cue in low for cue in _SCOPE_REPLY_SUBJECT):
+        return "subject"
+    return None
+
+
+def is_bare_scope_reply(text):
+    """True when a message is JUST answering "overall or subject?" and asks
+    nothing of its own - "overall", "it's my subject combination score".
+
+    Mirrors programs.is_bare_program_reply's reasoning exactly: "which
+    subjects are compulsory?" contains the word "subject" too, but is a
+    complete, self-sufficient new question, not an answer to the
+    clarification, and must not be swallowed into the pending one. A
+    genuinely bare reply is short and asks nothing - gated on both a
+    question mark (a real question almost always has one) and a word-count
+    ceiling generous enough for "It's in my specific subject combination,
+    not my overall aggregate" but not for an ordinary follow-up question.
+
+    Also false if the reply carries its OWN percentage ("55% in PCB") -
+    apply_percentage_scope would silently splice the scope onto the STALE
+    number from the original pending question and discard this new one,
+    answering confidently on the wrong figure instead of the one just given.
+    Falling through to the normal pipeline here is the safe direction: worst
+    case it asks again, which beats a wrong verdict.
+    """
+    if _PERCENT_RE.search(text or ""):
+        return None
+    scope = describes_percentage_scope(text)
+    if not scope:
+        return None
+    if "?" in text or len((text or "").split()) > 10:
+        return None
+    return scope
+
+
+def apply_percentage_scope(text, scope):
+    """Splice an explicit scope cue next to the first percentage figure in
+    `text`, so extract()'s _nearest_cue (a tight +/-30 char window - see its
+    docstring) attributes it correctly. Used to recombine a bare
+    clarify-percentage reply with the ORIGINAL question, which is the one
+    that actually carries the number; the reply itself never repeats it.
+    """
+    m = _PERCENT_RE.search(text or "")
+    if not m:
+        return text
+    cue = " overall" if scope == "overall" else " in the specific subject combination"
+    return text[:m.end()] + cue + text[m.end():]
+
+
 def subject_verdict(project_id, subjects):
     """Whether the subjects the student studied satisfy this programme.
 

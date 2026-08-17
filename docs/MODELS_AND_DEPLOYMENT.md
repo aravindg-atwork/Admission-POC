@@ -56,6 +56,64 @@ model is a one-line change, no code edits. `SARVAM_API_KEY` is read from the
 environment — never committed. The console's **Cost** tab shows live usage against
 the daily cap and a per-agent breakdown (Sarvam cloud / local / free cache).
 
+### Local open-source Sarvam model (2B)
+
+Sarvam's open-source 2B model is **`sarvamai/sarvam-1`** on Hugging Face
+(20+ Indian languages, incl. Hindi/Marathi/Tamil). It is **not** the same as the
+cloud `sarvam-105b`; it is a much smaller, self-hostable model.
+
+Local copy (already downloaded, verified intact):
+
+| Item | Value |
+|------|-------|
+| Repo | `sarvamai/sarvam-1` |
+| Location | `D:\models\sarvam-1` |
+| Size | ~5.1 GB (2 `.safetensors` shards: 4,550 MB + 266 MB; 255 tensors) |
+| Files | 12 (weights, config, tokenizer, index, license) |
+| SHA | `e9607337286ddf496d4a2562b194e489dcf3feea` |
+
+To re-download or update it later:
+
+```bash
+python -c "from huggingface_hub import snapshot_download; \
+print(snapshot_download(repo_id='sarvamai/sarvam-1', local_dir='D:/models/sarvam-1'))"
+```
+
+To run it locally you'd need a transformer/inference runtime (e.g. `transformers`
++ `torch`, or `llama.cpp`/`Ollama` GGUF conversion) — see the "Chat" row in the
+frozen-model table for how it fits the stack. This local copy is a ready-to-use
+artifact for that, independent of the cloud API.
+
+### Consolidated local model library (`D:\models`)
+
+The `D:\models` folder is the single local model store, consolidating the
+downloaded Sarvam models plus every model already present on this machine
+(Ollama GGUF blobs and the Hugging Face embedding model). All are **copied**
+(original caches untouched, so the running Ollama/embedding setup keeps working).
+
+| Model | Format | Location | Size |
+|-------|--------|----------|------|
+| sarvam-1 (2B, open-source) | safetensors | `D:\models\sarvam-1` | ~4.8 GB |
+| sarvam-30b (retired cloud model) | safetensors (26 shards) | `D:\models\sarvam-30b` | ~119.8 GB |
+| sarvam-1 GGUF Q4_K_M | GGUF (Ollama, QuantFactory) | `D:\models\sarvam-1-gguf-Q4_K_M` | ~1.5 GB |
+| qwen2.5-coder:1.5b | GGUF (Ollama) | `D:\models\qwen2.5-coder-1.5b` | ~0.9 GB |
+| qwen2.5-coder:7b | GGUF (Ollama) | `D:\models\qwen2.5-coder-7b` | ~4.4 GB |
+| gemma2:2b | GGUF (Ollama) — the offline chat fallback | `D:\models\gemma2-2b` | ~1.5 GB |
+| llama3.1:8b | GGUF (Ollama) — the global fallback | `D:\models\llama3.1-8b` | ~4.7 GB |
+| llama3.2:3b | GGUF (Ollama) | `D:\models\llama3.2-3b` | ~1.9 GB |
+| bge-small-en-v1.5 | safetensors (HF embedding) | `D:\models\bge-small-en-v1.5` | ~0.1 GB |
+
+Total ~142.7 GB on `D:\`.
+
+The `tools/copy_ollama_models.py` script reads each Ollama model's manifest,
+prints the matching GGUF blob (the `application/vnd.ollama.image.model` layer)
+into `D:\models\<name>\<name>.gguf`, and is safe to re-run (skips existing
+destinations). The embedding model was copied straight from
+`~/.cache/huggingface/hub/models--BAAI--bge-small-en-v1.5`.
+
+No Phi model was found on this machine — the `phi`/`phi3` paths in
+site-packages are `transformers` library source code, not model weights.
+
 ## 3. What has to be hosted
 
 | Component | Resource profile |

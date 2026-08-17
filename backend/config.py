@@ -339,6 +339,30 @@ ELIGIBILITY_GUARD_ENABLED = os.environ.get(
 # any Hetzner calls on it (see the plan's staged rollout).
 VALIDATION_LLM_CHECK_ENABLED = os.environ.get("VALIDATION_LLM_CHECK_ENABLED", "false").lower() == "true"
 
+# Last-resort clarification, added 2026-08-17. Every guard above this one
+# already either fires deterministically or checks _routed() itself (which
+# drops low-confidence router opinions in favour of keyword logic - see
+# guards._routed's docstring). What reaches the very end of GUARDS with
+# route["confidence"] == "low" is the leftover: the router was unsure AND no
+# deterministic guard could classify the question either, so without this
+# switch it falls straight into free-form RAG generation on a question
+# nobody actually resolved - answering confidently on a guess.
+#
+# NOT the same change as the three attempts HANDOFF.md's "clarification
+# guard punishes clever ideas" section warns were tried and reverted. Those
+# made _program_clarify_guard itself MORE trigger-happy (deterministic-only,
+# self-consistency sampling) and regressed sections E/F because a percentage
+# or policy question that was already being classified fine got caught too.
+# This guard only sees what every other guard already gave up on - it cannot
+# steal a question those were handling correctly, because if the question
+# reached the end of the guard order at all, none of them fired. Still
+# gated behind a switch and measured before/after per that same section's
+# instruction, since "no other guard fired" is a different bar than "the
+# question was genuinely ambiguous" and the two have not been proven to be
+# the same set of questions yet.
+LOW_CONFIDENCE_CLARIFY_ENABLED = os.environ.get(
+    "LOW_CONFIDENCE_CLARIFY_ENABLED", "true").lower() == "true"
+
 # Orchestrator: complexity trigger + sub-topic fan-out (see orchestrator.py).
 ORCHESTRATOR_MIN_WORDS = int(os.environ.get("ORCHESTRATOR_MIN_WORDS", "35"))
 ORCHESTRATOR_MAX_SUBTASKS = int(os.environ.get("ORCHESTRATOR_MAX_SUBTASKS", "3"))

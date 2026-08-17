@@ -132,7 +132,21 @@ def is_payment_issue(text):
 # documents do I have to submit") - combined with a percentage actually
 # appearing nearby, false positives on ordinary questions are minimal: "I
 # have a question" has no percent sign, so never matches this.
-_SELF_SCORE_RE = re.compile(r"\bi\s+(?:have|scored|got|secured|obtained|achieved)\b", re.IGNORECASE)
+#
+# "with X%" is the second alternative, added 2026-08-17 after a live miss:
+# "Am I eligible with 60%?" carries no verb from the list above at all, so it
+# fell through this guard entirely, then _eligibility_guard's own ambiguous-
+# percentage path (evaluate()'s "no_percentage"/"overall_not_subject" cases),
+# straight to plain RAG - which guessed 60% meant the subject-combination
+# score and answered "Yes, 60% clears the requirement" without ever asking.
+# Not gated on "I"/"my" the way the verb list is, because "with X%" already
+# reads as the student's own figure in this construction ("eligible with
+# 60%", "get in with 60%") - the surrounding _ELIGIBILITY_WORDS/_PHRASES
+# check below still has to match too, so this alone can't fire on a bare
+# "with 60%" that isn't an eligibility question.
+_SELF_SCORE_RE = re.compile(
+    r"\bi\s+(?:have|scored|got|secured|obtained|achieved)\b|\bwith\s+\d{1,3}\s*%",
+    re.IGNORECASE)
 _PERCENT_RE = re.compile(r"\d{1,3}\s*%")
 # A student who already names which figure they mean has resolved the
 # ambiguity themselves - do not force a clarification they already answered.

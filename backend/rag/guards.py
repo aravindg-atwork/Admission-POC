@@ -30,7 +30,7 @@ from ..prompts.canned import (_DISPUTE_PROMPT, _META_ACKNOWLEDGE_TEXT, _OFF_TOPI
                                _UNKNOWN_PROGRAMME_TEXT,
                                _PROGRAM_LIST_TEXT,
                                _OFF_TOPIC_TRIVIA_PROMPT, _PERCENTAGE_CLARIFY_TEXT,
-                               _PROGRAM_CLARIFY_TEXT)
+                               _PERCENTAGE_SCOPE_OPTIONS, _PROGRAM_CLARIFY_TEXT)
 
 
 def _clarify_language(ctx):
@@ -365,8 +365,14 @@ def _percentage_clarify_guard(ctx):
         # trips the guard must not get an English clarification back.
         clarify_lang = _clarify_language(ctx)
         text = _PERCENTAGE_CLARIFY_TEXT.get(clarify_lang, _PERCENTAGE_CLARIFY_TEXT["en"])
+        options = _PERCENTAGE_SCOPE_OPTIONS.get(clarify_lang, _PERCENTAGE_SCOPE_OPTIONS["en"])
+        # carryQuestion: see _program_clarify_guard's identical field - the
+        # widget arms pendingClarification with THIS text, and
+        # chat_routes.py's is_bare_scope_reply branch splices the reply's
+        # scope onto it rather than the bare question the student typed.
         return {"answer": text, "pages": [], "model": "guard",
-                "language": language, "source": "clarify-percentage", "speakable": True}
+                "language": language, "source": "clarify-percentage", "speakable": True,
+                "scopeOptions": options, "carryQuestion": question}
     return None
 
 
@@ -478,6 +484,36 @@ def _eligibility_guard(ctx):
 
     result = eligibility.evaluate(candidate, original)
     if result["verdict"] not in ("eligible", "not_eligible"):
+        if result["verdict"] == "insufficient" and result.get("reason") == "overall_not_subject":
+            # The student DID give a percentage and DID scope it ("60%
+            # overall") - evaluate() correctly refused to measure an
+            # aggregate against a subject-combination rule, but silently
+            # returning None here handed the mismatch to plain RAG, which
+            # has no access to that verdict and guessed the aggregate
+            # satisfied the subject-combination threshold anyway. That is
+            # the exact Q25 failure this guard's docstring says it exists to
+            # prevent - reproduced live 2026-08-17 with "I have 60%
+            # overall, am I eligible for B.Tech Dairy?" answered "Yes, 60%
+            # clears the requirement" against a 50%/40% SUBJECT threshold.
+            # Reuses _percentage_clarify_guard's canned text: it already
+            # explains the subject-combination-vs-aggregate distinction and
+            # asks for the right figure, which fits even though this
+            # student already named their scope - they still haven't given
+            # the number the rule actually needs.
+            # No scopeOptions chips here, unlike _percentage_clarify_guard:
+            # this student already told us "overall" (that's how evaluate()
+            # reached this reason at all), so re-offering it as a clickable
+            # choice would ask them to confirm what they already said. What
+            # is actually missing is their SUBJECT-combination percentage, a
+            # number, not a two-way choice - the free-text box (never
+            # disabled - see app.js's composer) is the right tool for that.
+            clarify_lang = _clarify_language(ctx)
+            text = _PERCENTAGE_CLARIFY_TEXT.get(clarify_lang, _PERCENTAGE_CLARIFY_TEXT["en"])
+            ctx.trace("eligibility", verdict="insufficient", reason="overall_not_subject",
+                      overall=result.get("overall"), programme=result.get("programme"))
+            return {"answer": text, "pages": [], "model": "guard",
+                    "language": ctx.language, "source": "clarify-percentage", "speakable": True,
+                    "carryQuestion": ctx.question}
         return None
 
     ctx.trace("eligibility", verdict=result["verdict"], programme=result.get("programme"),
@@ -806,8 +842,19 @@ def _program_clarify_guard(ctx):
         # "what is the hostel fee?" (differs). Both questions contain the same
         # marker word; only reading them apart works.
         routed_needs = _routed(ctx, "needs_program_clarification")
-        needs_clarify = (routed_needs if routed_needs is not None
-                         else programs.needs_program_clarification(question))
+        # Router still decides alone when it has an opinion (routed_needs is
+        # not None) - EXCEPT it can no longer silently skip a clarification
+        # the narrow, proven-safe marker set already knows to ask for (see
+        # programs.needs_program_clarification_strong's docstring: excludes
+        # "reservation"/"reserved"/"quota", the one collision this codebase
+        # already measured - section E 9/9 -> 5/9 - when the full marker set
+        # was OR'd in unconditionally). With no router opinion at all
+        # (unavailable/low confidence), the FULL marker set is still the
+        # fallback, unchanged from before today.
+        if routed_needs is None:
+            needs_clarify = programs.needs_program_clarification(question)
+        else:
+            needs_clarify = routed_needs or programs.needs_program_clarification_strong(question)
         if needs_clarify:
             # No program named at all, and the topic is one that genuinely
             # varies per program (see programs.py) - nothing useful to
@@ -815,8 +862,15 @@ def _program_clarify_guard(ctx):
             clarify_lang = _clarify_language(ctx)
             text = _PROGRAM_CLARIFY_TEXT.get(clarify_lang, _PROGRAM_CLARIFY_TEXT["en"])
             options = [{"projectId": pid, "label": name} for pid, name in programs.PROGRAM_NAMES.items()]
+            # `question`, not original_question: when this fires right after
+            # a percentage-clarify round-trip (see chat_routes.py's
+            # pendingClarification handling), `question` is already the
+            # recombined "60% overall, ..." text - carrying THAT forward is
+            # what makes the two clarifications chain correctly instead of
+            # the second one reverting to the bare pre-percentage question.
             return {"answer": text, "pages": [], "model": "guard", "language": language,
-                    "source": "clarify-program", "speakable": True, "clarifyOptions": options}
+                    "source": "clarify-program", "speakable": True, "clarifyOptions": options,
+                    "carryQuestion": question}
     return None
 
 
@@ -852,6 +906,40 @@ def _general_fanout_guard(ctx):
         ctx.hint_language, ctx.hint, ctx.typed_romanized, ctx.cloud_ok, ctx.trace)
 
 
+def _low_confidence_clarify_guard(ctx):
+    """Last resort: nothing above classified this, and the router wasn't
+    sure either. Ask instead of letting free-form RAG generation guess.
+
+    Deliberately the LAST guard, not an early gate on the router's
+    confidence field generally - see _routed()'s docstring, which already
+    has every earlier guard fall back to deterministic keyword logic on low
+    confidence rather than trust an unsure router opinion. Those guards
+    still fire correctly on plenty of low-confidence questions; this one
+    only ever sees what they ALL passed on, i.e. the router was unsure AND
+    keyword logic found nothing to classify either. That combination is
+    what used to fall straight into RAG and get answered fluently on a
+    guess - the same shape of failure _eligibility_guard's docstring
+    describes for percentages, generalized to "no guard could place this
+    question at all", not just the percentage case.
+
+    See config.LOW_CONFIDENCE_CLARIFY_ENABLED for why this is switched and
+    measured separately from the three reverted attempts HANDOFF.md
+    documents: those made an EARLY guard more eager and caught questions
+    that were already being handled correctly. This one only fires after
+    everything else has already declined.
+    """
+    if not config.LOW_CONFIDENCE_CLARIFY_ENABLED:
+        return None
+    route = getattr(ctx, "route", None)
+    if not route or route.get("confidence") != "low":
+        return None
+    clarify_lang = _clarify_language(ctx)
+    text = _META_ACKNOWLEDGE_TEXT.get(clarify_lang, _META_ACKNOWLEDGE_TEXT["en"])
+    ctx.trace("routing", decision="low_confidence_clarify")
+    return {"answer": text, "pages": [], "model": "guard", "language": ctx.language,
+            "source": "clarify-lowconfidence", "speakable": True}
+
+
 GUARDS = [
     _injection_guard,
     _greeting_guard,
@@ -870,6 +958,7 @@ GUARDS = [
     _unknown_programme_guard,
     _program_clarify_guard,
     _general_fanout_guard,
+    _low_confidence_clarify_guard,
 ]
 
 

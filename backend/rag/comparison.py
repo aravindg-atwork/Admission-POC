@@ -7,6 +7,8 @@ _COMPARISON_TOP_K_PER_PROGRAM and _answer_comparison's own docstring for
 why.
 """
 
+import re
+
 from .. import config
 from ..core import textclean
 from ..prompts.system import _COMPARISON_SYSTEM_PROMPT
@@ -27,7 +29,18 @@ from .helpers import (_add_nri_scope_caveat, _apply_script_pref, _build_retrieva
 # (page 3) on "which courses can I apply for" - confirmed directly against
 # vectorstore.search that K=6 excluded it while K=10 included it, for the
 # exact same query.
-_COMPARISON_TOP_K_PER_PROGRAM = 10
+#
+# Raised 10 -> 14 on 2026-08-17, alongside _dedupe_chunks above (not instead
+# of it - the two fix different things). Dedup solved a program whose top-10
+# was mostly near-identical repeats of ONE fact; it does not help a program
+# whose data is genuinely WIDE rather than repetitive - confirmed directly
+# that even the deduped top-10 for B.Tech Dairy's hostel fees, which spans
+# five distinct college/room-type combinations, still didn't include a
+# single one of them for "What are the hostel fees?", while the same
+# programme's own single-project TOP_K=15 query found all five. 14 (not the
+# full 15) keeps a little headroom below the single-program budget, since a
+# comparison prompt is already three programs' worth of context in one call.
+_COMPARISON_TOP_K_PER_PROGRAM = 14
 
 # Found 2026-08-12: "I studied PCM. Which MAFSU courses can I apply for?"
 # against B.V.Sc.'s own store never surfaced its eligibility chunk ("minimum
@@ -64,6 +77,58 @@ _ELIGIBILITY_RETRIEVAL_BOOST = (
     " eligibility criteria required subjects Physics Chemistry Biology "
     "Biotechnology Mathematics English percentage marks qualifying examination"
 )
+
+# Found 2026-08-17: "whats the admission fees" against B.Tech. (Dairy
+# Technology)'s own store filled 8 of the 10 slots with near-identical
+# repeats of the SAME unreserved-fee sentence (OCR-chunked with overlapping
+# windows across pages 40/43), crowding out the DIFFERENT reserved-category
+# figure sitting at rank 14 - confirmed directly via vectorstore.search.
+# The model then stated the reserved figure without it being in context,
+# provenance.check flagged it unsourced, and redact() removed the WHOLE
+# B.Tech Dairy segment - including the correctly-grounded unreserved figure,
+# which WAS in the 10 chunks the whole time. Not a rank-cutoff problem
+# (raising K just adds more of the same repeated sentence) and not a
+# term-overlap problem (unlike the PCM case above) - it's wasted slots.
+# Pulls a wider candidate pool and drops near-duplicates before trimming to
+# _COMPARISON_TOP_K_PER_PROGRAM, so repeats stop crowding out genuinely
+# different content without raising the prompt size any query pays for.
+#
+# Similarity, not exact match: confirmed directly that the repeated chunks
+# above are NOT byte-identical - OCR rendered the same header two ways
+# ("matsu" vs "matsui", a one-character site-name difference, plus varying
+# leading whitespace) ahead of the otherwise-identical fee sentence, which
+# shifts everything after it far enough that a prefix or exact-string key
+# missed every single one of them. Token-set overlap (Jaccard) shrugs off a
+# one-word header difference the way an exact-match key cannot.
+_DEDUPE_POOL_MULTIPLIER = 3
+_DEDUPE_SIMILARITY = 0.8
+
+
+def _token_set(text):
+    return set(re.findall(r"[a-z0-9]+", (text or "").lower()))
+
+
+def _dedupe_chunks(chunks, keep):
+    """First `keep` chunks, skipping any whose text is a near-duplicate
+    (Jaccard token overlap above _DEDUPE_SIMILARITY) of one already kept -
+    see the comment above. Preserves the incoming score-sorted order -
+    vectorstore.search already returns highest first. O(keep * pool), fine
+    at these sizes (a few dozen chunks at most per program).
+    """
+    kept_tokens = []
+    out = []
+    for entry in chunks:
+        tokens = _token_set(entry.get("text", ""))
+        if tokens and any(
+            len(tokens & prior) / len(tokens | prior) >= _DEDUPE_SIMILARITY
+            for prior in kept_tokens
+        ):
+            continue
+        kept_tokens.append(tokens)
+        out.append(entry)
+        if len(out) >= keep:
+            break
+    return out
 
 
 def _answer_comparison(target_programs, question, script_pref, ui_language,
@@ -107,7 +172,13 @@ def _answer_comparison(target_programs, question, script_pref, ui_language,
         store = vectorstore.load(projects.store_path(pid))
         if not store:
             continue
-        top = vectorstore.search(store, query_vector, _COMPARISON_TOP_K_PER_PROGRAM, retrieval_text)
+        # Wider pool than the final K, then dedupe down - see
+        # _dedupe_chunks's comment for why the raw top-K alone can waste
+        # most of its slots on OCR-chunked repeats of the same sentence.
+        pool = vectorstore.search(store, query_vector,
+                                   _COMPARISON_TOP_K_PER_PROGRAM * _DEDUPE_POOL_MULTIPLIER,
+                                   retrieval_text)
+        top = _dedupe_chunks(pool, _COMPARISON_TOP_K_PER_PROGRAM)
         if not top:
             continue
         included.append(pid)

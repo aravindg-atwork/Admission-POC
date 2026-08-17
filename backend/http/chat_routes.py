@@ -16,7 +16,7 @@ import re
 import urllib.request
 
 from .. import config, rag
-from ..core import programs, textclean
+from ..core import eligibility, programs, textclean
 from ..generation import speech
 from ..storage import apikeys, audiocache, faq, projects
 
@@ -94,6 +94,22 @@ def handle_chat(self):
             project_id = named
             question = original_question
 
+    # Same idea, for _percentage_clarify_guard's "is that your overall score
+    # or those subjects?" (see core/eligibility.py's is_bare_scope_reply /
+    # apply_percentage_scope docstrings for why this needs its own splice
+    # rather than reusing router history: a live test showed a bare "overall"
+    # reply losing the original question's programme AND percentage and
+    # fanning out across all three programmes instead of answering the one
+    # actually asked about). Distinguished from the program-clarify case
+    # above by pendingClarification.kind, which the widget sets from which
+    # field the previous response carried (clarifyOptions vs scopeOptions) -
+    # both branches are mutually exclusive since a single turn only ever
+    # asks one clarifying question.
+    if pending.get("kind") == "percentage" and original_question:
+        scope = eligibility.is_bare_scope_reply(question)
+        if scope:
+            question = eligibility.apply_percentage_scope(original_question, scope)
+
     # The widget generates its own trace id so it can subscribe to
     # /api/progress BEFORE asking, and watch the real pipeline run rather than
     # a timed animation. Ignored unless it looks exactly like uuid4().hex -
@@ -117,6 +133,15 @@ def handle_chat(self):
         }
         if result.get("clarifyOptions"):
             payload["clarifyOptions"] = result["clarifyOptions"]
+        if result.get("scopeOptions"):
+            payload["scopeOptions"] = result["scopeOptions"]
+        # Both guard-supplied (see guards.py's carryQuestion comments) so the
+        # widget can arm its NEXT pendingClarification from server-known
+        # state instead of its own last-typed message, which is wrong the
+        # moment two clarifications chain (percentage, then still-unknown
+        # programme) - see this file's pendingClarification handling above.
+        if result.get("carryQuestion"):
+            payload["carryQuestion"] = result["carryQuestion"]
         if result.get("answeredForProgram"):
             payload["answeredForProgram"] = {
                 "projectId": result["answeredForProgram"],

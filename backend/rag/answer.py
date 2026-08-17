@@ -494,9 +494,9 @@ def _pipeline(ctx):
                 nri_postprocess = lambda r: _add_nri_scope_caveat(question, top, r)  # noqa: E731
                 reply, model, reasons, regenerated = validate.check_and_regenerate(
                     question, context, reply, model, system_prompt, user_prompt,
-                    postprocess=nri_postprocess)
+                    postprocess=nri_postprocess, own_project_id=project_id)
             else:
-                reasons = validate.deterministic_checks(question, context, reply)
+                reasons = validate.deterministic_checks(question, context, reply, project_id)
                 regenerated = False
             trace("validation", reasons=reasons, regenerated=regenerated)
             flagged = bool(reasons) and not regenerated

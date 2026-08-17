@@ -470,7 +470,7 @@ function ProgressRows({ reached, details }) {
   </div>`;
 }
 
-function Message({ m, lang, onReplayBrowser, onPickProgram, onFeedback }) {
+function Message({ m, lang, onReplayBrowser, onPickProgram, onPickScope, onFeedback }) {
   if (m.role === "user")
     return html`<div class="row user"><div class="bubble">${m.text}</div></div>`;
   if (m.role === "thinking")
@@ -494,6 +494,29 @@ function Message({ m, lang, onReplayBrowser, onPickProgram, onFeedback }) {
             ${m.clarifyOptions.map((o) => html`
               <button class="chip" key=${o.projectId}
                       onClick=${() => onPickProgram(o.projectId, m.originalQuestion)}>
+                ${o.label}
+              </button>`)}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Percentage-scope clarification: two quick-pick chips next to the SAME
+  // always-on textarea (see the composer in App below - never disabled by a
+  // clarification), so clicking is a shortcut rather than the only way to
+  // answer. Clicking sends the exact fixed text a typed answer would use
+  // (o.value), so both paths resolve through the identical server-side
+  // is_bare_scope_reply check - see chat_routes.py's pendingClarification
+  // handling and core/eligibility.py's docstrings for why.
+  if (m.scopeOptions) {
+    return html`
+      <div class="row bot">
+        <div>
+          <div class="bubble">${m.text}</div>
+          <div class="chips">
+            ${m.scopeOptions.map((o) => html`
+              <button class="chip" key=${o.value}
+                      onClick=${() => onPickScope(o.value, m.carryQuestion)}>
                 ${o.label}
               </button>`)}
           </div>
@@ -747,11 +770,22 @@ function App() {
   const send = useCallback(async (text, keyOverride) => {
     const q = (text || "").trim();
     if (!q || sending) return;
-    const activeKey = keyOverride || DEFAULT_API_KEY;
     // Consumed once: whether or not it resolves anything, the next message
     // must not still look like an answer to a clarification two turns back.
     const pendingClarification = pendingClarifyRef.current;
     pendingClarifyRef.current = null;
+    // pendingClarification.apiKey (set below, alongside originalQuestion) is
+    // the one narrow exception to keyOverride-never-persists (see the
+    // comment above this callback): a percentage-then-programme chain
+    // resolves the programme via a chip's keyOverride on one hop, then asks
+    // a THIRD question (the actual subject-combination number) that carries
+    // no programme name in its text at all - only the api key from the hop
+    // that resolved it still knows. Reproduced live 2026-08-17: without
+    // this, "I have 58% in my subject combination" reset to the shared
+    // widget's default project and lost B.Tech Dairy entirely. Still
+    // single-hop and consumed-once exactly like originalQuestion above, not
+    // the unbounded persistence the 2026-08-12 fix removed.
+    const activeKey = keyOverride || pendingClarification?.apiKey || DEFAULT_API_KEY;
     setMessages((m) => [...m, { role: "user", text: q }, { role: "thinking" }]);
     setInput("");
     if (taRef.current) taRef.current.style.height = "auto";
@@ -810,16 +844,30 @@ function App() {
       if (!res.ok) throw new Error(res.status);
       const d = await res.json();
       // Arm the follow-up resolution above for the NEXT message, carrying
-      // the question that actually needs answering once the student names
-      // a program - the same text the clarification chips resubmit.
-      if (d.clarifyOptions) pendingClarifyRef.current = { originalQuestion: q };
+      // the question that actually needs answering once the student
+      // answers - the same text the clarification chips resubmit.
+      // d.carryQuestion (server-known, see chat_routes.py) wins over the
+      // client's own `q` whenever present: the moment two clarifications
+      // chain (percentage, then still-unknown programme), `q` is just the
+      // scope reply itself ("overall"), not the combined question the
+      // NEXT clarification needs to carry forward. activeKey rides along
+      // too (see send()'s pendingClarification.apiKey comment) - covers
+      // _eligibility_guard's "overall_not_subject" reply as well, which
+      // carries carryQuestion but no chips at all (asks for a number, not a
+      // pick), and would otherwise lose a programme resolved via keyOverride
+      // on an earlier hop the moment the student just types the figure.
+      if (d.clarifyOptions) pendingClarifyRef.current = { kind: "program", originalQuestion: d.carryQuestion || q, apiKey: activeKey };
+      else if (d.scopeOptions) pendingClarifyRef.current = { kind: "percentage", originalQuestion: d.carryQuestion || q, apiKey: activeKey };
+      else if (d.carryQuestion) pendingClarifyRef.current = { kind: "percentage", originalQuestion: d.carryQuestion, apiKey: activeKey };
       const botId = nextId();
       setMessages((m) => [...m.slice(0, -1), {
         id: botId, role: "bot", text: d.answerText, pages: d.pageReferences || [],
         model: d.model, source: d.source, audioState: d.speakable ? "idle" : "unspeakable",
-        clarifyOptions: d.clarifyOptions || null, answeredForProgram: d.answeredForProgram || null,
+        clarifyOptions: d.clarifyOptions || null, scopeOptions: d.scopeOptions || null,
+        answeredForProgram: d.answeredForProgram || null,
         comparedPrograms: d.comparedPrograms || null,
-        originalQuestion: q, faqId: d.faqId || null, feedback: null, feedbackKey: activeKey,
+        originalQuestion: d.carryQuestion || q, carryQuestion: d.carryQuestion || q,
+        faqId: d.faqId || null, feedback: null, feedbackKey: activeKey,
       }]);
 
       if (speakOn && d.speakable) {
@@ -862,6 +910,19 @@ function App() {
     const program = PROGRAMS.find((p) => p.projectId === projectId);
     if (!program) return;
     send(originalQuestion, program.apiKey);
+  }, [send]);
+
+  // Unlike pickProgram above, a scope choice can't be resolved client-side -
+  // splicing "overall" onto the original question's percentage correctly
+  // (see core/eligibility.py's apply_percentage_scope, a tight-window cue
+  // match) needs the server. So this arms pendingClarifyRef itself and sends
+  // the chip's fixed value text, taking the exact same round trip a typed
+  // "It's my overall percentage" reply would - see chat_routes.py's
+  // pendingClarification handling for the kind:"percentage" branch that
+  // does the actual splice.
+  const pickScope = useCallback((value, originalQuestion) => {
+    pendingClarifyRef.current = { kind: "percentage", originalQuestion };
+    send(value);
   }, [send]);
 
   // Thumbs up/down on a specific served answer. Uses the key that ANSWERED
@@ -986,7 +1047,7 @@ function App() {
               ${welcome.chips.map((s) => html`<button class="chip" key=${s} onClick=${() => send(s)}>${s}</button>`)}
             </div>
           </div>`}
-        ${messages.map((m, i) => html`<${Message} key=${m.id || i} m=${m} lang=${lang} onReplayBrowser=${(t) => speakBrowserNow(t, lang)} onPickProgram=${pickProgram} onFeedback=${sendFeedback} />`)}
+        ${messages.map((m, i) => html`<${Message} key=${m.id || i} m=${m} lang=${lang} onReplayBrowser=${(t) => speakBrowserNow(t, lang)} onPickProgram=${pickProgram} onPickScope=${pickScope} onFeedback=${sendFeedback} />`)}
       </main>
 
       <footer class="composer">

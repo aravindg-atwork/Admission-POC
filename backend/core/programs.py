@@ -318,6 +318,64 @@ def needs_program_clarification(text):
     return _matches(words, _PROGRAM_SPECIFIC_MARKERS)
 
 
+# Narrower than _PROGRAM_SPECIFIC_MARKERS - excludes "reservation", "reserved",
+# "unreserved", "quota". Added 2026-08-17 for guards.py's _program_clarify_guard,
+# which now ORs a deterministic signal in alongside the router instead of only
+# using it as a fallback (see that guard's comment for why: the router
+# occasionally misclassifies "What are the eligibility criteria?" and used to
+# skip a clarification the full marker set already knew to ask for).
+#
+# The four words excluded here are exactly the ones this codebase already
+# measured as unsafe for that job: "what is the reservation POLICY?" (one
+# shared answer, same for all three programmes) and "what percentage do
+# RESERVED candidates need?" (differs per programme) both contain a reservation
+# word, and only reading the sentence - which only the router does - tells
+# them apart. OR-ing the full marker set back in reproduced the exact
+# regression HANDOFF.md documents for the deterministic-only attempt: Section
+# E 9/9 -> 5/9, the same four questions (reservation policy, documents to
+# claim it, cross-state reservation, EWS seats) wrongly asking "which
+# programme?" instead of answering. Excluding just these four here keeps the
+# broader OR-fix (eligibility, fee, marks, seats, hostel, duration, etc. all
+# still force a clarification even on a router "no") without reopening that
+# specific, already-measured collision.
+#
+# "hostel" added to the exclusion 2026-08-17, same day, confirmed live:
+# _program_clarify_guard's OWN pre-existing comment already named this exact
+# collision before this module even had a strong/weak split - "'is hostel
+# accommodation compulsory?' (shared) [vs] 'what is the hostel fee?'
+# (differs). Both questions contain the same marker word; only reading them
+# apart works." Missed it when first narrowing this set; force-asking
+# reproduced it immediately - "Is hostel accommodation compulsory?" (one
+# shared answer) started wrongly asking "which programme?" the same way the
+# reservation words did.
+#
+# "seat"/"seats"/"intake"/"vacancy"/"vacancies" excluded too, same day: "Are
+# there seats reserved for EWS candidates?" hit the identical shape - the
+# EWS reservation PERCENTAGE is a shared, state-mandated figure (like the
+# reservation words above), but total seat COUNT genuinely does vary per
+# programme, and "seats" alone can't tell which question this is. Not part
+# of the original ask (eligibility/fee) either, so excluding the whole
+# family rather than special-casing just EWS.
+_FORCE_ASK_MARKERS = _PROGRAM_SPECIFIC_MARKERS - {
+    "reservation", "reserved", "unreserved", "quota", "hostel",
+    "seat", "seats", "intake", "vacancy", "vacancies",
+}
+
+
+def needs_program_clarification_strong(text):
+    """Same as needs_program_clarification, but only the markers proven safe
+    to OR in against a router "no" (see _FORCE_ASK_MARKERS above). Used to
+    FORCE a clarification even when the router disagrees; the router is still
+    trusted alone (no override) on the excluded reservation/quota words.
+    """
+    if detect_program(text):
+        return False
+    words = _words(text)
+    if _matches(words, _SHARED_PORTAL_MARKERS):
+        return False
+    return _matches(words, _FORCE_ASK_MARKERS)
+
+
 def is_bare_program_reply(text):
     """True when a message is JUST a program name, carrying no question of
     its own - "btech", "B.F.Sc.", "the dairy one".

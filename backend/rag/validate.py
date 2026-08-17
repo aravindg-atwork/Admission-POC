@@ -47,11 +47,18 @@ def _extract_numbers(text):
             if len(n.replace(",", "").rstrip("%").strip()) >= _MIN_NUMBER_LEN}
 
 
-def deterministic_checks(question, context_text, reply):
+def deterministic_checks(question, context_text, reply, own_project_id=None):
     """Zero-LLM-call checks. Returns a list of failure-reason strings (empty
     if the reply looks clean). `context_text` is whatever excerpts the
     reply was actually generated from - the same `context`/pooled section
     text already built in rag.py, not re-fetched here.
+
+    `own_project_id`, if given, enables one more check: a single-programme
+    answer that names a DIFFERENT programme the student never asked about.
+    Optional (defaults to skipping that check) because comparison.py's
+    multi-programme answers are SUPPOSED to name several programmes - this
+    only makes sense on the single-project path, which is the only caller
+    that passes it.
     """
     reasons = []
 
@@ -65,6 +72,37 @@ def deterministic_checks(question, context_text, reply):
 
     if not faq.answer_addresses_question(question, reply):
         reasons.append("topic_mismatch")
+
+    # Found live 2026-08-17, right before a demo: "What is the eligibility
+    # for B.V.Sc.?" asked directly on bvsc's own project reproducibly (4/4)
+    # answered with a bizarre "this is not a B.Tech degree" tangent - "B.Tech"
+    # appears NOWHERE in the retrieved context or the question, confirmed
+    # directly, so this is the model spontaneously inventing a comparison,
+    # not a retrieval leak. Reuses programs.detect_programs_multi (the same
+    # alias matching every other programme-identity check in this codebase
+    # already trusts) rather than a new keyword list.
+    #
+    # detect_programs_multi, not detect_program: the single-best-match
+    # version returned "bvsc" here and only "bvsc" - the reply legitimately
+    # names its OWN programme too ("You do not qualify for B.V.Sc. & A.H.
+    # with a B.Tech degree"), which outranked the stray "B.Tech" mention and
+    # hid it entirely. The multi-detector catches both names in the same
+    # reply, which is exactly the signal: a reply is allowed to name its own
+    # programme, but a SECOND, different one that the student's own question
+    # never mentioned is never legitimate on this single-project path.
+    if own_project_id:
+        from ..core import programs
+        reply_programmes = set(programs.detect_programs_multi(reply))
+        question_programmes = set(programs.detect_programs_multi(question))
+        # Excludes own_project_id (a reply is always allowed to name its own
+        # programme) AND anything the question itself named (a student who
+        # asks "how does bvsc compare to btech" invited that mention) -
+        # first cut wrongly required the QUESTION to name zero programmes at
+        # all, which broke on the very case this exists for: "What is the
+        # eligibility for B.V.Sc.?" legitimately names bvsc in the question.
+        foreign = reply_programmes - {own_project_id} - question_programmes
+        if foreign:
+            reasons.append(f"foreign_programme_mention: {', '.join(sorted(foreign))}")
 
     return reasons
 
@@ -121,7 +159,7 @@ def llm_check(question, context_text, reply):
 
 
 def check_and_regenerate(question, context_text, reply, model, system_prompt, user_prompt,
-                          postprocess=None):
+                          postprocess=None, own_project_id=None):
     """The full bounded pipeline in one call, so rag.py's hook stays a
     one-liner: deterministic checks -> (only if flagged) one LLM check ->
     (only if that fails) one regeneration attempt. Never a loop - see the
@@ -137,11 +175,14 @@ def check_and_regenerate(question, context_text, reply, model, system_prompt, us
     _add_nri_scope_caveat) - keeps a regenerated reply held to the exact
     same safety nets as the original, without this leaf module needing to
     import rag.py's private helpers.
+
+    `own_project_id` - see deterministic_checks's own docstring; forwarded
+    through unchanged.
     """
     from .. import config
     from ..generation import llm
 
-    reasons = deterministic_checks(question, context_text, reply)
+    reasons = deterministic_checks(question, context_text, reply, own_project_id)
     if not reasons:
         return reply, model, [], False
 

@@ -99,6 +99,25 @@ _PERCENTAGE_CLARIFY_TEXT = {
           "मला सांगा कोणती आहे, म्हणजे मी तुम्हाला अचूक उत्तर देईन.",
 }
 
+# Quick-reply chips for the prompt above, added 2026-08-17 alongside the
+# widget UI change: two clickable answers next to the same free-text box
+# that already worked (see app.js's composer, never disabled by a
+# clarification), rather than clicking being the ONLY way to answer. `value`
+# is the exact literal text a click sends, matched back against
+# core.eligibility.is_bare_scope_reply - see that docstring for why a click
+# is deliberately routed through the same path a typed reply takes instead
+# of a separate code path, so the two stay behaviourally identical by
+# construction rather than by two implementations agreeing.
+_PERCENTAGE_SCOPE_OPTIONS = {
+    "en": [{"value": "It's my overall percentage", "label": "My overall percentage"},
+           {"value": "It's in the specific subject combination",
+            "label": "My subject-combination score"}],
+    "hi": [{"value": "यह मेरा कुल प्रतिशत है", "label": "मेरा कुल प्रतिशत"},
+           {"value": "यह विशेष विषय-संयोजन में है", "label": "मेरा विषय-संयोजन स्कोर"}],
+    "mr": [{"value": "ही माझी एकूण टक्केवारी आहे", "label": "माझी एकूण टक्केवारी"},
+           {"value": "ही विशिष्ट विषय-संयोजनातील आहे", "label": "माझा विषय-संयोजन स्कोअर"}],
+}
+
 
 
 # Deterministic acknowledgement for a message about the CONVERSATION rather
