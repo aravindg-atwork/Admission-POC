@@ -20,8 +20,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import (admin_routes, chat_routes, health_routes, progress_routes, static,
-               trace_routes)
+from . import (admin_routes, chat_routes, concurrency, health_routes,
+               progress_routes, static, trace_routes)
 from .. import config, prospectus_watch
 from ..orderassist import routes as orderassist_routes
 from ..storage import apikeys, atomic, projects
@@ -127,7 +127,13 @@ class Handler(BaseHTTPRequestHandler):
         m_suggestions_apply = re.match(r"^/admin/projects/([^/]+)/suggestions/apply$", self.path)
 
         if self.path == "/api/chat":
-            chat_routes.handle_chat(self)
+            # The only route with a ceiling. Everything else here is either a
+            # cheap read or an admin action nobody is racing.
+            with concurrency.chat_limiter.acquire() as admitted:
+                if not admitted:
+                    concurrency.refuse(self)
+                else:
+                    chat_routes.handle_chat(self)
         elif self.path == "/api/feedback":
             chat_routes.handle_feedback(self)
         elif self.path == "/api/ingest":

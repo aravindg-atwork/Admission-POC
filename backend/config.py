@@ -58,6 +58,21 @@ EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY", "")
 EMBEDDING_QUERY_TIMEOUT = int(os.environ.get("EMBEDDING_QUERY_TIMEOUT", "15"))
 EMBEDDING_INGEST_TIMEOUT = int(os.environ.get("EMBEDDING_INGEST_TIMEOUT", "600"))
 
+# --- Admission control (see http/concurrency.py) ---
+# How many answers may be in flight at once. ThreadingHTTPServer has no ceiling
+# of its own, and each answer holds a thread for seconds AND a slot against a
+# rate-limited provider. Measured here: one SEQUENTIAL 75-question eval run
+# drew eleven `HTTPError 429` responses from Mistral, so the provider - not
+# this process - is the binding constraint at the 10-50 concurrent students
+# this deployment is sized for. Holding the queue here makes it visible and
+# refusable instead of turning into a 429 nobody can act on.
+# 0 disables the ceiling entirely (fails open on a misconfigured value).
+MAX_CONCURRENT_CHATS = int(os.environ.get("MAX_CONCURRENT_CHATS") or "8")
+# A short grace wait so a brief burst becomes a small delay rather than a
+# refusal; only sustained overload should be refused.
+CHAT_QUEUE_WAIT_SECONDS = float(os.environ.get("CHAT_QUEUE_WAIT_SECONDS") or "2.0")
+CHAT_RETRY_AFTER_SECONDS = int(os.environ.get("CHAT_RETRY_AFTER_SECONDS") or "5")
+
 # --- Self-hosted embeddings (BGE-M3, multilingual) ---
 # Set EMBEDDING_PROVIDER=selfhosted to route embeddings through the same
 # self-hosted server as chat (SELFHOSTED_URL/SELFHOSTED_API_KEY above)
