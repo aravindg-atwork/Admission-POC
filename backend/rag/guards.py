@@ -788,23 +788,26 @@ def _program_clarify_guard(ctx):
         # matcher is exactly right about this narrow question.
         if programs.detect_program(getattr(ctx, "original_question", question)):
             return None
-        # DETERMINISTIC ONLY for this decision, deliberately - the one guard
-        # that does not consult the router, and the reason is measured rather
-        # than stylistic. Six identical calls of "can a student who passed
-        # 12th from another board apply?" at temperature 0.0 returned three
-        # different verdicts on this exact field, so the same student could be
-        # answered or bounced depending on nothing. The router is also simply
-        # wrong on the clearest case in the set: it reports no clarification
-        # needed for "what is the fee?", which differs across all three
-        # programmes.
+        # Router first, deterministic word list as the fallback.
         #
-        # This was only safe once _PROGRAM_SPECIFIC_MARKERS was narrowed to
-        # topics that genuinely differ; against the old broad list the same
-        # change scored section D 6/12 by bouncing "what documents are
-        # required?" and "how do I apply?". A word list is the right tool here
-        # because the question it answers is closed and small: does the answer
-        # differ per programme, yes or no.
-        needs_clarify = programs.needs_program_clarification(question)
+        # This was briefly changed to deterministic-only, on the grounds that
+        # the router returned three different verdicts for six identical calls
+        # of this field. That instability was real but it was NOT the main
+        # cause of the flapping test results - most of that turned out to be
+        # the FAQ cache serving a wrong answer produced in one bad moment (see
+        # answer.py's flagged-answer rule). With that fixed, the router's
+        # judgement is worth more than the word list's literalism.
+        #
+        # Measured, deterministic-only: sections B/C/D held or improved, but E
+        # fell 9/9 -> 5/9 and F 8/11 -> 6/10, because a word list cannot tell
+        # "what is the reservation POLICY?" (shared across all three
+        # programmes) from "what percentage do reserved candidates need?"
+        # (differs), nor "is hostel accommodation compulsory?" (shared) from
+        # "what is the hostel fee?" (differs). Both questions contain the same
+        # marker word; only reading them apart works.
+        routed_needs = _routed(ctx, "needs_program_clarification")
+        needs_clarify = (routed_needs if routed_needs is not None
+                         else programs.needs_program_clarification(question))
         if needs_clarify:
             # No program named at all, and the topic is one that genuinely
             # varies per program (see programs.py) - nothing useful to
