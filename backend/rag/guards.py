@@ -189,7 +189,7 @@ def _dispute_guard(ctx):
     # citing at all.
     query = _routed(ctx, "resolved_question") or ctx.question
     try:
-        query_vector = embeddings.embed([query])[0]
+        query_vector = embeddings.embed_query(query)
         store = vectorstore.load(projects.store_path(ctx.project_id))
         top = vectorstore.search(store, query_vector, config.TOP_K, query)
     except Exception as exc:  # noqa: BLE001 - never break the reply over this

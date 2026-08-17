@@ -10,7 +10,7 @@ import urllib.request
 from .. import config
 
 
-def _embed_local(texts):
+def _embed_local(texts, timeout):
     payload = json.dumps({"texts": list(texts)}).encode("utf-8")
     req = urllib.request.Request(
         config.EMBEDDING_URL,
@@ -18,15 +18,11 @@ def _embed_local(texts):
         headers={"Content-Type": "application/json", "X-API-Key": config.EMBEDDING_API_KEY},
         method="POST",
     )
-    # Generous: the service runs the model on CPU, and an ingest batch of full
-    # table pages (several KB each) is far slower than a single short query.
-    # 120s was enough for prose-sized chunks but timed out once whole tables
-    # started being embedded as single chunks.
-    with urllib.request.urlopen(req, timeout=600) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))["embeddings"]
 
 
-def _embed_selfhosted(texts):
+def _embed_selfhosted(texts, timeout):
     """Confirmed 2026-08-11 against the live BGE-M3 deployment: the endpoint
     is POST /v1/embedding (singular), not the OpenAI-standard /v1/embeddings -
     the same style of deviation as this server's chat endpoint (POST
@@ -43,12 +39,33 @@ def _embed_selfhosted(texts):
                  "Authorization": f"Bearer {config.SELFHOSTED_API_KEY}"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=600) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = json.loads(resp.read().decode("utf-8"))
         return data["data"]
 
 
-def embed(texts):
+def embed(texts, timeout=None):
+    """Embed a batch. Defaults to the generous ingest timeout.
+
+    The default is the SLOW one deliberately: an existing batch caller that is
+    not updated keeps working, whereas defaulting to the short query timeout
+    would make ingest start failing on large table chunks with no obvious
+    cause. Request-path callers should use embed_query instead of passing a
+    timeout by hand.
+    """
+    if timeout is None:
+        timeout = config.EMBEDDING_INGEST_TIMEOUT
     if config.EMBEDDING_PROVIDER == "selfhosted":
-        return _embed_selfhosted(texts)
-    return _embed_local(texts)
+        return _embed_selfhosted(texts, timeout)
+    return _embed_local(texts, timeout)
+
+
+def embed_query(text):
+    """Embed ONE question on a student's request path, with a bounded wait.
+
+    Exists so the short timeout is the obvious thing to reach for rather than
+    something each call site has to remember to pass. Every caller in rag/ is
+    on the request path and should use this; ingest and seeding are the only
+    legitimate users of the batch form above.
+    """
+    return embed([text], timeout=config.EMBEDDING_QUERY_TIMEOUT)[0]

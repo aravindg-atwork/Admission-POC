@@ -16,6 +16,7 @@ import threading
 from datetime import datetime, timezone
 
 from . import providers
+from ..storage import atomic
 from .. import config
 from ..core.lang import detect_script
 
@@ -35,9 +36,7 @@ def _sarvam_calls_today():
 def _record_sarvam_call():
     with _usage_lock:
         today, count = _sarvam_calls_today()
-        config.SARVAM_USAGE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        config.SARVAM_USAGE_PATH.write_text(
-            json.dumps({"date": today, "count": count + 1}), encoding="utf-8")
+        atomic.write_json(config.SARVAM_USAGE_PATH, {"date": today, "count": count + 1})
 
 
 def _sarvam_under_cap():
@@ -78,6 +77,23 @@ def _usable(provider, allow_cloud):
     if provider.is_cloud and (not allow_cloud or not _sarvam_under_cap()):
         return False
     return True
+
+
+def _attempt_timeout(provider, timeout):
+    """How long ONE attempt against this provider may take.
+
+    A cloud attempt is held to config.CLOUD_ATTEMPT_TIMEOUT so a stalled call
+    fails over quickly rather than hanging the student's request. Local
+    providers keep the caller's own budget: there is nothing to fail over TO,
+    so cutting them short only turns a slow answer into no answer.
+
+    min(), never a flat override - a caller that asks for less than the cap
+    keeps its tighter budget, which is what will let a per-request deadline be
+    threaded through here without fighting this function.
+    """
+    if provider is not None and provider.is_cloud:
+        return min(timeout, config.CLOUD_ATTEMPT_TIMEOUT)
+    return timeout
 
 
 def generate(system_prompt, user_prompt, question, timeout=280, allow_cloud=True, model=None,
@@ -121,7 +137,7 @@ def generate(system_prompt, user_prompt, question, timeout=280, allow_cloud=True
             # one extra call: the local fallback is markedly worse at exactly
             # these questions (it misread the hostel fee grid every time), so
             # silently dropping to it costs accuracy where it matters most.
-            call_timeout = min(timeout, config.SARVAM_TIMEOUT) if primary.is_cloud else timeout
+            call_timeout = _attempt_timeout(primary, timeout)
             for attempt in (1, 2):
                 try:
                     result = primary.chat(system_prompt, user_prompt, call_timeout,
@@ -151,8 +167,16 @@ def generate(system_prompt, user_prompt, question, timeout=280, allow_cloud=True
             f"No usable chat provider: primary={config.CHAT_PRIMARY!r} "
             f"fallback={config.CHAT_FALLBACK!r} (known: {providers.available()})")
     try:
-        result = fallback.chat(system_prompt, user_prompt, timeout, question=question, model=model,
-                                temperature=temperature)
+        # Capped the same way the primary is. This used to take the full
+        # `timeout` while the primary was held to CLOUD_ATTEMPT_TIMEOUT, which
+        # is backwards - the fallback is the slower, less reliable path, so it
+        # was the one allowed to run longest. With a 280s default that made one
+        # generate() worth 45 + 45 + 280 = 370s, and the answer path makes
+        # three to five of them.
+        result = fallback.chat(system_prompt, user_prompt,
+                               _attempt_timeout(fallback, timeout),
+                               question=question, model=model,
+                               temperature=temperature)
     except Exception as exc:  # noqa: BLE001 - both providers down (seen 2026-08-12:
         # bge-m3/glm-4-9b-chat went "running"->"stopped" mid-session with no
         # warning). This used to be unguarded, unlike the primary call above

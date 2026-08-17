@@ -235,7 +235,7 @@ def _pipeline(ctx):
                  else "native-language answer needs the Indic-tuned model")
 
     # Embed once; the vector is reused for both the FAQ lookup and RAG retrieval.
-    query_vector = embeddings.embed([question])[0]
+    query_vector = embeddings.embed_query(question)
 
     # FAQ cache: instant answer for a question we've seen or seeded before. Cached
     # text is always native-script; script_pref is applied below regardless of

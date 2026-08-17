@@ -44,6 +44,20 @@ DEFAULT_PROJECT_ID = "default"
 EMBEDDING_URL = os.environ.get("EMBEDDING_URL", "http://localhost:8000/embed")
 EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY", "")
 
+# Two timeouts, because the two callers have nothing in common but the endpoint.
+#
+# Ingest embeds a batch of whole OCR'd table pages against a CPU service, and
+# nobody is waiting on it - 120s was measured as too short once entire tables
+# started being embedded as single chunks, hence the generous ceiling.
+#
+# A query embeds ONE short question with a student watching a browser spinner,
+# and it used to share that same 600s. The embedding service occasionally 503s,
+# so a single bad call could pin a request thread for ten minutes - most of the
+# eighteen-minute hang recorded against Q66. Nothing downstream bounded it
+# because nothing anywhere sets a request budget.
+EMBEDDING_QUERY_TIMEOUT = int(os.environ.get("EMBEDDING_QUERY_TIMEOUT", "15"))
+EMBEDDING_INGEST_TIMEOUT = int(os.environ.get("EMBEDDING_INGEST_TIMEOUT", "600"))
+
 # --- Self-hosted embeddings (BGE-M3, multilingual) ---
 # Set EMBEDDING_PROVIDER=selfhosted to route embeddings through the same
 # self-hosted server as chat (SELFHOSTED_URL/SELFHOSTED_API_KEY above)
@@ -259,9 +273,26 @@ SARVAM_MODEL = os.environ.get("SARVAM_MODEL", "sarvam-105b")
 # FAQ cache means repeated questions don't count against this at all.
 SARVAM_DAILY_LIMIT = int(os.environ.get("SARVAM_DAILY_LIMIT", "150"))
 SARVAM_USAGE_PATH = BASE_DIR / "data" / "sarvam-usage.json"
-# Short timeout so a stalled cloud call fails over to the local model fast, instead
-# of hanging the UI. Sarvam normally answers in ~5-12s.
-SARVAM_TIMEOUT = int(os.environ.get("SARVAM_TIMEOUT", "45"))
+# Short timeout so a stalled cloud call fails over fast instead of hanging the
+# UI. Applies to ONE attempt against ANY cloud provider - primary or fallback.
+#
+# Renamed from SARVAM_TIMEOUT 2026-08-17. The old name had stopped describing
+# what the value does: Sarvam has been dead on HTTP 402 for weeks, yet this
+# figure silently governed whichever cloud provider was primary (Mistral), so
+# anyone reading llm.generate saw a Sarvam-specific knob bounding a Mistral
+# call. SARVAM_TIMEOUT is still honoured as an env var and still exported as an
+# alias below - renaming without that would quietly change the timeout on every
+# deployment whose .env sets the old name, including this one.
+# `or`, not a get() default: a key that is PRESENT but empty (a bare
+# "CLOUD_ATTEMPT_TIMEOUT=" line in .env, which is easy to leave behind while
+# commenting a value out) returns "", which would both shadow the alias and
+# crash int() at import time - taking the whole server down before it serves
+# one request.
+CLOUD_ATTEMPT_TIMEOUT = int(
+    os.environ.get("CLOUD_ATTEMPT_TIMEOUT")
+    or os.environ.get("SARVAM_TIMEOUT")
+    or "45")
+SARVAM_TIMEOUT = CLOUD_ATTEMPT_TIMEOUT  # backward-compatible alias
 
 # --- Orchestration / validation / self-learning (2026-08-12) ---
 # ORCHESTRATOR_PROVIDER is deliberately never "sarvam" in normal operation:

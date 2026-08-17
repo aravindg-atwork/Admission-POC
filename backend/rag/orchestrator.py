@@ -129,7 +129,7 @@ def answer_complex(project_id, question, script_pref, ui_language, language,
     if not subtopics:
         return None
 
-    query_vector = embeddings.embed([question])[0]
+    query_vector = embeddings.embed_query(question)
     store = vectorstore.load(projects.store_path(project_id))
     if not store:
         return None

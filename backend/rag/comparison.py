@@ -156,7 +156,7 @@ def _answer_comparison(target_programs, question, script_pref, ui_language,
     if (set(faq._words(question)) & _SUBJECT_STREAM_MARKERS
             or _ADMISSION_PROCESS_PHRASE in question.lower()):
         embed_text = question + _ELIGIBILITY_RETRIEVAL_BOOST
-    query_vector = embeddings.embed([embed_text])[0]
+    query_vector = embeddings.embed_query(embed_text)
     retrieval_text = _build_retrieval_text(embed_text, language, hint_language, ui_language)
 
     sections = []
