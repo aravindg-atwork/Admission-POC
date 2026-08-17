@@ -36,7 +36,9 @@ never a partial write.
 
 import json
 import os
+import re
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -79,3 +81,47 @@ def write_json(path, obj, _replace=os.replace, **dumps_kwargs):
         except OSError:
             pass
         raise
+
+
+# The shape mkstemp produces above: "<target name>.<random>.tmp". Matching the
+# shape rather than a bare "*.tmp" so the sweep can never claim a scratch file
+# that belongs to someone else in the same directory.
+_TEMP_NAME_RE = re.compile(r"^.+\.[A-Za-z0-9_]+\.tmp$")
+
+# A temp file younger than this may still belong to a write in flight. Deleting
+# one mid-write would turn a harmless leak into the data loss this module
+# exists to prevent, so the sweep only ever touches files old enough that no
+# live write could still own them.
+_TEMP_MIN_AGE_SECONDS = 3600
+
+
+def sweep_stale_temp_files(root, min_age_seconds=_TEMP_MIN_AGE_SECONDS):
+    """Delete leftover temp files under `root`. Returns how many were removed.
+
+    write_json cleans up after itself on any exception, but SIGKILL and a power
+    cut are uncatchable - so a hard crash leaves its temp file behind. They are
+    inert (every reader opens a known path; nothing globs) but they accumulate
+    beside multi-megabyte vector stores on a box nobody is watching.
+
+    Safe by construction and by omission: it matches only the name shape this
+    module creates, skips anything recent enough to belong to a live write, and
+    swallows per-file errors. This runs at startup, and no cleanup helper
+    should ever be the reason the server fails to boot.
+    """
+    root = Path(root)
+    if not root.is_dir():
+        return 0
+    cutoff = time.time() - min_age_seconds
+    removed = 0
+    for path in root.rglob("*.tmp"):
+        if not _TEMP_NAME_RE.match(path.name):
+            continue
+        try:
+            if path.stat().st_mtime > cutoff:
+                continue
+            os.unlink(str(path))
+            removed += 1
+        except OSError:
+            # Vanished under us, or not ours to delete. Either way, not fatal.
+            continue
+    return removed

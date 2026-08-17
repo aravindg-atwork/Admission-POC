@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from . import admin_routes, chat_routes, progress_routes, static, trace_routes
 from .. import config, prospectus_watch
 from ..orderassist import routes as orderassist_routes
-from ..storage import apikeys, projects
+from ..storage import apikeys, atomic, projects
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -225,6 +225,13 @@ def serve():
     if not projects.list_projects():
         projects.create("Admission Assistant", config.DEFAULT_PROJECT_ID)
     apikeys.get_or_create_default(config.DEFAULT_PROJECT_ID)
+
+    # Atomic writes clean up after themselves on any exception, but SIGKILL and
+    # a power cut are uncatchable, so a hard crash leaves its temp file beside
+    # the real one. Startup is the one moment we know no write is in flight.
+    swept = atomic.sweep_stale_temp_files(config.DATA_DIR)
+    if swept:
+        print(f"[backend] swept {swept} stale temp file(s) left by an earlier crash")
 
     threading.Thread(target=_prospectus_watch_loop, daemon=True).start()
 

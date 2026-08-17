@@ -53,6 +53,15 @@ extension/.keys/
 # --- Demo transfer bundle (contains .env and live API keys - never commit) ---
 demo-bundle*.zip
 
+# --- Machine-transfer archive (HANDOFF section 1) ---
+# `zip -r admission-data.zip data .env` is the documented way to move this
+# project between machines, so the archive contains every API key AND the
+# vector stores. It was sitting untracked and unignored at 37MB, one `git add
+# -A` away from being committed - which would put the keys in git history
+# permanently, since deleting a file later does not remove it from history.
+data.zip
+admission-data*.zip
+
 # macOS / scratch
 .DS_Store
 .disk_check_tmp
