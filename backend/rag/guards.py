@@ -15,7 +15,7 @@ pre-move inline sequence if you need to diff against it. Returns a fully-
 formed answer dict, or None to fall through to the next guard.
 """
 
-from . import citation, comparison
+from . import citation, comparison, router
 from .helpers import (_apply_script_pref, _assistant_scope, _greeting_prompt, _injection_refusal,
                        _program_name, is_greeting)
 from .. import config
@@ -788,21 +788,23 @@ def _program_clarify_guard(ctx):
         # matcher is exactly right about this narrow question.
         if programs.detect_program(getattr(ctx, "original_question", question)):
             return None
-        # Router first, deterministic as the fallback - the original order,
-        # restored after trying it the other way round on 2026-08-16 and
-        # measuring the damage. The reasoning for flipping it was real (the
-        # router said no clarification was needed for "what is the fee?",
-        # which plainly differs per programme) but it generalised two cases
-        # into a rule: needs_program_clarification is a broad TOPIC word list
-        # containing "documents", "apply", "fee" and "merit list", so making
-        # it sufficient on its own turned six answerable questions in section
-        # D into "which programme are you asking about?" in under a second.
-        # 9/14 -> 6/12. The router's nuance is worth more than the word list's
-        # recall here; the fan-out guard below is what actually fixes the
-        # general-question case.
-        routed_needs = _routed(ctx, "needs_program_clarification")
-        needs_clarify = (routed_needs if routed_needs is not None
-                         else programs.needs_program_clarification(question))
+        # DETERMINISTIC ONLY for this decision, deliberately - the one guard
+        # that does not consult the router, and the reason is measured rather
+        # than stylistic. Six identical calls of "can a student who passed
+        # 12th from another board apply?" at temperature 0.0 returned three
+        # different verdicts on this exact field, so the same student could be
+        # answered or bounced depending on nothing. The router is also simply
+        # wrong on the clearest case in the set: it reports no clarification
+        # needed for "what is the fee?", which differs across all three
+        # programmes.
+        #
+        # This was only safe once _PROGRAM_SPECIFIC_MARKERS was narrowed to
+        # topics that genuinely differ; against the old broad list the same
+        # change scored section D 6/12 by bouncing "what documents are
+        # required?" and "how do I apply?". A word list is the right tool here
+        # because the question it answers is closed and small: does the answer
+        # differ per programme, yes or no.
+        needs_clarify = programs.needs_program_clarification(question)
         if needs_clarify:
             # No program named at all, and the topic is one that genuinely
             # varies per program (see programs.py) - nothing useful to

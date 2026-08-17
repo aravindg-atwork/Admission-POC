@@ -210,14 +210,28 @@ def _words(text):
 # dates and the like. A question hitting one of these, with no program named,
 # is the case that actually needs disambiguating.
 _PROGRAM_SPECIFIC_MARKERS = {
-    "fee", "fees", "eligibility", "eligible", "criteria", "admission",
-    "seat", "seats", "hostel", "tuition", "marks", "quota", "reservation",
-    "reserved", "unreserved", "syllabus", "course", "degree", "intake",
-    "neet", "aieea", "cgpa", "documents", "certificate", "certificates",
-    "deadline", "merit", "grievance", "refund", "internship", "vacancy",
-    "vacancies", "cutoff", "duration", "curriculum",
+    # Topics whose ANSWER genuinely differs between the three programmes, and
+    # where answering from all three is worse than asking which one. Narrowed
+    # 2026-08-17 after measuring both alternatives.
+    #
+    # Removed: "admission", "documents", "certificate(s)", "deadline",
+    # "merit", "grievance", "refund", "course", "degree", "internship". Those
+    # are shared - one application portal, one document list, one merit
+    # process - and having them here meant "what documents are required?" and
+    # "how do I apply?" were answered with "which programme are you asking
+    # about?". Section D scored 6/12 that way against 12/12 without them.
+    #
+    # "fee" stays, and that is not arbitrary: a bare "what is the fee?" fanned
+    # out across all three programmes came back with every figure redacted by
+    # the provenance check, because no single retrieval could source three
+    # programmes' fee tables cleanly. A clarification is a better answer than
+    # three apologies.
+    "fee", "fees", "tuition", "eligibility", "eligible", "criteria",
+    "marks", "cutoff", "percentage", "seat", "seats", "intake", "vacancy",
+    "vacancies", "quota", "reservation", "reserved", "unreserved", "hostel",
+    "syllabus", "curriculum", "duration", "neet", "aieea", "cgpa",
     # Hindi / Marathi
-    "शुल्क", "फी", "फीस", "पात्रता", "जागा", "वसतिगृह", "प्रवेश",
+    "शुल्क", "फी", "फीस", "पात्रता", "जागा", "वसतिगृह",
 }
 # Portal-mechanics topics that have exactly one correct answer regardless of
 # which program - matches tools/seed_faq_portal.py's shared content. A
@@ -228,6 +242,15 @@ _PROGRAM_SPECIFIC_MARKERS = {
 _SHARED_PORTAL_MARKERS = {
     "register", "registration", "password", "login", "log", "upload",
     "print", "resubmission", "resubmit", "account", "forgot",
+    # Added 2026-08-17. A question can MENTION a programme-specific topic
+    # without asking for its value, and the word list alone cannot tell the
+    # difference: "how do I PAY the application fee?" is one payment process
+    # for all three programmes, and "does qualifying for NEET GUARANTEE
+    # admission?" is one answer for all three, yet both were bounced with
+    # "which programme are you asking about?" purely because "fee" and "neet"
+    # appear in them. These verbs mark the question as being about the
+    # PROCESS, which is shared, rather than the figure, which is not.
+    "pay", "paying", "payment", "guarantee", "guarantees", "guaranteed",
 }
 
 
