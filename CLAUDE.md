@@ -1,27 +1,73 @@
 # Working notes for Claude
 
 Operational context for this repo. Read before changing anything in `backend/`.
+Companion file: `HANDOFF.md` (machine-migration setup, gitignored data transfer).
+This file is the one kept current session-to-session — if the two disagree,
+trust this one and fix HANDOFF.md's claim, not the other way round.
 
 ## Running it
 
-```bash
-cd /Volumes/nyx/Admission-POC          # project lives on the nyx external drive
-.venv-backend/bin/python3 run_backend.py
+Windows box. No native/compiled dependencies (see HANDOFF.md §2 for why).
+
+```bat
+.venv-backend\Scripts\python.exe run_backend.py
 ```
 
-Serves on `:5050` — student widget at `/`, operator console at `/admin`.
-Admin token is `ADMIN_TOKEN` in `.env` (currently `password`; `admin-token.txt`
-is untracked and gitignored).
+Serves on `:5050` locally — student widget at `/`, operator console at `/admin`.
+Admin token is `ADMIN_TOKEN` in `.env` (`password` — **settled, do not re-flag
+or suggest changing it**, that decision has been made explicitly more than
+once).
 
-Always use `.venv-backend/bin/python3`, never bare `python3` — the system
-interpreter has none of the dependencies.
+Always use `.venv-backend\Scripts\python.exe`, never bare `python`/`python3` —
+the system interpreter has none of the dependencies.
 
-After changing a prompt, **clear the FAQ cache** or you will keep testing the
-old answer and conclude nothing changed:
+After changing a prompt OR any guard/eligibility logic, **clear the FAQ cache
+on every project, not just `default`** — a question asked on the general
+widget is answered by whichever programme it routes to and cached *there*.
+Clearing `default` alone leaves the real answer cached and you end up testing
+the cache, not the fix:
 
 ```bash
-curl -X POST localhost:5050/admin/projects/default/cache/clear -H "X-Admin-Token: password"
+for p in default bvsc bfsc btech-dairy; do
+  curl -X POST "localhost:5050/admin/projects/$p/cache/clear" -H "X-Admin-Token: password"
+done
 ```
+
+**Use `127.0.0.1`, never `localhost`, in any script that calls the backend
+with `urllib`.** Unlike curl/browsers, `urllib` doesn't race IPv4/IPv6 —
+`localhost` resolves to `::1` first and eats ~2s per request before falling
+back. Every script under `tools/` was fixed to `127.0.0.1` 2026-08-18; keep
+new ones consistent.
+
+**Windows console is cp1252 and cannot print Devanagari or some Unicode
+(e.g. ZWJ `‍`).** A naive `print()` on Hindi/Marathi output throws
+`UnicodeEncodeError` and looks like a crash, or gets misread as "garbled
+answer" if you catch the exception. Either `sys.stdout.reconfigure(encoding="utf-8")`
+at the top of the script, or write output to a file with `encoding="utf-8"`
+and read it back.
+
+## Production deployment
+
+Live at **159.69.210.30** (Hetzner, `ai-hub-nbg1-01`), port 80, no domain.
+Co-located on a box that already ran an `ai-platform` Docker stack serving
+`qwen2.5-3b-instruct` chat + `bge-m3` embeddings via `api+postgres+redis`
+(kept running — other things depend on them); the stack's own **nginx was
+removed** to free port 80 for this project. This admission backend runs as a
+plain `python3` process on the host, not in Docker.
+
+- Service: `systemctl {status,restart} admission-poc` — `Restart=on-failure`,
+  logs to `backend_stdout.log`/`backend_stderr.log` under `/opt/admission-poc`.
+- Deploy pipeline (no CI, all manual): edit locally → compile-check
+  (`python -m py_compile <file>`) → restart local backend → verify locally →
+  commit + push to `production-hardening` → `scp` each changed file
+  **individually to its correct path** (a flat multi-file `scp ... dest-dir/`
+  silently drops subdirectory structure — every file lands directly in
+  `backend/`) → delete `__pycache__` on the server → `systemctl restart
+  admission-poc` → `curl /healthz` → **MD5 checksum parity check** (`certutil
+  -hashfile <file> MD5` locally, `md5sum <file>` on the server — must match) →
+  live smoke-test the specific fix → clear FAQ cache on all four projects.
+- SSH key: not committed (obviously). Ask the user if it isn't already in
+  `~/.ssh/` or the session scratchpad.
 
 ## Scope
 
@@ -29,17 +75,24 @@ Three undergraduate programmes, 2026-27 prospectuses. Postgraduate
 programmes (M.V.Sc., Ph.D., M.Tech.) were retired 2026-08-14 — projects
 deleted and aliases removed from `core/programs.py`.
 
-| project id | programme |
-|---|---|
-| `default` | B.V.Sc. & A.H. |
-| `bfsc` | B.F.Sc. |
-| `btech-dairy` | B.Tech. (Dairy Technology) |
+| project id | programme | has its own corpus? |
+|---|---|---|
+| `default` | — (general entry point) | **no** — routes/clarifies only |
+| `bvsc` | B.V.Sc. & A.H. | yes |
+| `bfsc` | B.F.Sc. | yes |
+| `btech-dairy` | B.Tech. (Dairy Technology) | yes |
 
-`default` does double duty: it is the B.V.Sc. corpus AND the general entry
-point. `helpers._assistant_scope` exists because of that — self-description
-on `default` must name all three programmes, while retrieval stays scoped to
-its own corpus. Conflating them made the shared widget introduce itself as
-the B.V.Sc. assistant.
+**`default` does NOT hold a corpus.** It used to (through 2026-08-16), and
+that double duty caused 7/80 eval failures — any question naming no programme
+answered confidently from B.V.Sc. data. Split into its own `bvsc` project;
+`programs.PROGRAM_NAMES` is `{"bvsc", "bfsc", "btech-dairy"}` — `"default"` is
+never a key in it. **Do not put a corpus back on `default`, and do not assume
+`default` and `bvsc` are the same project** — they are not, `config.
+DEFAULT_PROJECT_ID == "default"` is a distinct id from `"bvsc"`, and code that
+conflates them (or old docs that say "`default` doubles as the B.V.Sc.
+corpus") is describing the pre-split state. `helpers._assistant_scope` is what
+makes `default`'s self-description name all three programmes while it holds
+none of them itself.
 
 Languages: **English, Hindi, Marathi**. Tamil is out of scope (aliases and
 canned text still exist; harmless, do not invest further).
@@ -64,13 +117,15 @@ Dead or exhausted, do not rely on:
 - **TTS** (`TTS_URL`, local Docker on :8001) — connection refused. Indic voice
   is therefore broken. Mistral TTS does NOT fix it: ten voices, all
   `en_us`/`en_gb`, zero Indic, and English already has a browser voice.
+  `gpt-4o-mini-tts` is the promising candidate; an OpenAI key was supplied
+  2026-08-14 but had **zero credits**, so nothing is wired up.
 
 ## Architecture
 
 `backend/` is layered; nothing imports upward.
 
 ```
-core/        pure logic (lang, programs, intent, tablelookup)
+core/        pure logic (lang, programs, intent, eligibility, tablelookup)
 storage/     projects, apikeys, faq, vectorstore, stats
 generation/  providers, llm, embeddings, speech
 prompts/     system.py (LLM prompts), canned.py (fixed replies), registry.py
@@ -81,18 +136,73 @@ trace/       live SSE observability
 
 **Guard order matters** (`rag/guards.py`, `GUARDS` list). Runs before the FAQ
 cache is reachable, which is deliberate: clarification can never be skipped
-by a cache hit.
+by a cache hit. Current order (verify against the file — this list has grown
+twice this project already and will again):
 
 ```
-injection → greeting → dispute → meta_correction → off_topic →
-program_list → percentage_clarify → comparison → program_redirect →
-unknown_programme → program_clarify
+injection → topic_menu → greeting → dispute → meta_correction → off_topic →
+program_list → eligibility → percentage_clarify → comparison →
+program_redirect → unknown_programme → program_clarify → general_fanout →
+low_confidence_clarify
 ```
 
 `rag/router.py` classifies intent in one call. It returns `None` on **any**
 failure and every guard falls back to deterministic keyword logic — the
 router is an upgrade, never a dependency. `ROUTER_ENABLED=false` reverts
-everything.
+everything. The router is also **non-deterministic across calls on the same
+ambiguous input** — it has been observed assigning two different intent
+labels to the identical question on different runs. Never trust it alone for
+anything a guard treats as a veto; always corroborate with a deterministic
+check (`detect_program`, `is_shared_topic`, etc).
+
+**`programs.is_shared_topic(text)`** — a portal-mechanics vocabulary check
+(register/login/upload/resubmit/pay/guarantee/...). Originally built for one
+guard, now reused as a deterministic veto in three places
+(`_program_clarify_guard`, `_injection_guard`, `_off_topic_guard`) to close
+gaps where the router mis-classifies ordinary portal questions. Reach for
+this pattern again before inventing a new one-off fix for the same shape of
+router false-positive.
+
+**Guided eligibility interview** (`_eligibility_guard` +
+`_eligibility_interview_ask`/`_eligibility_percent_ask` in `guards.py`,
+`core/eligibility.py`). When a bare "am I eligible?" is missing entrance-exam
+status, category, or the right percentage, the guard now asks one question at
+a time (entrance → category → subject-percentage) instead of a single blunt
+"please clarify" — driven by `interviewOptions`/`interviewField`/`slotUpdate`
+in the response, echoed back by the client as `conversationState`
+(`{programme, intent, category, subjectPercent, overallPercent,
+entranceExamStatus}`) on the next request. **The current message's own words
+always win over anything carried in `conversationState`** —
+`resolve_conversation_slot()` enforces this; never trust the carried state
+over what the student just typed.
+
+**Eligibility verdicts intentionally say "meets the marks requirement", not
+"is eligible".** Changed 2026-08-1x after review: a flat "you are eligible"
+overclaimed certainty while NEET-UG-2026 clearance, age (17 by 31 Dec 2026,
+`bvsc` only — verified on its own prospectus page 4; **not** yet verified for
+`bfsc`/`btech-dairy`, see Open), and category-certificate requirements were
+still outstanding. `_eligibility_facts()`/`_eligibility_fallback_sentence()`
+give those conditions equal weight to the verdict, not a footnote.
+
+**`detect_program(text)` returns only the FIRST-named programme** when a
+question names several (`detect_programs_multi()[0]`) — by design, for the
+single-programme redirect/lookup callers it was built for. Any NEW call site
+that might see multiple programmes in one question (comparison, eligibility
+verdicts, threshold lookups) must check `detect_programs_multi()` itself and
+decline (fall through) when it returns more than one, rather than silently
+picking the first. `_eligibility_guard` had exactly this bug through
+2026-08-18: a three-programme eligibility question silently computed a
+verdict against only the first-named programme's thresholds. Fixed; watch
+for the same shape elsewhere before adding a new `detect_program()` call.
+
+**Client-side (`static/app.js`/`admin-app.js`) React stale-closure
+gotcha**: `setState()` followed by an immediate function call in the *same*
+synchronous handler reads the PRE-update state, because the closure that
+call runs in was created at the last render, before the update lands. Fixed
+throughout by computing the next value explicitly
+(`const next = {...conversationState, [field]: value}`) and passing it as an
+override parameter to `send()`, never by calling `send()` right after
+`setState()` and hoping it sees the new value.
 
 ## Things that cost hours — do not rediscover
 
@@ -135,14 +245,27 @@ releases, and since the lock is module-global it wedges FAQ writes for every
 project at once - including `add()` on ordinary chat traffic. It hides well:
 a warm, fully-backfilled file never triggers the backfill.
 
-**Redirect stdout with `python3 -u` when benchmarking.** Python block-buffers
+**Redirect stdout with `python -u` when benchmarking.** Python block-buffers
 stdout to a file, so a long run shows an empty output file the whole time and
 looks hung when it is fine.
+
+**"management quota"/"management seat" and similar bare-word collisions.**
+`_FOREIGN_COURSE_WORDS` matches short bare words like "management" that also
+appear in completely ordinary MAFSU-scoped phrases. Fixed narrowly with a
+disambiguator-word gate (only exclude "management" from that set when
+"quota"/"seat"/"seats" is also present) rather than removing the word
+outright — removing it would reopen the original false-negative it exists
+to catch. If a new collision word turns up, extend the gate, don't redesign it.
+
+**Reproduce before you fix.** LLM-path answers have real run-to-run
+variance; several apparent regressions this project turned out to be
+generation-variance noise, not a code change. Re-run the exact same failing
+question 1-3 times before concluding anything broke.
 
 ## Testing
 
 ```bash
-ADMIN_TOKEN=password .venv-backend/bin/python3 tools/bench_answer_quality.py
+ADMIN_TOKEN=password .venv-backend/Scripts/python.exe tools/bench_answer_quality.py
 ```
 
 The one suite that checks **figures**, not just which path answered. Ground
@@ -151,14 +274,25 @@ programme's figure — that is what contamination looks like.
 
 Other scripts (`test_matrix`, `test_clarification`, `test_projects`,
 `test_hinglish`, `test_retrieval_hi_mr`) assert on `source` and language, not
-correctness of figures. All passing as of 2026-08-14; `test_retrieval_hi_mr`
-is quota-free.
+correctness of figures. All fixed to use `127.0.0.1` 2026-08-18;
+`test_clarification.py` also had its project id fixed (`mvsc` → `bvsc` — the
+old one was deleted in the 2026-08-14 retirement and the whole suite 404'd
+before it could check anything). `test_retrieval_hi_mr` is quota-free.
+
+`tools/measure_latency_p95.py` (added 2026-08-18): reuses
+`eval_admissions.CASES`, records every response time, reports
+p50/p90/p95/p99 via linear interpolation — answers HANDOFF.md's open "p95
+unmeasured" item instead of eyeballing a few slow-looking cases.
+
+No suite yet exercises the guided eligibility interview or topic-menu chips
+as multi-turn conversations (`eval_admissions.py`'s `C()` framework is
+single-turn only) — see Open.
 
 Long runs: write output to the session scratchpad, not `/tmp` (it does not
-persist). Never `pkill -f` a pattern matching your own command — it kills the
-wrapper shell before the work starts.
+persist on this Windows box). Never `pkill -f` a pattern matching your own
+command — it kills the wrapper shell before the work starts.
 
-## Benchmark, 2026-08-14 (post-OCR)
+## Benchmark, 2026-08-14 (post-OCR, pre-eligibility-interview)
 
 `14/14 correct, avg 9.0s`. Read the distribution, not the average:
 
@@ -171,25 +305,52 @@ wrapper shell before the work starts.
 
 The outlier did **not** reproduce - the same question on a cold cache ran
 1.55s and 2.12s immediately after. Treat it as provider tail latency, not a
-slow path to go optimise. What is unproven is **p95**, not the median.
+slow path to go optimise.
 
-This means answer *quality* is at the ceiling of what this suite measures, so
-a stronger answer model is not the current bottleneck. Do not spend a new
-provider budget on chat quality on the strength of this number.
-
-But 14/14 is a narrow claim. The suite checks figures - fees, percentages,
-subject streams, and one refusal. It does **not** cover presentation, tone,
-follow-ups, multi-turn context, the seeded portal answers, or anything in
-Hindi/Marathi beyond digit normalisation. Those are exactly the areas the
-owner has raised repeatedly. A green suite here is not "the bot is good".
+This benchmark predates the guided-interview/topic-menu/conversationState
+work and the "meets the marks requirement" phrasing change — re-run before
+trusting it as a description of current answer quality, not just latency.
 
 ## Open
 
-- **p95 latency unmeasured.** Median is in target; the tail is not
-  characterised, and a retry/timeout policy is the lever, not a better model.
-- **Indic TTS broken** — needs the Docker service running or another
-  provider. `gpt-4o-mini-tts` is the promising candidate (Mistral TTS was
-  rejected for being English-only); an OpenAI key was supplied 2026-08-14 but
-  had **zero credits**, so nothing was wired up.
-- Presentation/quality pass and `taste-skill` redesign of the Playground.
-- No suite covers presentation, multi-turn, or Indic answer quality.
+- **P95 latency**: see the latest `measure_latency_p95.py` run output in the
+  session scratchpad, or re-run it — the number changes with provider tail
+  latency and is worth re-checking periodically, not a one-time fact to
+  memorize here.
+- **No regression coverage for the guided eligibility interview or
+  topic-menu chips.** Both are multi-turn state machines
+  (`interviewOptions`/`interviewField`/`slotUpdate` round-tripped via
+  `conversationState`); `eval_admissions.py` can't express that. Needs a new
+  test file built on `test_clarification.py`'s `_make_key`/`ask` pattern but
+  extended to carry `conversationState` across turns.
+- **Programme-name typo tolerance not implemented** (e.g. "bfsv" for
+  "bfsc"). Deliberately deferred: the codebase's existing fuzzy-match helper
+  is gated to markers ≥6 characters specifically because short strings like
+  "bfsc"/"bvsc" (4 chars) risk false-positive collisions at edit-distance 1.
+  Needs its own design, not a blind reuse of the existing helper.
+- **Age/NCL-certificate facts only verified for `bvsc`.** The same sentence
+  exists in `bfsc`/`btech-dairy`'s corpora but only inside the NRI/FN/PIO/OCI
+  section — a materially different, unverified scope. Do not add
+  `age_requirement` to their `RULES` entries without reading their own
+  general-eligibility section first.
+- **Comparison-path retry/accept-reject logic bug.** A retry that
+  objectively fixed the reported problem was being rejected because the
+  accept check compares raw flag counts rather than checking whether the
+  SAME original problem was resolved.
+- **Hindi/Marathi language-detection mismatch** on certain question
+  phrasings — not yet isolated to a specific pattern.
+- **B.Tech-Dairy tangent hallucination** on `bvsc`'s own single-answer path —
+  the foreign-programme chunk filter added this session
+  (`rag/answer.py`, filters chunks whose `detect_programs_multi` names a
+  programme other than the current project) does not catch this specific
+  case yet.
+- **Retrieval golden set is thin.** `tools/eval_retrieval_full.py` (added
+  2026-08-18) tried to derive gold chunks automatically from
+  `eval_admissions.CASES`'s `expect` term lists and could only reliably
+  label 2/80 cases — those lists were built for loose answer-checking, not
+  verbatim chunk-grounding. A real golden set needs hand-labeling, not
+  reuse of the existing eval cases.
+- **Indic TTS still broken** — needs the Docker service running or a funded
+  `gpt-4o-mini-tts` key.
+- No suite covers presentation, tone, or Indic answer *quality* (as opposed
+  to source/figure correctness) — repeatedly raised, still open.
