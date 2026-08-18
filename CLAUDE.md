@@ -313,10 +313,29 @@ trusting it as a description of current answer quality, not just latency.
 
 ## Open
 
-- **P95 latency**: see the latest `measure_latency_p95.py` run output in the
-  session scratchpad, or re-run it — the number changes with provider tail
-  latency and is worth re-checking periodically, not a one-time fact to
-  memorize here.
+- **P95 latency — measured, and it is bad.** First real run, 2026-08-18,
+  `measure_latency_p95.py` against production, cold cache, all 80
+  `eval_admissions.CASES`:
+
+  | | |
+  |---|---|
+  | min / p50 | 1.0s / 3.0s — median is fine, matches the old benchmark |
+  | p90 / p95 / p99 | **56.0s / 80.5s / 240.1s** |
+  | max / mean | 240.2s / 18.7s |
+  | >15s | 15/80 (18.8%) |
+  | errors | 3/80 timed out or dropped outright (Q49, Q56, Q66 — reservation-policy and seat-count questions) |
+
+  This is the number HANDOFF.md's P0 section predicted but never measured:
+  median latency hid a tail that 1 in 5 real students would actually hit,
+  plus outright failures on ~4% of questions. The fast end (sections A/G,
+  1.0-1.1s) is entirely the deterministic paths (eligibility verdicts,
+  retired-programme refusals) that skip the LLM round trip — the slow tail
+  clusters in reservation/fees/colleges, the sections that go through
+  retrieval + generation. **This is now the top-priority open item** — a
+  retry/timeout policy on the slow provider path, not a better model (see
+  the answer-quality ceiling note above). Re-run
+  `tools/measure_latency_p95.py` after any change here rather than trusting
+  this table indefinitely; provider tail latency drifts.
 - **No regression coverage for the guided eligibility interview or
   topic-menu chips.** Both are multi-turn state machines
   (`interviewOptions`/`interviewField`/`slotUpdate` round-tripped via
