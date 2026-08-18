@@ -142,6 +142,89 @@ def _self_credential_programs(text):
     return found
 
 
+# The single core abbreviation per programme, used ONLY by
+# _typo_matched_projects below - never the full alias tuple. The descriptive
+# aliases (veterinary, fishery, dairy, vet...) stay exact-substring-only on
+# purpose: "vet" is a common enough word that fuzzing it would misfire
+# ("vet appointment"), and "dairy" is edit-distance-1 from the real word
+# "daily" ("daily fee schedule" must not route to btech-dairy). The three
+# short abbreviations don't have that problem - they aren't dictionary
+# words - which is exactly what makes a typo in one of THEM worth catching.
+_CORE_ABBREVIATIONS = {
+    "bvsc": "bvsc",
+    "bfsc": "bfsc",
+    "btech-dairy": "btech",
+}
+
+# Real, common, unrelated words that happen to sit edit-distance-1 (or one
+# adjacent transposition) from a core abbreviation above and must never be
+# treated as a typo of it - see _typo_matched_projects's docstring for how
+# "tech" (one letter from "btech") was found and why a per-word exclusion,
+# not a length change, is the right fix.
+_TYPO_EXCLUDED_WORDS = {"tech"}
+
+
+def _is_adjacent_transposition(a, b):
+    """True if `a` is `b` with exactly one pair of ADJACENT characters
+    swapped ("bvcs" vs "bvsc") - plain Levenshtein counts a transposition
+    as distance 2 (two substitutions), not 1, so _levenshtein_le(a, b, 1)
+    misses this extremely common typo shape entirely. Only ever called
+    alongside that check, never instead of it - see _typo_matched_projects.
+    """
+    if len(a) != len(b):
+        return False
+    diffs = [i for i in range(len(a)) if a[i] != b[i]]
+    return (len(diffs) == 2 and diffs[1] == diffs[0] + 1
+            and a[diffs[0]] == b[diffs[1]] and a[diffs[1]] == b[diffs[0]])
+
+
+def _typo_matched_projects(text):
+    """Single-edit typo tolerance for the three core programme
+    abbreviations - "bfsv" for "bfsc", "bvcs" for "bvsc" - as
+    {project_id: matched_word}.
+
+    core/programs.py's existing typo tolerance (_matches, used for topic
+    markers like "eligibility") is gated to markers >=6 characters for
+    exactly the reason these abbreviations were left out of it entirely: at
+    4-5 characters, a blind edit-distance-1 net is wide enough to catch
+    other words by accident. Worse than an unrelated word here specifically:
+    "bvsc" and "bfsc" are mutually edit-distance-1 of EACH OTHER (the
+    v/f substitution), so a naive per-abbreviation check would let a typo of
+    ONE programme's name "correct" into a DIFFERENT, wrong programme -
+    silently answering from the wrong corpus, worse than not catching the
+    typo at all. This is the concrete shape of the risk that kept typo
+    tolerance off the programme aliases in the first place.
+
+    Fixed by requiring the match be unique: a word is only accepted as a
+    typo of an abbreviation when it is within edit-distance 1 of that ONE
+    abbreviation and no other. "bfsv" is distance 1 from "bfsc" but distance
+    2 from "bvsc" - unambiguous, accepted. A word equidistant from (or
+    within edit-distance 1 of) two abbreviations at once is left undetected
+    rather than guessed either way.
+
+    _TYPO_EXCLUDED_WORDS closes a second gap the uniqueness rule above
+    cannot: a word can be unambiguously distance-1 from exactly one
+    abbreviation and STILL be a real, common, unrelated word - "tech" is
+    distance 1 from "btech" (drop the leading "b") and appears constantly in
+    completely unrelated contexts ("hi-tech", "tech support", "EdTech"), not
+    just as a typo of the abbreviation. Found by sweeping every question in
+    tools/eval_admissions.py's CASES plus a broad list of common short
+    English words before trusting this function; "tech" was the only
+    collision either turned up. Extend this set the same way
+    programs.mentions_foreign_course's management/quota gate is extended -
+    add the word, do not redesign the check - if a new one is found.
+    """
+    found = {}
+    for word in _words(text):
+        if len(word) < 4 or word in _TYPO_EXCLUDED_WORDS:
+            continue
+        near = [pid for pid, abbr in _CORE_ABBREVIATIONS.items()
+                if _levenshtein_le(word, abbr, 1) or _is_adjacent_transposition(word, abbr)]
+        if len(near) == 1:
+            found[near[0]] = word
+    return found
+
+
 def detect_programs_multi(text):
     """Return every project id a question explicitly names, ordered by where
     its first alias appears in the text - not just one (see detect_program).
@@ -161,12 +244,26 @@ def detect_programs_multi(text):
     norm = _normalize(text)
     self_credential = _self_credential_programs(text)
     found = []
+    matched_ids = set()
     for project_id, aliases in _PROGRAM_ALIASES.items():
         if project_id in self_credential:
             continue
         positions = [norm.find(alias) for alias in aliases if alias in norm]
         if positions:
             found.append((min(positions), project_id))
+            matched_ids.add(project_id)
+    # Typo fallback: only for a programme no EXACT alias already found (a
+    # question can misspell one programme while naming another correctly -
+    # each is judged on its own). Position comes from the lowered original
+    # text rather than `norm` (the exact-match coordinate space, fully
+    # despaced) - a minor mismatch, acceptable since a question mixing an
+    # exact mention of one programme with a typo'd mention of another is a
+    # vanishingly rare case to begin with.
+    lowered = text.lower()
+    for project_id, word in _typo_matched_projects(text).items():
+        if project_id in self_credential or project_id in matched_ids:
+            continue
+        found.append((lowered.find(word), project_id))
     found.sort()
     return [project_id for _, project_id in found]
 
