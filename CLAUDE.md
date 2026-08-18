@@ -284,9 +284,12 @@ before it could check anything). `test_retrieval_hi_mr` is quota-free.
 p50/p90/p95/p99 via linear interpolation — answers HANDOFF.md's open "p95
 unmeasured" item instead of eyeballing a few slow-looking cases.
 
-No suite yet exercises the guided eligibility interview or topic-menu chips
-as multi-turn conversations (`eval_admissions.py`'s `C()` framework is
-single-turn only) — see Open.
+`tools/test_conversation_flows.py` (added 2026-08-18) exercises the guided
+eligibility interview and topic-menu chips as multi-turn conversations —
+`eval_admissions.py`'s `C()` framework is single-turn only and can't. Drives
+the same mechanism `static/app.js`'s `pickInterview`/`pickTopic` use: resend
+the server's `carryQuestion`, with `conversationState` built by setting
+exactly the field a chip click would set.
 
 Long runs: write output to the session scratchpad, not `/tmp` (it does not
 persist on this Windows box). Never `pkill -f` a pattern matching your own
@@ -336,12 +339,10 @@ trusting it as a description of current answer quality, not just latency.
   the answer-quality ceiling note above). Re-run
   `tools/measure_latency_p95.py` after any change here rather than trusting
   this table indefinitely; provider tail latency drifts.
-- **No regression coverage for the guided eligibility interview or
-  topic-menu chips.** Both are multi-turn state machines
-  (`interviewOptions`/`interviewField`/`slotUpdate` round-tripped via
-  `conversationState`); `eval_admissions.py` can't express that. Needs a new
-  test file built on `test_clarification.py`'s `_make_key`/`ask` pattern but
-  extended to carry `conversationState` across turns.
+- ~~No regression coverage for the guided eligibility interview or
+  topic-menu chips.~~ **Done 2026-08-18** —
+  `tools/test_conversation_flows.py`, 12/12 passing, stable across repeat
+  runs.
 - **Programme-name typo tolerance not implemented** (e.g. "bfsv" for
   "bfsc"). Deliberately deferred: the codebase's existing fuzzy-match helper
   is gated to markers ≥6 characters specifically because short strings like
