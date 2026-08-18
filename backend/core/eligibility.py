@@ -52,15 +52,13 @@ RULES = {
         # Live report: an "eligible" verdict was overclaiming - it mentioned
         # NEET as an outstanding condition but never age, even though the
         # source states it with equal standing. Not added for bfsc/btech-
-        # dairy: the identical sentence exists in both their corpora too,
-        # but ONLY inside "IMPORTANT INSTRUCTIONS TO NRI/FN/PIO/OCI
-        # CANDIDATES" - a materially different scope (NRI-specific vs. every
-        # candidate) that has NOT been separately verified as the general
-        # rule for those two programmes, so it is deliberately left out
-        # rather than guessed. No interview step or birthdate extraction
-        # exists to CHECK this against a stated date - it is stated as an
-        # outstanding condition in the verdict, exactly like the entrance
-        # exam already is, not a computed pass/fail.
+        # dairy at the time this was first written - that assumption was
+        # WRONG, corrected 2026-08-18 (see their own entries below): both
+        # DO state the identical rule in their own general eligibility
+        # section too, not only the NRI one. No interview step or birthdate
+        # extraction exists to CHECK this against a stated date - it is
+        # stated as an outstanding condition in the verdict, exactly like
+        # the entrance exam already is, not a computed pass/fail.
         "age_requirement": "17 years of age by 31 December 2026 (born on or before 1 January 2010)",
     },
     "bfsc": {
@@ -73,6 +71,18 @@ RULES = {
         "entrance": "MHT-CET 2026",
         "entrance_key": "cet",
         "page": 10,
+        # Verified 2026-08-18 directly against the OCR'd prospectus text
+        # (data/projects/bfsc/vector-store.json, page 10): item 4 of "5. THE
+        # ELIGIBILITY / SELECTION CRITERIA FOR ADMISSION" - the SAME general
+        # section and list position as bvsc's, not a footnote - states this
+        # verbatim: "Candidates should fulfill the eligibility condition of
+        # 17 years of age on 31/12/2026 i.e. the candidate born on or before
+        # 1st January, 2010 shall only be considered for admission on merit
+        # basis." Also independently restated in the NRI/FN/PIO/OCI section
+        # (page 23, item 11.ii) - corrects the earlier assumption above that
+        # this was NRI-only for bfsc/btech-dairy; it was never actually
+        # checked against the source text until now.
+        "age_requirement": "17 years of age by 31 December 2026 (born on or before 1 January 2010)",
     },
     "btech-dairy": {
         "label": "B.Tech. (Dairy Technology)",
@@ -84,6 +94,11 @@ RULES = {
         "entrance": "MHT-CET 2026",
         "entrance_key": "cet",
         "page": 5,
+        # Verified 2026-08-18, same method as bfsc above
+        # (data/projects/btech-dairy/vector-store.json, page 5): item 4 of
+        # "5. THE ELIGIBILITY / SELECTION CRITERIA FOR ADMISSION" states the
+        # identical sentence verbatim (down to the punctuation).
+        "age_requirement": "17 years of age by 31 December 2026 (born on or before 1 January 2010)",
     },
 }
 
