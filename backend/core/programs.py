@@ -523,10 +523,21 @@ def comparison_targets(text):
 # Courses this university does not run, plus the shapes an unfamiliar degree
 # usually takes. Deliberately a list of COURSES: the refusal it gates must
 # never trigger on the institution's own name.
+#
+# "be" (Bachelor of Engineering) removed 2026-08-18: it is also the single
+# most common auxiliary verb in English, and _words() tokenizes on word
+# boundaries alone with no part-of-speech awareness - "which NEET score
+# will BE considered for 2026 admission?", an entirely ordinary admission
+# question, collided on that one word and got refused outright with "I
+# only cover admissions for...". "engineering" (already in this set) plus
+# _DEGREE_SHAPE_RE's fallback (which matches "B.E." - the form people
+# actually write to distinguish it from the word "be") already cover a
+# genuine Bachelor of Engineering mention without this bare two-letter
+# token's blast radius.
 _FOREIGN_COURSE_WORDS = {
     "mba", "mbbs", "bds", "bams", "bhms", "bums", "bpt", "bsc", "msc", "ba",
     "bcom", "mcom", "llb", "llm", "bca", "mca", "bba", "bpharm", "dpharm",
-    "bed", "med", "phd", "mvsc", "mtech", "be", "btech",
+    "bed", "med", "phd", "mvsc", "mtech", "btech",
     "engineering", "medicine", "medical", "nursing", "pharmacy", "law",
     "agriculture", "horticulture", "forestry", "commerce", "arts", "management",
 }

@@ -44,6 +44,24 @@ RULES = {
         "entrance": "NEET-UG-2026",
         "entrance_key": "neet",
         "page": 4,
+        # Verified 2026-08-18, THE ELIGIBILITY/SELECTION CRITERIA section
+        # itself (item 3, same list as marks/NEET/medium-of-instruction, not
+        # a footnote): "Candidates should fulfill the eligibility condition
+        # of 17 years of age on 31/12/2026 i.e. the candidate born on or
+        # before 1st January, 2010 shall only be considered for admission."
+        # Live report: an "eligible" verdict was overclaiming - it mentioned
+        # NEET as an outstanding condition but never age, even though the
+        # source states it with equal standing. Not added for bfsc/btech-
+        # dairy: the identical sentence exists in both their corpora too,
+        # but ONLY inside "IMPORTANT INSTRUCTIONS TO NRI/FN/PIO/OCI
+        # CANDIDATES" - a materially different scope (NRI-specific vs. every
+        # candidate) that has NOT been separately verified as the general
+        # rule for those two programmes, so it is deliberately left out
+        # rather than guessed. No interview step or birthdate extraction
+        # exists to CHECK this against a stated date - it is stated as an
+        # outstanding condition in the verdict, exactly like the entrance
+        # exam already is, not a computed pass/fail.
+        "age_requirement": "17 years of age by 31 December 2026 (born on or before 1 January 2010)",
     },
     "bfsc": {
         "label": "B.F.Sc.",
@@ -600,4 +618,9 @@ def evaluate(project_id, text):
             "category": category or "unreserved",
             "category_assumed": category is None,
             "programme": rule["label"], "required_subjects": rule["subject_label"],
-            "entrance": rule["entrance"], "page": rule["page"]}
+            "entrance": rule["entrance"], "page": rule["page"],
+            # .get(), not rule[...]: only bvsc's RULES entry currently has
+            # this key (see its own comment on why bfsc/btech-dairy are
+            # deliberately left out) - None here for the other two, which
+            # _eligibility_facts reads as "nothing to mention".
+            "age_requirement": rule.get("age_requirement")}

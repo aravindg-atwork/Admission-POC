@@ -389,9 +389,28 @@ def _off_topic_guard(ctx):
     through to the normal pipeline when the router is unavailable, where the
     system prompt's own off-topic rule still handles it - slower and at the
     cost of a Sarvam call, but correct.
+
+    ONE narrow exception to "no keyword fallback", added 2026-08-18:
+    programs.is_shared_topic vetoes an off_topic_task classification
+    specifically. Reproduced live - "I uploaded the wrong document. Can I
+    upload it again?", an entirely ordinary admission-portal question, was
+    classified off_topic_task and refused with "I'm the admissions
+    assistant... I'd be happy to help you with your application" (a polite
+    version of the exact same not-listening failure _injection_guard's own
+    is_shared_topic veto exists to fix - same underlying student need,
+    caught by a DIFFERENT router intent label on a different run, which is
+    exactly the router non-determinism this whole guard file is built to
+    route around). This is not the general "off topic is everything a
+    question isn't about" problem the docstring above describes - it is
+    reusing an already-narrow, already-proven portal-mechanics vocabulary
+    check (register/upload/resubmit/pay/...), not a new topic marker list.
+    off_topic_trivia is untouched: a genuine trivia question never contains
+    this vocabulary, so the veto has nothing to accidentally protect there.
     """
     intent = _routed(ctx, "intent")
     if intent not in ("off_topic_trivia", "off_topic_task"):
+        return None
+    if intent == "off_topic_task" and programs.is_shared_topic(ctx.question):
         return None
     prompt = (_OFF_TOPIC_TRIVIA_PROMPT if intent == "off_topic_trivia"
               else _OFF_TOPIC_TASK_PROMPT).format(program=_assistant_scope(ctx.project_id))
@@ -1028,12 +1047,22 @@ def _eligibility_fallback_sentence(result):
         return (f"No, you are not eligible for {programme}: it requires "
                 f"{result['required_subjects']}, and you are missing "
                 f"{', '.join(result['missing'])}.")
-    verdict = "Yes, you are eligible for" if result["verdict"] == "eligible" else "No, you are not eligible for"
+    # Same "meets the marks requirement" scoping as _eligibility_facts's own
+    # verdict line above, and the same reason - this fallback sentence is
+    # what a student sees when the fluent phrasing already proved untrust-
+    # worthy once, so it is exactly the wrong place to reintroduce the
+    # overclaiming "you ARE eligible" this whole change exists to remove.
+    verdict = "Yes, you meet the marks requirement for" if result["verdict"] == "eligible" else "No, you are not eligible for"
     sentence = (f"{verdict} {programme}: your {result['stated']}% in "
                 f"{result['required_subjects']} is measured against the "
                 f"{result['category']} category requirement of {result['required']}%.")
     if result["verdict"] == "eligible" and result.get("entrance"):
-        sentence += f" Meeting this is only the eligibility bar - you must also have {result['entrance']}."
+        sentence += f" This is not the same as being admitted - you must also clear (not just appear for) {result['entrance']}."
+    if result["verdict"] == "eligible" and result.get("age_requirement"):
+        sentence += f" You must also meet the age requirement: {result['age_requirement']}."
+    if result["verdict"] == "eligible" and result.get("category") == "reserved":
+        sentence += (" If you belong specifically to VJ, DT(a), NT(b/c/d), OBC, SEBC or SBC "
+                     "category, you will also need a Non-Creamy Layer Certificate.")
     return sentence
 
 
@@ -1120,7 +1149,16 @@ def _eligibility_facts(result):
                 f"{result['required_subjects']}, and they are missing: "
                 f"{', '.join(result['missing'])}. Tell them this plainly and say what "
                 f"the requirement is. Do not soften it into a maybe.")
-    verdict = "IS eligible for" if result["verdict"] == "eligible" else "is NOT eligible for"
+    # "MEETS THE MARKS REQUIREMENT for", not "IS eligible for" - changed
+    # 2026-08-18. Live report: a student who gave marks + category got "You
+    # are eligible for B.V.Sc." stated as if final, with NEET tacked on
+    # after as a "please also ensure" afterthought - accurate about the
+    # marks, overclaiming about admission itself (NEET still has to be
+    # CLEARED, not merely appeared for; age and category documents are
+    # separate conditions this verdict never checked at all). The word
+    # "eligible" alone reads as a green light; this phrasing is deliberately
+    # scoped to the ONE thing that was actually computed.
+    verdict = "MEETS THE MARKS REQUIREMENT for" if result["verdict"] == "eligible" else "is NOT eligible for"
     lines = [
         f"VERDICT (already decided, state exactly this): the student {verdict} "
         f"{programme} on the marks they gave.",
@@ -1132,8 +1170,22 @@ def _eligibility_facts(result):
                      "requirement - say so, and mention the reserved requirement is "
                      "lower, so they can correct you if they are in a reserved category.")
     if result["verdict"] == "eligible" and result.get("entrance"):
-        lines.append(f"Meeting this threshold is only the eligibility bar - they must "
-                     f"also have {result['entrance']}. Mention that, briefly.")
+        lines.append(f"Meeting the marks requirement is NOT the same as being "
+                     f"admitted - they must also CLEAR (not just appear for) "
+                     f"{result['entrance']}. State this with the SAME weight as "
+                     f"the marks verdict, in the same short answer, not as a "
+                     f"trailing footnote.")
+    if result["verdict"] == "eligible" and result.get("age_requirement"):
+        lines.append(f"They must also meet the age requirement: "
+                     f"{result['age_requirement']}. State this too, with equal "
+                     f"weight, not as an afterthought.")
+    if result["verdict"] == "eligible" and result.get("category") == "reserved":
+        lines.append("If they belong specifically to VJ, DT(a), NT(b/c/d), OBC, "
+                     "SEBC or SBC category (not SC/ST, which use only a caste "
+                     "certificate), they will also need a Non-Creamy Layer "
+                     "Certificate issued on or after 01/04/2026. Mention this as "
+                     "a conditional note (\"if you belong to...\"), since their "
+                     "exact reserved sub-category was not asked.")
     lines.append("Lead with the verdict in the first sentence. Do not re-derive it, "
                  "do not hedge it, and do not quote any other percentage.")
     return "\n".join(lines)
