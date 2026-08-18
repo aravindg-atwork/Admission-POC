@@ -178,10 +178,10 @@ over what the student just typed.
 
 **Eligibility verdicts intentionally say "meets the marks requirement", not
 "is eligible".** Changed 2026-08-1x after review: a flat "you are eligible"
-overclaimed certainty while NEET-UG-2026 clearance, age (17 by 31 Dec 2026,
-`bvsc` only — verified on its own prospectus page 4; **not** yet verified for
-`bfsc`/`btech-dairy`, see Open), and category-certificate requirements were
-still outstanding. `_eligibility_facts()`/`_eligibility_fallback_sentence()`
+overclaimed certainty while entrance-exam clearance, age (17 by 31 Dec 2026 —
+verified for all three programmes, each on its own prospectus's general
+eligibility section), and category-certificate requirements were still
+outstanding. `_eligibility_facts()`/`_eligibility_fallback_sentence()`
 give those conditions equal weight to the verdict, not a footnote.
 
 **`detect_program(text)` returns only the FIRST-named programme** when a
@@ -362,11 +362,14 @@ trusting it as a description of current answer quality, not just latency.
   uniqueness rule so "bvsc"/"bfsc" (mutually edit-distance-1 of each other)
   can't typo-correct into one another, plus a small excluded-word set for
   real words that happen to collide (`"tech"` → `"btech"`).
-- **Age/NCL-certificate facts only verified for `bvsc`.** The same sentence
-  exists in `bfsc`/`btech-dairy`'s corpora but only inside the NRI/FN/PIO/OCI
-  section — a materially different, unverified scope. Do not add
-  `age_requirement` to their `RULES` entries without reading their own
-  general-eligibility section first.
+- ~~Age/NCL-certificate facts only verified for `bvsc`.~~ **Done 2026-08-18**
+  — the earlier assumption (NRI-section-only for `bfsc`/`btech-dairy`) was
+  actually checked against the source text this time and turned out wrong:
+  both state the identical age rule in their own general eligibility
+  section too (`bfsc` page 10 item 4, `btech-dairy` page 5 item 4, same list
+  position as `bvsc`'s). All three `RULES` entries now carry
+  `age_requirement`; the NCL-certificate note in `guards.py` was already
+  programme-agnostic and needed no change.
 - **Comparison-path retry/accept-reject logic bug.** A retry that
   objectively fixed the reported problem was being rejected because the
   accept check compares raw flag counts rather than checking whether the
