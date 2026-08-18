@@ -60,25 +60,25 @@ def check(label, got_source, expected_source, answer_text=""):
 
 
 results = []
-mvsc_key = _make_key("mvsc")
+bvsc_key = _make_key("bvsc")
 default_key = _make_key("default")
 
 print("=== English: ambiguous percentage (2026-08-12 regression) ===")
-r = ask(mvsc_key, "I have scored 60%, am I eligible for M.V.Sc.?", "en")
+r = ask(bvsc_key, "I have scored 60%, am I eligible for B.V.Sc.?", "en")
 results.append(check("EN ambiguous", r.get("source"), "clarify-percentage", r.get("answerText", "")))
 
 print("\n=== English: already-qualified percentage (must NOT clarify) ===")
-r = ask(mvsc_key, "I have 51% overall in 12th but 45% in PCB and English, am I eligible for M.V.Sc.?", "en")
+r = ask(bvsc_key, "I have 51% overall in 12th but 45% in PCB and English, am I eligible for B.V.Sc.?", "en")
 ok = r.get("source") != "clarify-percentage"
 print(f"{'PASS' if ok else 'FAIL'}  EN qualified: expected NOT clarify-percentage, got={r.get('source')!r}")
 results.append(ok)
 
 print("\n=== Hindi: ambiguous percentage ===")
-r = ask(mvsc_key, "मुझे 60% मिले हैं, क्या मैं एम.व्ही.एससी. के लिए पात्रता रखता हूँ?", "hi")
+r = ask(bvsc_key, "मुझे 60% मिले हैं, क्या मैं बी.व्ही.एससी. के लिए पात्रता रखता हूँ?", "hi")
 results.append(check("HI ambiguous", r.get("source"), "clarify-percentage", r.get("answerText", "")))
 
 print("\n=== Marathi: ambiguous percentage ===")
-r = ask(mvsc_key, "मला 60% मिळाले आहेत, मला एम.व्ही.एससी.साठी प्रवेश मिळेल का?", "mr")
+r = ask(bvsc_key, "मला 60% मिळाले आहेत, मला बी.व्ही.एससी.साठी प्रवेश मिळेल का?", "mr")
 results.append(check("MR ambiguous", r.get("source"), "clarify-percentage", r.get("answerText", "")))
 
 print("\n=== Program-clarification still works: English ===")

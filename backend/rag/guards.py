@@ -760,7 +760,16 @@ def _eligibility_guard(ctx):
     # programme the student named routes here via target_programs; with none
     # named there is nothing to evaluate against.
     routed = _routed(ctx, "target_programs") or []
-    named = programs.detect_program(original)
+    # detect_program alone returns only the FIRST-named programme (see its
+    # docstring) - silently picking one when the student named several was
+    # exactly this guard's bug: "am I eligible for B.V.Sc., B.F.Sc., or
+    # B.Tech Dairy?" got a verdict computed against B.V.Sc.'s thresholds
+    # alone, with the other two dropped and never mentioned. Only trust a
+    # single unambiguous match here; two or more falls through (candidate
+    # stays None below) to _percentage_clarify_guard/_comparison_guard,
+    # which are the guards actually built to handle more than one programme.
+    multi_named = programs.detect_programs_multi(original)
+    named = multi_named[0] if len(multi_named) == 1 else None
     if project_id == config.DEFAULT_PROJECT_ID:
         # The student's OWN words first; the router only as a fallback. Taking
         # routed[0] ahead of detect_program made this guard tell a student who
