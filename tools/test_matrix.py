@@ -16,7 +16,7 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8")  # Windows console default (cp1252) can't print Devanagari/Tamil
 
-BASE = "http://localhost:5050"
+BASE = "http://127.0.0.1:5050"
 ADMIN = os.environ.get("ADMIN_TOKEN", "poc-admin-dev-token")
 
 results = []

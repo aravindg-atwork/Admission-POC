@@ -4,7 +4,7 @@ import os
 import urllib.error
 import urllib.request
 
-BASE = "http://localhost:5050"
+BASE = "http://127.0.0.1:5050"
 # Read from the environment, matching the other tools/ scripts: a
 # hardcoded token 401s on any machine whose ADMIN_TOKEN was changed.
 ADMIN = os.environ.get("ADMIN_TOKEN", "poc-admin-dev-token")

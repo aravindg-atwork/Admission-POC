@@ -52,7 +52,7 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8")  # Windows cp1252 console can't print Devanagari
 
-BASE = os.environ.get("BASE_URL", "http://localhost:5050")
+BASE = os.environ.get("BASE_URL", "http://127.0.0.1:5050")
 ADMIN = os.environ.get("ADMIN_TOKEN", "poc-admin-dev-token")
 PROJECT = os.environ.get("PROJECT_ID", "default")
 

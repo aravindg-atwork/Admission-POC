@@ -47,7 +47,7 @@ print(f"CHAT_PRIMARY: {chat_primary or 'sarvam (default)'}")
 # The issue is the embedding service is down. Let's check if there's a fallback
 print(f"\nChecking backend /api/chat directly...")
 try:
-    req = urllib.request.Request("http://localhost:5050/api/chat")
+    req = urllib.request.Request("http://127.0.0.1:5050/api/chat")
     req.add_header("Content-Type", "application/json")
     req.add_header("X-API-Key", "aas_test")
     req.data = json.dumps({"question": "hello"}).encode("utf-8")

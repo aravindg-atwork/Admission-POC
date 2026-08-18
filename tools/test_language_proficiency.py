@@ -17,7 +17,7 @@ import time
 
 def get_api_key():
     """Extract the API key from the index page."""
-    with urllib.request.urlopen("http://localhost:5050/") as f:
+    with urllib.request.urlopen("http://127.0.0.1:5050/") as f:
         html = f.read().decode()
     m = re.search(r'ADMISSION_API_KEY="([^"]+)"', html)
     if m:
@@ -34,7 +34,7 @@ def ask(api_key, question, ui_language=None, script_preference=None):
         body["scriptPreference"] = script_preference
 
     req = urllib.request.Request(
-        "http://localhost:5050/api/chat",
+        "http://127.0.0.1:5050/api/chat",
         data=json.dumps(body).encode("utf-8"),
         headers={
             "Content-Type": "application/json",

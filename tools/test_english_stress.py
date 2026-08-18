@@ -26,7 +26,7 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-BASE = "http://localhost:5050"
+BASE = "http://127.0.0.1:5050"
 API_KEY = "aas_2GdiE0TfeVWNseNQeJonQpBRQYNqbm3ssl4lS3PozEo"
 LOG_PATH = "tools/test_english_stress_results.log"
 

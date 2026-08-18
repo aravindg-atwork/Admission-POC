@@ -40,7 +40,7 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-BASE = os.environ.get("BACKEND_URL", "http://localhost:5050")
+BASE = os.environ.get("BACKEND_URL", "http://127.0.0.1:5050")
 # Read from the environment like tools/test_matrix.py does. Hardcoding the
 # default meant this script 401'd on any machine whose ADMIN_TOKEN had been
 # changed in .env - and the failure comes after it prints "80 entries", so it

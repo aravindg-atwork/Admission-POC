@@ -38,7 +38,7 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-BASE = os.environ.get("BACKEND_URL", "http://localhost:5050")
+BASE = os.environ.get("BACKEND_URL", "http://127.0.0.1:5050")
 ADMIN = os.environ.get("ADMIN_TOKEN", "poc-admin-dev-token")
 # This content is program-agnostic (portal login/upload/password mechanics
 # are identical regardless of which degree course you're applying for), so

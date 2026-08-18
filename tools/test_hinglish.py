@@ -8,7 +8,7 @@ ADMIN = os.environ.get("ADMIN_TOKEN", "poc-admin-dev-token")
 
 def _make_temp_key():
     req = urllib.request.Request(
-        "http://localhost:5050/admin/keys",
+        "http://127.0.0.1:5050/admin/keys",
         data=json.dumps({"label": "test-hinglish-run"}).encode("utf-8"),
         headers={"Content-Type": "application/json", "X-Admin-Token": ADMIN}, method="POST")
     with urllib.request.urlopen(req, timeout=30) as resp:
@@ -22,7 +22,7 @@ _KEY_ID = _created["id"]
 
 def _delete_temp_key():
     req = urllib.request.Request(
-        f"http://localhost:5050/admin/keys/{_KEY_ID}",
+        f"http://127.0.0.1:5050/admin/keys/{_KEY_ID}",
         headers={"X-Admin-Token": ADMIN}, method="DELETE")
     urllib.request.urlopen(req, timeout=30)
 
@@ -35,7 +35,7 @@ def ask(q, script_pref=None):
     body = {"question": q}
     if script_pref:
         body["scriptPreference"] = script_pref
-    req = urllib.request.Request("http://localhost:5050/api/chat", data=json.dumps(body).encode("utf-8"),
+    req = urllib.request.Request("http://127.0.0.1:5050/api/chat", data=json.dumps(body).encode("utf-8"),
         headers={"Content-Type": "application/json", "X-API-Key": KEY}, method="POST")
     with urllib.request.urlopen(req, timeout=200) as resp:
         return json.loads(resp.read().decode("utf-8"))
