@@ -131,6 +131,44 @@ def _dedupe_chunks(chunks, keep):
     return out
 
 
+# Found 2026-08-18 via direct trace inspection: a "compare NRI fees" question
+# retrieved THREE separate, structurally near-identical fee tables for B.V.Sc.
+# alone - Annexure-IV "FEE STRUCTURE (Constituent Veterinary Colleges)",
+# Annexure-V "FEE STRUCTURE: University Quota (...Private Veterinary
+# Colleges)", Annexure-VI "FEE STRUCTURE: Management Quota (...Private
+# Veterinary Colleges)" - each with its OWN, DIFFERENT figures (private
+# college fees run higher than constituent/government college fees). The
+# model quoted the SAME numbers under all three category labels instead of
+# reading each table separately; provenance.check_labels correctly caught it
+# (see _answer_comparison's provenance block) and it was redacted rather than
+# served wrong - but redaction is cleanup, not prevention. B.F.Sc. and
+# B.Tech. Dairy each have only ONE fee table, so this is a B.V.Sc.-shaped
+# problem specifically, not something to special-case broadly.
+# Anchored to a markdown heading LINE (optional #/* markers at line start),
+# not a bare substring match - "FEE STRUCTURE" also appears mid-sentence in
+# ordinary prose ("the University reserves the right to increase the fee
+# structure at any time..."), which a substring match wrongly counted as a
+# distinct table category. A real table heading is on its own line.
+_FEE_STRUCTURE_RE = re.compile(
+    r"(?im)^[#*\s]{0,8}FEE STRUCTURE\s*[:\-–]?\s*\(?([A-Za-z][A-Za-z /\-]{3,60})")
+
+
+def _fee_table_categories(chunks):
+    """Distinct fee-table category labels found across one programme's own
+    retrieved chunks - empty or a single label means nothing to warn about;
+    two or more means the prompt should tell the model explicitly that these
+    are separate tables with separate figures, rather than leaving it to
+    notice three near-identically-formatted tables on its own.
+    """
+    labels = set()
+    for chunk in chunks:
+        for match in _FEE_STRUCTURE_RE.finditer(chunk.get("text", "")):
+            label = match.group(1).strip().rstrip(")").strip()
+            if label:
+                labels.add(label)
+    return labels
+
+
 def _answer_comparison(target_programs, question, script_pref, ui_language,
                         language, hint_language, hint, typed_romanized, cloud_ok, trace=None):
     """Answer a question that spans several programs by retrieving from each
@@ -185,6 +223,15 @@ def _answer_comparison(target_programs, question, script_pref, ui_language,
         all_pages.update(e["page"] for e in top)
         all_chunks.extend(top)
         excerpt_text = "\n\n".join(_compact_readings(e["text"]) for e in top)
+        categories = _fee_table_categories(top)
+        if len(categories) > 1:
+            excerpt_text = (
+                f"(NOTE: the excerpts below contain {len(categories)} SEPARATE fee-structure "
+                f"tables for {_program_name(pid)} - {', '.join(sorted(categories))}. Each has "
+                "its OWN figures; do not reuse one table's numbers for a different category. "
+                "State each fee under the specific category its own table names, and if the "
+                "excerpts don't give a figure for a category, say so rather than guessing.)\n\n"
+            ) + excerpt_text
         sections.append(f"=== {_program_name(pid)} ===\n{excerpt_text}")
         program_contexts[pid] = excerpt_text
 

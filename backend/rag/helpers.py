@@ -70,6 +70,36 @@ def _injection_refusal(project_id, ui_language):
     return template.format(program=_program_name(project_id))
 
 
+def resolve_conversation_slot(current_value, seeded_value):
+    """Precedence rule for merging a structured slot the CURRENT message
+    states against the same slot carried over in ctx.conversationState (the
+    client-accumulated profile from earlier turns - see answer.py's
+    _build_context and http/chat_routes.py's validation).
+
+    The current message's own words always win. `current_value` is whatever
+    THIS turn's text actually says about the slot (e.g. eligibility.extract()
+    run on ctx.original_question) - if it says anything at all, that is the
+    answer, full stop. `seeded_value` (from ctx.conversationState) is used
+    only to fill a gap the current message leaves empty, e.g. a category
+    named two turns ago that this message doesn't repeat. It must never
+    override or contradict what the student is saying right now.
+    This is not a new rule invented for conversationState - it is the exact
+    same "student's own words first, the router only as a fallback"
+    precedence guards.py already applies for programme detection (see
+    _eligibility_guard's and _program_redirect_guard's docstrings on
+    corroborating/preferring ctx.original_question over the router's
+    target_programs). conversationState is just another lower-priority
+    source of the same shape, and belongs behind the same rule.
+
+    Not called anywhere yet - conversationState reaches ctx in P0, but no
+    guard reads it yet (that starts in P1). Exists now, ahead of any caller,
+    so P1's guided-interview guard has one correct, already-reasoned-through
+    place to do this merge instead of five slightly different reimplementations
+    growing across whichever guards end up filling slots.
+    """
+    return current_value if current_value is not None else seeded_value
+
+
 _UI_LANGUAGE_NAMES = {"hi": "Hindi", "mr": "Marathi", "ta": "Tamil", "en": "English"}
 
 

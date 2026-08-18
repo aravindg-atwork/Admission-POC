@@ -226,12 +226,18 @@ _PROGRAM_SPECIFIC_MARKERS = {
     # the provenance check, because no single retrieval could source three
     # programmes' fee tables cleanly. A clarification is a better answer than
     # three apologies.
+    # "hostel" moved to _SHARED_PORTAL_MARKERS 2026-08-18: the prospectuses
+    # don't actually state a differing per-programme hostel fee at all - the
+    # FEE STRUCTURE annexures only say it is "payable at the respective
+    # college at the time of confirmation of admission", the same sentence in
+    # every corpus. There was never a number here to disambiguate; "hostel"
+    # only ever looked programme-specific by analogy with "fee".
     "fee", "fees", "tuition", "eligibility", "eligible", "criteria",
     "marks", "cutoff", "percentage", "seat", "seats", "intake", "vacancy",
-    "vacancies", "quota", "reservation", "reserved", "unreserved", "hostel",
+    "vacancies", "quota", "reservation", "reserved", "unreserved",
     "syllabus", "curriculum", "duration", "neet", "aieea", "cgpa",
     # Hindi / Marathi
-    "शुल्क", "फी", "फीस", "पात्रता", "जागा", "वसतिगृह",
+    "शुल्क", "फी", "फीस", "पात्रता", "जागा",
 }
 # Portal-mechanics topics that have exactly one correct answer regardless of
 # which program - matches tools/seed_faq_portal.py's shared content. A
@@ -251,6 +257,17 @@ _SHARED_PORTAL_MARKERS = {
     # appear in them. These verbs mark the question as being about the
     # PROCESS, which is shared, rather than the figure, which is not.
     "pay", "paying", "payment", "guarantee", "guarantees", "guaranteed",
+    # Added 2026-08-18, same shape: "does MAFSU CONSIDER 12th marks or
+    # entrance-exam marks?" asks about the merit-calculation PROCESS (the
+    # weightage system is described the same way across every programme's
+    # prospectus), not a differing figure, yet "marks" alone got it bounced
+    # with "which programme?".
+    "consider", "considers", "considered",
+    # See _PROGRAM_SPECIFIC_MARKERS's comment on "hostel" - moved here
+    # entirely, not just excluded from the strong/force-ask set, because
+    # there is no differing per-programme figure to disambiguate in the
+    # first place.
+    "hostel", "वसतिगृह",
 }
 
 
@@ -305,6 +322,27 @@ def _matches(words, markers):
     return False
 
 
+def is_shared_topic(text):
+    """True when the question hits a portal-mechanics/process marker that has
+    exactly one correct answer regardless of programme (see
+    _SHARED_PORTAL_MARKERS). Exposed separately from needs_program_clarification
+    so guards.py can use it as a veto over a ROUTER opinion too, not just as
+    an early-return inside the deterministic marker check - see
+    _program_clarify_guard's use of this for why: the router's own
+    "needs_program_clarification" verdict used to win unconditionally
+    whenever it had one, with no way for a proven-shared topic to override a
+    router false positive back to "just answer it". Reproduced directly -
+    "Does MAFSU consider 12th marks or entrance-exam marks for admission?"
+    and "What is the hostel fee at MAFSU?" both have one shared answer (the
+    weightage process is described the same way for every programme; hostel
+    fees are stated as "payable at the respective college", not a differing
+    figure - see the FEE STRUCTURE annexures), yet both got bounced with
+    "which programme?" because the router said yes and nothing could say
+    otherwise.
+    """
+    return _matches(_words(text), _SHARED_PORTAL_MARKERS)
+
+
 def needs_program_clarification(text):
     """True when a question is about something that varies per program,
     names no specific program, and isn't one of the shared portal-mechanics
@@ -312,9 +350,9 @@ def needs_program_clarification(text):
     """
     if detect_program(text):
         return False
-    words = _words(text)
-    if _matches(words, _SHARED_PORTAL_MARKERS):
+    if is_shared_topic(text):
         return False
+    words = _words(text)
     return _matches(words, _PROGRAM_SPECIFIC_MARKERS)
 
 
@@ -370,9 +408,9 @@ def needs_program_clarification_strong(text):
     """
     if detect_program(text):
         return False
-    words = _words(text)
-    if _matches(words, _SHARED_PORTAL_MARKERS):
+    if is_shared_topic(text):
         return False
+    words = _words(text)
     return _matches(words, _FORCE_ASK_MARKERS)
 
 
@@ -533,7 +571,19 @@ def mentions_foreign_course(text):
     if detect_programs_multi(text):
         return False
     words = _words(text)
-    if words & _FOREIGN_COURSE_WORDS:
+    # "management" alone is in _FOREIGN_COURSE_WORDS for a business-management
+    # degree ("do you offer a management course?"), but "Management Quota" is
+    # this university's OWN admission-category term - every one of the three
+    # programmes' own prospectuses uses it constantly (private-college seats
+    # filled outside the state merit list, as opposed to "University Quota").
+    # Reproduced live: "Do I need NEET even if I'm taking management quota?"
+    # - squarely an in-scope MAFSU admission question - got refused with "I
+    # only cover admissions for..." because "management" alone was enough to
+    # trigger the foreign-course match. "quota" anywhere in the text is
+    # enough to disambiguate: nobody asks about a "management quota" wanting
+    # a business degree.
+    foreign_words = _FOREIGN_COURSE_WORDS - {"management"} if "quota" in words else _FOREIGN_COURSE_WORDS
+    if words & foreign_words:
         return True
     stripped = re.sub(r"\b(mafsu|maharashtra|university|college|institute)\b", " ",
                       text or "", flags=re.I)

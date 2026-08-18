@@ -470,7 +470,7 @@ function ProgressRows({ reached, details }) {
   </div>`;
 }
 
-function Message({ m, lang, onReplayBrowser, onPickProgram, onPickScope, onFeedback }) {
+function Message({ m, lang, onReplayBrowser, onPickProgram, onPickScope, onPickTopic, onPickInterview, onFeedback }) {
   if (m.role === "user")
     return html`<div class="row user"><div class="bubble">${m.text}</div></div>`;
   if (m.role === "thinking")
@@ -517,6 +517,59 @@ function Message({ m, lang, onReplayBrowser, onPickProgram, onPickScope, onFeedb
             ${m.scopeOptions.map((o) => html`
               <button class="chip" key=${o.value}
                       onClick=${() => onPickScope(o.value, m.carryQuestion)}>
+                ${o.label}
+              </button>`)}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Topic/capability menu (see guards.py's _topic_menu_guard): "tell me
+  // about admission" / "what can you help with?" answered with a short
+  // grounded menu instead of a wall of text. Unlike clarifyOptions/
+  // scopeOptions above, a click here is NOT resolving a clarification round-
+  // trip - o.value is already a complete, self-sufficient question ("What
+  // are the fees?"), so it just resubmits as a normal fresh message (see
+  // App's pickTopic) rather than arming pendingClarifyRef.
+  if (m.topicOptions) {
+    return html`
+      <div class="row bot">
+        <div>
+          <div class="bubble">${m.text}</div>
+          <div class="chips">
+            ${m.topicOptions.map((o) => html`
+              <button class="chip" key=${o.value}
+                      onClick=${() => onPickTopic(o.value)}>
+                ${o.label}
+              </button>`)}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Guided-eligibility-interview chips (see guards.py's
+  // _eligibility_interview_ask / chat_routes.py's interviewOptions
+  // forwarding). Distinct field name from clarifyOptions/scopeOptions
+  // deliberately - a click here answers a STRUCTURED conversationState slot
+  // (m.interviewField: "entranceExamStatus" | "category"), not a programme
+  // switch and not a text splice, so overloading either existing shape would
+  // mean chat_routes.py's pendingClarification splice paths (keyed on
+  // clarifyOptions's projectId shape and scopeOptions's is_bare_scope_reply
+  // text-splice) misfire on a value that is neither. Clicking sets that one
+  // slot then resubmits the ORIGINAL question (m.carryQuestion) - same
+  // "resend the full question, let the server recompute" pattern
+  // clarifyOptions already uses, no server-side text-splicing needed at all
+  // since the fact now lives in conversationState instead of the message
+  // text (see rag/guards.py's resolve_conversation_slot-based merge).
+  if (m.interviewOptions) {
+    return html`
+      <div class="row bot">
+        <div>
+          <div class="bubble">${m.text}</div>
+          <div class="chips">
+            ${m.interviewOptions.map((o) => html`
+              <button class="chip" key=${o.value}
+                      onClick=${() => onPickInterview(m.interviewField, o.value, m.carryQuestion)}>
                 ${o.label}
               </button>`)}
           </div>
@@ -680,7 +733,7 @@ function LangPicker({ mode, initial, onDone, onCancel }) {
       </div>
     </div>` : html`
     <div class="lang-step">
-      <button class="lang-back" onClick=${() => setStep(1)}>&larr; Back</button>
+      <button class="lang-back" onClick=${() => setStep(1)}>← Back</button>
       <h2 class="lang-title">Native script or Latin?</h2>
       <p class="lang-desc">How should ${langOpt.sub} answers be written back to you?</p>
       <div class="script-grid">
@@ -720,6 +773,21 @@ function App() {
   const [recording, setRecording] = useState(false);
   const [hint, setHint] = useState("");
   const [showDemo, setShowDemo] = useState(false);
+
+  // Slot-filling profile accumulated across THIS conversation - the P0
+  // foundation for the guided-interview/topic-menu work (see
+  // agent-qustioning system.md at the repo root). Sent alongside `history`
+  // on every /api/chat call (see send() below) so the backend can eventually
+  // read it as ctx.conversationState (rag/answer.py) - nothing server-side
+  // acts on it yet, so today this only ever grows from what the WIDGET
+  // itself already knows for certain (a clicked programme chip, a redirect
+  // the server just told us about), never from a guess. Kept as one object
+  // rather than several refs/states so there's a single, obviously-named
+  // thing to hand to a future P1 slot-filling guard's request shape.
+  const [conversationState, setConversationState] = useState({
+    programme: null, intent: null, category: null,
+    subjectPercent: null, overallPercent: null, entranceExamStatus: null,
+  });
 
   const lang = LANG_TO_CODE[pref ? pref.lang : "en"];
   // "auto" mirrors whatever script the student typed in: type in Devanagari and
@@ -767,7 +835,7 @@ function App() {
   // (rag.py's detect_program/needs_comparison/needs_program_clarification)
   // decides each question independently rather than a stale client-side key
   // deciding it for them.
-  const send = useCallback(async (text, keyOverride) => {
+  const send = useCallback(async (text, keyOverride, stateOverride) => {
     const q = (text || "").trim();
     if (!q || sending) return;
     // Consumed once: whether or not it resolves anything, the next message
@@ -838,6 +906,22 @@ function App() {
             .filter((x) => (x.role === "user" || x.role === "bot") && x.text)
             .slice(-8)
             .map((x) => ({ role: x.role === "user" ? "user" : "assistant", text: x.text })),
+          // Client-accumulated slot-filling state (see the useState above) -
+          // the backend echoes nothing back for this yet (see
+          // http/chat_routes.py's _sanitize_conversation_state docstring:
+          // nothing server-side derives an update in P0), so this is sent
+          // every turn but only ever updated locally, below.
+          // stateOverride, when given, wins over the closed-over
+          // conversationState variable - see pickInterview's own comment for
+          // why: setConversationState() queues a re-render, but send() (this
+          // whole function) is a stale closure until that re-render happens,
+          // so reading the `conversationState` variable directly here, right
+          // after a click that JUST called setConversationState, sees the
+          // value from BEFORE the click - reproduced live, clicking "Yes,
+          // I've appeared" resent the request with entranceExamStatus still
+          // null, and the interview asked the exact same entrance-exam
+          // question a second time instead of advancing to category.
+          conversationState: stateOverride || conversationState,
           ...(pendingClarification ? { pendingClarification } : {}),
         }),
       });
@@ -859,11 +943,38 @@ function App() {
       if (d.clarifyOptions) pendingClarifyRef.current = { kind: "program", originalQuestion: d.carryQuestion || q, apiKey: activeKey };
       else if (d.scopeOptions) pendingClarifyRef.current = { kind: "percentage", originalQuestion: d.carryQuestion || q, apiKey: activeKey };
       else if (d.carryQuestion) pendingClarifyRef.current = { kind: "percentage", originalQuestion: d.carryQuestion, apiKey: activeKey };
+      // The one thing the SERVER resolves that the widget didn't already
+      // know going in: a redirect guard answered from a different programme
+      // than the one this request named (see guards.py's
+      // _program_redirect_guard and chat_routes.py's answeredForProgram
+      // payload). Seeding conversationState.programme from it means the
+      // NEXT turn's seed already reflects reality without waiting for the
+      // student to name the programme again - still just a seed, still
+      // overridden the moment their next message says otherwise (see
+      // rag/helpers.py's resolve_conversation_slot).
+      if (d.answeredForProgram?.projectId) {
+        setConversationState((s) => ({ ...s, programme: d.answeredForProgram.projectId }));
+      }
+      // Generic slot-filling patch from the guided-eligibility interview
+      // (see rag/guards.py's _slot_update / chat_routes.py's slotUpdate
+      // forwarding) - a plain merge, same shape as the answeredForProgram
+      // seed above but covering every conversationState field the server
+      // guard decided to set this turn (category, percentages, entrance
+      // status, the interview's own "which field are we asking" marker).
+      // Only ever adds/overwrites keys actually present in d.slotUpdate -
+      // the server already dropped every None before sending it (see
+      // _slot_update's docstring), so a field the interview never touched
+      // this turn is left exactly as it was.
+      if (d.slotUpdate) {
+        setConversationState((s) => ({ ...s, ...d.slotUpdate }));
+      }
       const botId = nextId();
       setMessages((m) => [...m.slice(0, -1), {
         id: botId, role: "bot", text: d.answerText, pages: d.pageReferences || [],
         model: d.model, source: d.source, audioState: d.speakable ? "idle" : "unspeakable",
         clarifyOptions: d.clarifyOptions || null, scopeOptions: d.scopeOptions || null,
+        topicOptions: d.topicOptions || null,
+        interviewOptions: d.interviewOptions || null, interviewField: d.interviewField || null,
         answeredForProgram: d.answeredForProgram || null,
         comparedPrograms: d.comparedPrograms || null,
         originalQuestion: d.carryQuestion || q, carryQuestion: d.carryQuestion || q,
@@ -898,7 +1009,7 @@ function App() {
     // `messages` is a real dependency now that history is sent - without it
     // send() would close over the thread as it looked when the callback was
     // last built and ship stale (or empty) history to the router.
-  }, [sending, lang, speakOn, nativeScript, messages]);
+  }, [sending, lang, speakOn, nativeScript, messages, conversationState]);
 
   // Resolves a program-clarification prompt: look up that program's own
   // widget key and resubmit the original question under it, for this one
@@ -909,8 +1020,23 @@ function App() {
   const pickProgram = useCallback((projectId, originalQuestion) => {
     const program = PROGRAMS.find((p) => p.projectId === projectId);
     if (!program) return;
-    send(originalQuestion, program.apiKey);
-  }, [send]);
+    // The widget already knows the picked programme with certainty - a
+    // click, not a guess - so it seeds conversationState.programme itself
+    // rather than waiting on a round trip (see the useState above and
+    // answeredForProgram handling in send(): same idea, different source).
+    // Still just a seed: resolve_conversation_slot's precedence rule means
+    // the student's own next message can still override this.
+    // Same stale-closure hazard send()'s stateOverride comment describes for
+    // pickInterview, closed the same way - this request is already correctly
+    // SCOPED via program.apiKey regardless (a project's own key routes
+    // server-side without needing conversationState.programme at all), so
+    // this one is latent rather than symptomatic today, but left inconsistent
+    // it is one future guard-read away from reproducing the exact bug fixed
+    // in pickInterview.
+    const next = { ...conversationState, programme: projectId };
+    setConversationState(next);
+    send(originalQuestion, program.apiKey, next);
+  }, [send, conversationState]);
 
   // Unlike pickProgram above, a scope choice can't be resolved client-side -
   // splicing "overall" onto the original question's percentage correctly
@@ -924,6 +1050,42 @@ function App() {
     pendingClarifyRef.current = { kind: "percentage", originalQuestion };
     send(value);
   }, [send]);
+
+  // Topic-menu chip click (see guards.py's _topic_menu_guard and Message's
+  // topicOptions branch above): unlike pickProgram/pickScope, o.value is
+  // already a complete, self-sufficient question ("What are the fees?"), so
+  // this is nothing more than send() with a canned question string - no
+  // pendingClarifyRef arming, no keyOverride, since there is no clarification
+  // round-trip to resolve.
+  const pickTopic = useCallback((value) => {
+    send(value);
+  }, [send]);
+
+  // Guided-eligibility-interview chip click (see guards.py's
+  // _eligibility_interview_ask and Message's interviewOptions branch
+  // above). Unlike pickScope, this needs no server-side text splice at all:
+  // the fact belongs in conversationState (a structured slot -
+  // "entranceExamStatus"/"category" - not prose), so it is set directly,
+  // client-side, with certainty - same reasoning as pickProgram's own
+  // comment on why a CLICK seeds state immediately rather than waiting on a
+  // round trip. Resubmitting `originalQuestion` (the carried question, same
+  // pattern as pickProgram) lets the server recompute the verdict from
+  // scratch with the now-more-complete conversationState merged in (see
+  // rag/guards.py's resolve_conversation_slot-based merge) - there is
+  // nothing left for the message TEXT itself to carry.
+  const pickInterview = useCallback((field, value, originalQuestion) => {
+    if (!field) return;
+    // Compute the merged state ONCE, synchronously, and use that same
+    // object both to update React state (for every LATER turn) and as
+    // send()'s stateOverride (for THIS turn) - see send()'s own comment on
+    // stateOverride for the stale-closure bug this avoids. Using the
+    // functional setConversationState updater form here is what would have
+    // been silently stale for the immediate send() call below - fine for
+    // updating state, wrong for reading it back in the same tick.
+    const next = { ...conversationState, [field]: value };
+    setConversationState(next);
+    send(originalQuestion, undefined, next);
+  }, [send, conversationState]);
 
   // Thumbs up/down on a specific served answer. Uses the key that ANSWERED
   // this particular message (m.feedbackKey), stored on the message itself at
@@ -1047,7 +1209,7 @@ function App() {
               ${welcome.chips.map((s) => html`<button class="chip" key=${s} onClick=${() => send(s)}>${s}</button>`)}
             </div>
           </div>`}
-        ${messages.map((m, i) => html`<${Message} key=${m.id || i} m=${m} lang=${lang} onReplayBrowser=${(t) => speakBrowserNow(t, lang)} onPickProgram=${pickProgram} onPickScope=${pickScope} onFeedback=${sendFeedback} />`)}
+        ${messages.map((m, i) => html`<${Message} key=${m.id || i} m=${m} lang=${lang} onReplayBrowser=${(t) => speakBrowserNow(t, lang)} onPickProgram=${pickProgram} onPickScope=${pickScope} onPickTopic=${pickTopic} onPickInterview=${pickInterview} onFeedback=${sendFeedback} />`)}
       </main>
 
       <footer class="composer">

@@ -593,6 +593,16 @@ function Playground({ keys, token, projectName, programNames }) {
   const [traces, setTraces] = useState({});
   const [order, setOrder] = useState([]);
   const [hint, setHint] = useState("");
+  // Same slot-filling profile as static/app.js's conversationState (see its
+  // own useState comment) - the tester needs it too, since the guided-
+  // eligibility interview (rag/guards.py's _eligibility_guard, P1) reads
+  // ctx.conversationState to decide what's already known and what to ask
+  // next. Without this, testing the interview here would ask the same
+  // question forever: every turn would look like the first.
+  const [conversationState, setConversationState] = useState({
+    programme: null, intent: null, category: null,
+    subjectPercent: null, overallPercent: null, entranceExamStatus: null,
+  });
   const threadRef = useRef(null);
   const pendingClarifyRef = useRef(null);
   const mineRef = useRef({});   // traceIds this playground produced
@@ -617,7 +627,7 @@ function Playground({ keys, token, projectName, programNames }) {
     return () => es.close();
   }, [token]);
 
-  const send = async (text) => {
+  const send = async (text, _keyUnused, stateOverride) => {
     const q = (text || input).trim();
     if (!q || busy) return;
     if (!keyVal) { setHint("Pick an active key first — see the API Keys tab."); return; }
@@ -634,6 +644,10 @@ function Playground({ keys, token, projectName, programNames }) {
           uiLanguage: TTS_LANG_MAP[lang] || "en",
           history: messages.filter((x) => (x.role === "user" || x.role === "bot") && x.text)
             .slice(-8).map((x) => ({ role: x.role === "user" ? "user" : "assistant", text: x.text })),
+          // stateOverride wins when given - see the interview chip's own
+          // comment above for the stale-closure bug this avoids (mirrors
+          // static/app.js's send()).
+          conversationState: stateOverride || conversationState,
           ...(pending ? { pendingClarification: pending } : {}),
         }),
       });
@@ -642,11 +656,41 @@ function Playground({ keys, token, projectName, programNames }) {
         return;
       }
       const d = await res.json();
-      if (d.clarifyOptions) pendingClarifyRef.current = { originalQuestion: q };
+      // Same generic slot-filling patch as static/app.js's send() - see
+      // rag/guards.py's _slot_update docstring for why this is a merge of
+      // present keys only, never a field-clearing overwrite.
+      if (d.slotUpdate) setConversationState((s) => ({ ...s, ...d.slotUpdate }));
+      // Must match app.js's own arming logic exactly, `kind` included -
+      // chat_routes.py's pendingClarification handling only splices a
+      // percentage-scope reply onto its original question when
+      // kind === "percentage" (see that file's `pending.get("kind")` check).
+      // This tester used to send `{originalQuestion: q}` with no `kind` at
+      // all, which happens to satisfy the program-reply branch (that one
+      // doesn't check kind) but silently never matches the percentage
+      // branch - a scope-clarify reply typed here was treated as a brand
+      // new question every time, landing on an unrelated "which programme?"
+      // bounce instead of resolving the eligibility check. `d.carryQuestion`
+      // over the raw `q`, also matching app.js: needed for a clarification
+      // that chains through more than one hop.
+      if (d.clarifyOptions) pendingClarifyRef.current = { kind: "program", originalQuestion: d.carryQuestion || q };
+      else if (d.scopeOptions) pendingClarifyRef.current = { kind: "percentage", originalQuestion: d.carryQuestion || q };
+      else if (d.carryQuestion) pendingClarifyRef.current = { kind: "percentage", originalQuestion: d.carryQuestion };
       if (d.traceId) { mineRef.current[d.traceId] = true; setSelected(d.traceId); }
       setMessages((m) => [...m.slice(0, -1), {
         role: "bot", text: d.answerText, source: d.source, model: d.model,
         traceId: d.traceId || null, clarifyOptions: d.clarifyOptions || null,
+        scopeOptions: d.scopeOptions || null,
+        // Topic-menu chips (see guards.py's _topic_menu_guard) - o.value is
+        // already a complete question, so the click handler below is just
+        // send(o.value), same as the tester's own suggestion chips.
+        topicOptions: d.topicOptions || null,
+        // Guided-eligibility-interview chips (see guards.py's
+        // _eligibility_interview_ask) - carryQuestion stored on the message
+        // itself (app.js does the same) since a click needs to resubmit the
+        // ORIGINAL question, not the chip's own value - see pickInterview
+        // below.
+        interviewOptions: d.interviewOptions || null, interviewField: d.interviewField || null,
+        carryQuestion: d.carryQuestion || q,
         program: (d.answeredForProgram || {}).label || null,
       }]);
     } catch {
@@ -706,6 +750,38 @@ function Playground({ keys, token, projectName, programNames }) {
                   ${m.clarifyOptions ? html`<div class="chips" style=${{ marginTop: 8 }}>
                     ${m.clarifyOptions.map((o) => html`<button class="chip" key=${o.projectId} disabled=${busy}
                         onClick=${() => send(o.label)}>${o.label}</button>`)}
+                  </div>` : ""}
+                  ${m.scopeOptions ? html`<div class="chips" style=${{ marginTop: 8 }}>
+                    ${m.scopeOptions.map((o) => html`<button class="chip" key=${o.value} disabled=${busy}
+                        onClick=${() => send(o.value)}>${o.label}</button>`)}
+                  </div>` : ""}
+                  ${m.topicOptions ? html`<div class="chips" style=${{ marginTop: 8 }}>
+                    ${m.topicOptions.map((o) => html`<button class="chip" key=${o.value} disabled=${busy}
+                        onClick=${() => send(o.value)}>${o.label}</button>`)}
+                  </div>` : ""}
+                  ${m.interviewOptions ? html`<div class="chips" style=${{ marginTop: 8 }}>
+                    ${m.interviewOptions.map((o) => html`<button class="chip" key=${o.value} disabled=${busy}
+                        onClick=${() => {
+                          // See static/app.js's pickInterview: a structured
+                          // conversationState slot, set with certainty from
+                          // the click, then resubmit the CARRIED question
+                          // (never o.value itself - that's a semantic tag,
+                          // not a chat message) so the server recomputes the
+                          // verdict with the now-more-complete state merged
+                          // in (rag/guards.py's resolve_conversation_slot).
+                          // Computed synchronously and passed as send()'s
+                          // 3rd arg rather than read back from React state -
+                          // setConversationState() queues a re-render, so
+                          // send() (defined in an earlier render) would
+                          // otherwise close over the PRE-click value and
+                          // resubmit without this answer, reproducing the
+                          // exact bug fixed in static/app.js's pickInterview
+                          // (the interview re-asked the same question
+                          // instead of advancing).
+                          const nextState = { ...conversationState, [m.interviewField]: o.value };
+                          setConversationState(nextState);
+                          send(m.carryQuestion, undefined, nextState);
+                        }}>${o.label}</button>`)}
                   </div>` : ""}
                 </div>`;
             })}

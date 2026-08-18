@@ -52,7 +52,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from backend import config  # noqa: E402
 from backend.storage import apikeys, faq, projects  # noqa: E402
 
-BASE = f"http://localhost:{config.PORT}"
+# 127.0.0.1, not localhost: urllib doesn't race IPv6/IPv4 like a browser does,
+# and on this Windows host "localhost" resolves to ::1 first, costing ~2s per
+# request before the IPv4 fallback succeeds - see config.py's OLLAMA_URL note.
+BASE = f"http://127.0.0.1:{config.PORT}"
 
 # Verified from the 2026-27 prospectuses, with the page each came from.
 #   B.V.Sc. & A.H.  50% / 47.50% reserved, PCB-or-Biotech + English   (p4)
@@ -202,8 +205,18 @@ CASES = [
     C("E", 57, "Does MAFSU have a Maharashtra domicile requirement?", answered=True, no_clarify=True),
 
     # ---- F. Fees, colleges, seats ---------------------------------------
+    # Ground truth was wrong here until 2026-08-18: 62,635 is the ADMISSION
+    # fee (one-time, Annexure-IV "The admission fees for unreserved
+    # category..."), a different line item from the TUITION fee this
+    # question actually asks about. The B.V.Sc. FEE STRUCTURE table (same
+    # annexure) labels Tuition Fee 27,500/yr for years 1-3 and 41,250 for
+    # year 4 - confirmed directly against the source PDF, not the OCR chunk
+    # alone. forbid=40610/22360: B.Tech Dairy's own admission-fee figures,
+    # still worth guarding against cross-programme contamination even though
+    # the expected figures changed.
     C("F", 58, "What is the tuition fee for B.V.Sc. at MAFSU?",
-      expect=["62635", "62,635"], forbid=["40610", "40,610"], no_clarify=True),
+      expect=["27500", "27,500"], forbid=["40610", "40,610", "22360", "22,360"],
+      no_clarify=True),
     C("F", 59, "How much does the complete B.V.Sc. course cost?", manual="total not confirmed in source"),
     C("F", 60, "What is the hostel fee at MAFSU?", answered=True),
     C("F", 61, "Is hostel accommodation compulsory?", answered=True),

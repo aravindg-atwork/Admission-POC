@@ -16,7 +16,7 @@ from . import guards
 from . import router
 from .. import config
 from ..trace import events as trace_events
-from ..core import tablelookup
+from ..core import programs, tablelookup
 from ..core.intent import is_payment_issue
 from ..core.lang import detect_devanagari_hi_mr, detect_romanized_indic, detect_script
 from ..core import textclean
@@ -32,7 +32,7 @@ from .helpers import (_add_nri_scope_caveat, _apply_script_pref, _build_retrieva
 
 
 def _build_context(project_id, question, script_pref, ui_language, history=None, route=None,
-                   trace_id=None):
+                   trace_id=None, conversation_state=None):
     """Runs the language-detection/romanization/hint-building preamble once
     per request and returns the ctx object every guard (guards.py) and the
     pipeline (_pipeline below) read from. `reanswer` is dependency-injected
@@ -179,11 +179,49 @@ def _build_context(project_id, question, script_pref, ui_language, history=None,
         ui_language=ui_language, language=language, hint_language=hint_language,
         hint=hint, typed_romanized=typed_romanized, cloud_ok=cloud_ok, route=route,
         history=history or [],
+        # Client-accumulated slot-filling state from earlier turns in THIS
+        # conversation (programme/category/percentages/entrance-exam status -
+        # see http/chat_routes.py's validation and static/app.js's
+        # conversationState). Always a dict, never None, so a guard can do
+        # `ctx.conversationState.get("programme")` without a None-check at
+        # every call site - the same convention `history` already uses
+        # (defaults to [], never None) one line up.
+        #
+        # P0 scope only: this field is now reliably present and precedence-
+        # ordered (see rag/helpers.py's resolve_conversation_slot), but NO
+        # guard reads or acts on it yet - that starts in P1. Wiring it into a
+        # guard's actual decision means also applying the precedence rule at
+        # that call site: the CURRENT message's own words always win over a
+        # seeded value here, exactly like ctx.original_question already wins
+        # over the router's target_programs in _eligibility_guard and
+        # _program_redirect_guard (see their docstrings) - a seeded slot may
+        # only fill a gap the current message leaves empty, never override or
+        # contradict what the student is saying right now.
+        conversationState=conversation_state or {},
         # Same trace id on the way through a redirect, so a student watching
         # progress sees one continuous run instead of a stream that goes quiet
         # at the redirect and never delivers final_answer.
-        reanswer=lambda pid: _answer(pid, effective_question, script_pref, ui_language,
-                                      history, route, trace_id=collector.trace_id),
+        #
+        # Passes `question` (this call's own TRUE raw text), not
+        # `effective_question` (the router's paraphrase) - P1 fix. `route`
+        # is reused unchanged below, so the inner _build_context still
+        # recomputes the identical `effective_question` for ITS OWN
+        # ctx.question (retrieval/generation are unaffected); what changes is
+        # only ctx.original_question on the redirected side, which used to
+        # silently become the router's compressed rewrite instead of what
+        # the student actually typed. Reproduced live: "I have PCB but not
+        # Biotechnology. Am I eligible for B.V.Sc.?" on the default widget
+        # got redirected to bvsc with resolved_question collapsed to the
+        # bare "Am I eligible for B.V.Sc.?" - losing the subjects clause
+        # eligibility.describes_own_subjects (used by _eligibility_guard's
+        # guided-interview gate, and by evaluate() itself) needs to see. The
+        # exact same class of bug CLAUDE.md already documents for programme
+        # detection ("must use ctx.original_question, not ctx.question") -
+        # this closes the same gap for the redirect path specifically, where
+        # original_question itself was quietly the wrong text all along.
+        reanswer=lambda pid: _answer(pid, question, script_pref, ui_language,
+                                      history, route, trace_id=collector.trace_id,
+                                      conversation_state=conversation_state),
         trace=collector.record,
         # Surfaced so a caller can line an answer up with the trace that
         # produced it. Without it the console could only show a firehose of
@@ -194,9 +232,9 @@ def _build_context(project_id, question, script_pref, ui_language, history=None,
 
 
 def _answer(project_id, question, script_pref, ui_language, history=None, route=None,
-            trace_id=None):
+            trace_id=None, conversation_state=None):
     ctx = _build_context(project_id, question, script_pref, ui_language, history, route,
-                         trace_id=trace_id)
+                         trace_id=trace_id, conversation_state=conversation_state)
     guard_response = guards.run_guards(ctx)
     result = guard_response if guard_response is not None else _pipeline(ctx)
     # Stamped in one place rather than in each of the many return points, so
@@ -336,6 +374,31 @@ def _pipeline(ctx):
     top = vectorstore.search(store, retrieval_vector, config.TOP_K, retrieval_text)
     trace("retrieval", topK=len(top),
           chunks=[{"page": e.get("page"), "score": e.get("score"), "snippet": e["text"][:160]} for e in top])
+
+    # Drop retrieved chunks that name a DIFFERENT programme than this project,
+    # before they ever reach the model - the same signal validate.py's
+    # foreign_programme_mention check uses on the REPLY, applied earlier, to
+    # the INPUT. Added after a reproduced failure: MAFSU's own B.Tech (Dairy
+    # Technology) 2026-27 prospectus has a copy-paste error on page 8 (an
+    # "other state candidates" clause left over from a B.V.Sc. template,
+    # still naming "B.V.Sc. & A.H." and its Biology/Biotechnology subject
+    # requirement). That chunk usually got outvoted by the two OTHER, correct
+    # mentions of "Physics, Chemistry, Mathematics" already in the same
+    # corpus - but not always, and an eval run caught the model echoing
+    # "Biology" once. Silently excluding a chunk naming a foreign programme
+    # removes the contradiction at the source instead of hoping generation
+    # resolves it correctly every time. Only applies to a real programme
+    # project (comparison.py's multi-programme path builds its own context
+    # separately and is untouched); guarded against emptying `top` entirely,
+    # since one bad chunk among many should never turn into "no context".
+    if project_id in programs.PROGRAM_NAMES:
+        filtered = [e for e in top
+                    if not (set(programs.detect_programs_multi(e["text"])) - {project_id})]
+        if filtered and len(filtered) < len(top):
+            trace("retrieval", note="dropped foreign-programme chunk(s)",
+                  dropped=len(top) - len(filtered))
+        if filtered:
+            top = filtered
 
     if not top:
         # No prospectus uploaded for this project yet. An empty excerpts block was
@@ -537,7 +600,7 @@ def _pipeline(ctx):
 
 
 def answer(project_id, question, script_pref="auto", ui_language=None, history=None,
-           trace_id=None):
+           trace_id=None, conversation_state=None):
     """Student -> intent -> FAQ cache -> RAG -> LLM -> answer.
 
     Returns {answer, pages, model, language, source, speakable}. `source` is
@@ -552,10 +615,16 @@ def answer(project_id, question, script_pref="auto", ui_language=None, history=N
     instead of leaving it to guess from the question's wording alone (see
     _language_hint). Every call is timed and recorded (counts/timing only, never
     question text) for that project's own dashboard and cost panel.
+
+    `conversation_state` is the client-accumulated slot-filling profile for
+    this conversation (see http/chat_routes.py's validation) - threaded onto
+    ctx.conversationState (_build_context below) for guards to read starting
+    in P1. Optional and defaults to {}; passing nothing here is identical to
+    today's behavior, before this field existed at all.
     """
     t0 = time.time()
     result = _answer(project_id, question, script_pref, ui_language, history,
-                     trace_id=trace_id)
+                     trace_id=trace_id, conversation_state=conversation_state)
     stats.record(projects.stats_path(project_id), result["source"], result["model"],
                  result["language"], round((time.time() - t0) * 1000))
     return result

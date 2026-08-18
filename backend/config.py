@@ -95,7 +95,13 @@ EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "local")
 SELFHOSTED_EMBEDDING_MODEL = os.environ.get("SELFHOSTED_EMBEDDING_MODEL", "bge-m3")
 
 # --- Ollama + model routing ---
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+# 127.0.0.1, not localhost: on this Windows deployment host, getaddrinfo
+# resolves "localhost" to ::1 first and the OS takes ~2s to fail that connect
+# before falling back to IPv4 - measured via urllib (curl's happy-eyeballs
+# hides it, which is why this went unnoticed). That tax lands on every Ollama
+# call, and it alone can exceed admin_routes.py's 2s liveness-check timeout,
+# making a reachable Ollama report as down.
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 # Keep models resident in memory so there is no per-request cold start.
 OLLAMA_KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
 

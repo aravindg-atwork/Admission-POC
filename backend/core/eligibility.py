@@ -444,6 +444,92 @@ _APPLY_RE = re.compile(
     r"\b(apply|eligible|eligibility|qualify|can i (do|join|take)|opt for)\b", re.I)
 
 
+def describes_self(text):
+    """Whether `text` speaks in the first person at all - "I", "my", "I've".
+
+    Used by the guided-interview gate (rag/guards.py's
+    _looks_like_eligibility_question) to tell "what is the eligibility
+    criteria for B.V.Sc.?" (a question about the RULE) apart from "am I
+    eligible for B.V.Sc.?" (a question about the STUDENT). Both reach
+    evaluate()'s "insufficient"/"no_percentage" outcome identically - neither
+    states a percentage - but only the second should ever prompt the
+    interview; the first must keep falling through to a normal descriptive
+    RAG answer exactly as it always has. Reproduced directly: without this
+    check, A1 ("What is the eligibility criteria for B.V.Sc. & A.H. at
+    MAFSU?" - a general, answerable-from-the-prospectus question) got
+    intercepted with "have you appeared for the entrance exam?" instead of
+    its real answer.
+    """
+    return bool(_FIRST_PERSON_RE.search(text or ""))
+
+
+_BARE_NUMBER_RE = re.compile(r"^\s*(\d{1,3}(?:\.\d+)?)\s*%?\s*$")
+
+
+def bare_percent(text):
+    """The percentage figure in `text`, regardless of any scope cue - used by
+    the guided-interview flow (rag/guards.py's _eligibility_guard) to accept
+    a lone number ("48", "48%") as the answer to a question that has ALREADY
+    narrowed the scope unambiguously by asking for it specifically ("what is
+    your percentage in the required subject combination?"). extract()'s
+    cue-based disambiguation exists for the freeform case, where a bare
+    number's scope is genuinely unclear - it is the wrong tool once the
+    assistant itself is the one that asked, and the only thing left to
+    interpret is the number.
+
+    Tries _PERCENT_RE first (needs a "%"/"percent" marker) so a number
+    embedded in a longer sentence is still read correctly, then falls back
+    to a whole-message bare number with no marker at all ("48") - the most
+    natural reply to a question that already told the student it wants a
+    percentage, and the ONLY thing _PERCENT_RE cannot match, since it
+    requires the marker. The whole-message anchor (^...$) keeps this
+    fallback narrow: it must be the entire reply, not a number sitting
+    inside a longer, differently-shaped message.
+    """
+    m = _PERCENT_RE.search(text or "")
+    if not m:
+        m = _BARE_NUMBER_RE.match(text or "")
+    if not m:
+        return None
+    value = float(m.group(1))
+    return value if value <= 100 else None
+
+
+# Bare yes/no/pending replies to the interview's "have you appeared for the
+# entrance exam?" question (see rag/guards.py's _eligibility_interview_ask).
+# missing_entrance_exam requires a first-person negation NEXT TO the exam's
+# own name (see its docstring) - deliberately narrow so an unrelated sentence
+# mentioning the exam isn't misread as a personal claim. A one-word "no"
+# typed in reply to OUR OWN question has neither, so it needs its own,
+# equally narrow, classifier - mirrors is_bare_scope_reply's shape exactly:
+# short, and not a substantial question of its own, so a genuine new
+# question typed at this moment still falls through instead of being
+# swallowed as an answer to a stale prompt.
+_ENTRANCE_BARE_NO_RE = re.compile(r"^(no|nope|nah|haven'?t|didn'?t|not\s+appeared)\b", re.I)
+_ENTRANCE_BARE_YES_RE = re.compile(r"^(yes|yeah|yep|already|done|appeared)\b", re.I)
+_ENTRANCE_BARE_PENDING_RE = re.compile(r"pending|upcoming|scheduled|not\s+yet", re.I)
+
+
+def is_bare_entrance_reply(text):
+    """Which way a short, question-free reply answers "have you appeared for
+    the entrance exam?" - "yes" | "no" | "pending" | None. None both for a
+    genuine new question ("do I need to appear for MHT-CET?" - has a "?" and
+    is really about the RULE, not a personal claim - describes_own_subjects'
+    docstring covers the identical trap for subjects) and for anything that
+    isn't recognisably an answer at all.
+    """
+    stripped = (text or "").strip()
+    if not stripped or "?" in stripped or len(stripped.split()) > 6:
+        return None
+    if _ENTRANCE_BARE_PENDING_RE.search(stripped):
+        return "pending"
+    if _ENTRANCE_BARE_NO_RE.match(stripped):
+        return "no"
+    if _ENTRANCE_BARE_YES_RE.match(stripped):
+        return "yes"
+    return None
+
+
 def is_which_programmes_question(text):
     """"Which courses can I apply for?" - answerable from subjects alone.
 

@@ -21,6 +21,83 @@ from ..generation import speech
 from ..storage import apikeys, audiocache, faq, projects
 
 
+# Allowed conversationState keys and how each is validated - the same
+# pin-the-shape discipline `history` gets a few lines into handle_chat below
+# (fixed key set, fixed value types, everything else silently dropped rather
+# than trusted). This is client-supplied text/numbers that will eventually
+# reach a guard's decision logic (P1), not just a prompt, so it gets the
+# stricter treatment: unlike history's free-text `text[:1000]`, every field
+# here is checked against a closed set or a numeric range, and anything that
+# doesn't fit is dropped to None rather than passed through best-effort - a
+# bad guess here is a wrong eligibility verdict, not a slightly-off prompt.
+_CONVERSATION_PROGRAMMES = set(programs.PROGRAM_NAMES)
+_CONVERSATION_CATEGORIES = {"reserved", "unreserved"}
+_CONVERSATION_ENTRANCE_STATUSES = {"yes", "no", "pending"}
+
+
+def _sanitize_percent(value):
+    """A percentage the client claims was already extracted this
+    conversation - only trusted in the same range eligibility.py itself
+    would accept (0-100), and only as a real number. Anything else (a
+    string, a bool, NaN, out of range) comes back None rather than a
+    half-trusted guess, since P1 will feed this straight into the same
+    threshold comparison eligibility.evaluate() does for the current
+    message.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value != value or not (0 <= value <= 100):  # value != value -> NaN
+        return None
+    return float(value)
+
+
+def _sanitize_conversation_state(raw):
+    """Validate the client's conversationState onto the fixed shape
+    ctx.conversationState carries (see rag/answer.py's _build_context) -
+    {programme, intent, category, subjectPercent, overallPercent,
+    entranceExamStatus}, every value either the right primitive or None.
+
+    Unconditionally returns a dict with exactly these six keys (never a
+    subset, never extra ones), so every reader downstream - today just this
+    module echoing nothing back, from P1 onward every guard that touches
+    ctx.conversationState - can assume the shape without a KeyError guard at
+    every call site, the same convention `history`'s per-turn
+    {role, text} shape already gives its readers.
+
+    Not yet acted on by anything (P0 scope - see _build_context's docstring
+    on ctx.conversationState): this only pins the shape crossing the network
+    boundary so P1 can start reading it immediately without redoing this
+    validation pass itself.
+    """
+    if not isinstance(raw, dict):
+        return {"programme": None, "intent": None, "category": None,
+                "subjectPercent": None, "overallPercent": None,
+                "entranceExamStatus": None}
+    programme = raw.get("programme")
+    if programme not in _CONVERSATION_PROGRAMMES:
+        programme = None
+    intent = raw.get("intent")
+    # No fixed intent vocabulary exists yet (P1 defines it) - capped the same
+    # way history's per-turn text is capped, so an oversized or malformed
+    # value can't bloat a future prompt, without pretending to validate
+    # against a set that doesn't exist yet.
+    intent = intent.strip()[:100] if isinstance(intent, str) and intent.strip() else None
+    category = raw.get("category")
+    if category not in _CONVERSATION_CATEGORIES:
+        category = None
+    entrance_status = raw.get("entranceExamStatus")
+    if entrance_status not in _CONVERSATION_ENTRANCE_STATUSES:
+        entrance_status = None
+    return {
+        "programme": programme,
+        "intent": intent,
+        "category": category,
+        "subjectPercent": _sanitize_percent(raw.get("subjectPercent")),
+        "overallPercent": _sanitize_percent(raw.get("overallPercent")),
+        "entranceExamStatus": entrance_status,
+    }
+
+
 def _read_multipart_file(body, content_type):
     """Minimal multipart/form-data parser: returns the first file's raw bytes."""
     m = re.search(r"boundary=(.+)$", content_type)
@@ -83,6 +160,14 @@ def handle_chat(self):
         role = "user" if turn.get("role") == "user" else "assistant"
         history.append({"role": role, "text": text[:1000]})
 
+    # Client-accumulated slot-filling profile for this conversation (see
+    # rag/answer.py's ctx.conversationState and this file's
+    # _sanitize_conversation_state docstring for the shape/validation
+    # discipline). Threaded onto ctx below via rag.answer()'s new
+    # conversation_state kwarg - not read by any guard yet (P0 scope), but
+    # already validated at the boundary so P1 doesn't have to.
+    conversation_state = _sanitize_conversation_state(body.get("conversationState"))
+
     pending = body.get("pendingClarification") or {}
     original_question = (pending.get("originalQuestion") or "").strip()
     if original_question and programs.is_bare_program_reply(question):
@@ -118,7 +203,8 @@ def handle_chat(self):
     client_trace_id = body.get("traceId")
     try:
         result = rag.answer(project_id, question, script_pref, ui_language, history,
-                            trace_id=client_trace_id if isinstance(client_trace_id, str) else None)
+                            trace_id=client_trace_id if isinstance(client_trace_id, str) else None,
+                            conversation_state=conversation_state)
         payload = {
             "answerText": result["answer"],
             "pageReferences": result["pages"],
@@ -135,6 +221,29 @@ def handle_chat(self):
             payload["clarifyOptions"] = result["clarifyOptions"]
         if result.get("scopeOptions"):
             payload["scopeOptions"] = result["scopeOptions"]
+        # Topic-menu chips (see guards.py's _topic_menu_guard) - unlike
+        # clarifyOptions/scopeOptions above, a click here resubmits a
+        # complete, self-sufficient question of its own, so there is no
+        # matching carryQuestion/pendingClarification wiring needed for it.
+        if result.get("topicOptions"):
+            payload["topicOptions"] = result["topicOptions"]
+        # Guided-eligibility-interview chips (see guards.py's
+        # _eligibility_interview_ask) - interviewField names which
+        # conversationState slot a click should set (see static/app.js's
+        # pickInterview) before resubmitting carryQuestion below.
+        if result.get("interviewOptions"):
+            payload["interviewOptions"] = result["interviewOptions"]
+            payload["interviewField"] = result.get("interviewField")
+        # The client-accumulated slot-filling profile this turn's guard
+        # decided to seed/update (see rag/helpers.py's resolve_conversation_slot
+        # and guards.py's _slot_update) - e.g. the programme an eligibility
+        # interview just confirmed, or the "resolved" marker a completed
+        # verdict leaves behind for one more turn so a same-topic swap like
+        # "what about SC?" still has something to swap. A plain patch, never
+        # a full replacement - see _slot_update's docstring on why a field
+        # this turn doesn't know about is OMITTED rather than sent as null.
+        if result.get("slotUpdate"):
+            payload["slotUpdate"] = result["slotUpdate"]
         # Both guard-supplied (see guards.py's carryQuestion comments) so the
         # widget can arm its NEXT pendingClarification from server-known
         # state instead of its own last-typed message, which is wrong the

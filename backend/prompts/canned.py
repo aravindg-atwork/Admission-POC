@@ -99,6 +99,34 @@ _PERCENTAGE_CLARIFY_TEXT = {
           "मला सांगा कोणती आहे, म्हणजे मी तुम्हाला अचूक उत्तर देईन.",
 }
 
+# For the SAME missing-information gap as _PERCENTAGE_CLARIFY_TEXT above
+# (evaluate()'s overall_not_subject reason - see guards.py's
+# _eligibility_percent_ask) but reached the SECOND time round, once the
+# student has already answered "overall or subject?" and said "overall".
+# Reusing _PERCENTAGE_CLARIFY_TEXT there re-asks "is it your overall score,
+# or specifically in those subjects?" to someone who just said it was their
+# overall score - reproduced live: a student who typed "its overall score"
+# in reply got the identical question back, verbatim, and reasonably read
+# that as the assistant not having listened, even though a NEW piece of
+# information (their subject-specific percentage) was genuinely still
+# missing. This text names that gap directly - asks for the number, not the
+# scope - instead of repeating a question already answered.
+_SUBJECT_PERCENT_ASK_TEXT = {
+    "en": "Thanks - since that's your overall aggregate, I still need your "
+          "percentage specifically in the required subject combination "
+          "(Physics, Chemistry, Biology/Mathematics and English) to give you "
+          "an exact answer - the two are usually different numbers. What was "
+          "your percentage in just those subjects?",
+    "hi": "धन्यवाद - चूँकि यह आपका कुल प्रतिशत है, मुझे सटीक जवाब देने के लिए अब भी "
+          "आपके आवश्यक विषय-संयोजन (भौतिकी, रसायन विज्ञान, जीव विज्ञान/गणित और "
+          "अंग्रेज़ी) में आपका प्रतिशत चाहिए - ये दोनों आमतौर पर अलग संख्याएँ होती हैं। "
+          "सिर्फ़ इन्हीं विषयों में आपका प्रतिशत कितना था?",
+    "mr": "धन्यवाद - हे तुमचे एकूण प्रतिशत असल्यामुळे, अचूक उत्तर देण्यासाठी मला अजूनही "
+          "तुमच्या आवश्यक विषय-संयोजनातील (भौतिकशास्त्र, रसायनशास्त्र, जीवशास्त्र/गणित "
+          "आणि इंग्रजी) टक्केवारी हवी आहे - या सहसा वेगळ्या संख्या असतात. फक्त याच "
+          "विषयांमधील तुमची टक्केवारी किती होती?",
+}
+
 # Quick-reply chips for the prompt above, added 2026-08-17 alongside the
 # widget UI change: two clickable answers next to the same free-text box
 # that already worked (see app.js's composer, never disabled by a
@@ -241,4 +269,100 @@ _UNKNOWN_PROGRAMME_TEXT = {
     "mr": "मी फक्त {programmes} च्या प्रवेशाबद्दल सांगू शकतो, त्यामुळे त्या "
           "अभ्यासक्रमात मदत करू शकणार नाही. यापैकी एखादा अभिप्रेत असल्यास सांगा, "
           "मी लगेच उत्तर देईन.",
+}
+
+
+# ---------------------------------------------------------------------------
+# P1: guided eligibility interview (see rag/guards.py's _eligibility_guard
+# and _eligibility_interview_ask). Asks for ONE missing field at a time -
+# entrance-exam status, then category - instead of either silently assuming
+# "unreserved" (evaluate()'s pre-existing category_assumed fallback, still
+# used when the student never engages the interview at all, e.g. an API
+# caller with no chip UI) or falling through to plain RAG generation, which
+# is what a bare "am I eligible for B.V.Sc.?" did before this existed - the
+# same "guessing where the deterministic engine could instead ask" failure
+# eligibility.py's own module docstring already documents for the
+# percentage-vs-threshold comparison, one turn earlier in the conversation.
+#
+# Same per-language keying / hint_language selection as
+# _PROGRAM_CLARIFY_TEXT above. No Tamil key yet - eligibility.py's own
+# category/entrance-exam detectors don't cover Tamil either (see
+# extract()'s _RESERVED_WORDS/_UNRESERVED_WORDS and
+# missing_entrance_exam's regexes), so there is nothing yet to ask FOR in
+# that language.
+_ELIGIBILITY_ENTRANCE_TEXT = {
+    "en": "One more thing before I can give you a straight answer - have "
+          "you appeared for {entrance}? Admission is decided on that exam, "
+          "so it changes what I can tell you.",
+    "hi": "सीधा जवाब देने से पहले एक और बात - क्या आपने {entrance} की परीक्षा दी "
+          "है? प्रवेश इसी परीक्षा के आधार पर तय होता है, इसलिए इससे जवाब बदल "
+          "सकता है।",
+    "mr": "थेट उत्तर देण्याआधी आणखी एक गोष्ट - तुम्ही {entrance} परीक्षा दिली आहे "
+          "का? प्रवेश याच परीक्षेवर आधारित ठरतो, त्यामुळे याने उत्तर बदलू शकते.",
+}
+# `value` is what a click sends when it resubmits the carried question (see
+# app.js's pickInterview) - a short semantic tag stored straight into
+# conversationState.entranceExamStatus, not prose - unlike
+# _PERCENTAGE_SCOPE_OPTIONS.value, which IS the literal text a click sends as
+# a new chat message. The interview answers a STRUCTURED slot instead of
+# splicing text, so there is nothing here for is_bare_scope_reply's approach
+# to matching against; see guards.py's merge logic instead.
+_ELIGIBILITY_ENTRANCE_OPTIONS = {
+    "en": [{"value": "yes", "label": "Yes, I've appeared"},
+           {"value": "no", "label": "No, not yet"},
+           {"value": "pending", "label": "It's scheduled / pending"}],
+    "hi": [{"value": "yes", "label": "हाँ, दे दी है"},
+           {"value": "no", "label": "नहीं, अभी नहीं"},
+           {"value": "pending", "label": "अभी बाकी है"}],
+    "mr": [{"value": "yes", "label": "हो, दिली आहे"},
+           {"value": "no", "label": "नाही, अजून नाही"},
+           {"value": "pending", "label": "अजून बाकी आहे"}],
+}
+
+_ELIGIBILITY_CATEGORY_TEXT = {
+    "en": "And which category are you applying under - Unreserved (General) "
+          "or Reserved (SC/ST/OBC/NT/VJNT/SBC/EWS)? The required percentage "
+          "differs between the two.",
+    "hi": "और आप किस श्रेणी में आवेदन कर रहे हैं - अनारक्षित (जनरल) या आरक्षित "
+          "(SC/ST/OBC/NT/VJNT/SBC/EWS)? दोनों के लिए आवश्यक प्रतिशत अलग-अलग है।",
+    "mr": "आणि तुम्ही कोणत्या प्रवर्गातून अर्ज करत आहात - अराखीव (जनरल) की राखीव "
+          "(SC/ST/OBC/NT/VJNT/SBC/EWS)? दोन्हीसाठी आवश्यक टक्केवारी वेगळी आहे.",
+}
+_ELIGIBILITY_CATEGORY_OPTIONS = {
+    "en": [{"value": "unreserved", "label": "Unreserved / General"},
+           {"value": "reserved", "label": "Reserved (SC/ST/OBC/...)"}],
+    "hi": [{"value": "unreserved", "label": "अनारक्षित / जनरल"},
+           {"value": "reserved", "label": "आरक्षित (SC/ST/OBC/...)"}],
+    "mr": [{"value": "unreserved", "label": "अराखीव / जनरल"},
+           {"value": "reserved", "label": "राखीव (SC/ST/OBC/...)"}],
+}
+
+
+# Lead text for the P2 topic/capability menu - see guards.py's
+# _topic_menu_guard. Two variants, not one: "tell me about admission" is the
+# student asking about the PROCESS, "what can you help with?" is asking about
+# THE ASSISTANT, and answering the second with "what would you like to know
+# about admission?" reads as not having heard the actual question even though
+# the menu that follows is identical either way. Deliberately plain
+# admissions-counselor language, no mention of "topics", "categories",
+# "options" or anything that reads as internal system vocabulary (see
+# agent-qustioning system.md section 11 - "do not expose internal RAG
+# terminology").
+_TOPIC_MENU_LEAD_TEXT = {
+    "broad": {
+        "en": "Sure - what would you like to know about admission? Pick one "
+              "below, or just ask in your own words:",
+        "hi": "ज़रूर - आप प्रवेश के बारे में क्या जानना चाहेंगे? नीचे से एक चुनें, "
+              "या अपने शब्दों में पूछें:",
+        "mr": "नक्कीच - तुम्हाला प्रवेशाबद्दल काय जाणून घ्यायचं आहे? खालीलपैकी एक "
+              "निवडा, किंवा तुमच्या स्वतःच्या शब्दांत विचारा:",
+    },
+    "capability": {
+        "en": "I can help with quite a bit around admission. What would you "
+              "like to check?",
+        "hi": "मैं प्रवेश से जुड़ी कई चीज़ों में मदद कर सकता हूँ। आप क्या जांचना "
+              "चाहेंगे?",
+        "mr": "मी प्रवेशाशी संबंधित बऱ्याच गोष्टींमध्ये मदत करू शकतो. तुम्हाला काय "
+              "तपासायचं आहे?",
+    },
 }

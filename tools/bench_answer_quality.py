@@ -37,7 +37,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from backend import config  # noqa: E402
 from backend.storage import apikeys  # noqa: E402
 
-BASE = f"http://localhost:{config.PORT}"
+# 127.0.0.1, not localhost - see config.py's OLLAMA_URL comment: urllib pays
+# a ~2s IPv6-then-IPv4 tax per request on this Windows host that curl/browsers
+# don't, on every one of this suite's requests.
+BASE = f"http://127.0.0.1:{config.PORT}"
 
 # (project, question, expect, forbid)
 CASES = [

@@ -66,7 +66,17 @@ def handle_trace_stream(self):
                 payload = ": ping\n\n"
             self.wfile.write(payload.encode("utf-8"))
             self.wfile.flush()
-    except (BrokenPipeError, ConnectionAbortedError):
-        pass  # admin closed the tab; nothing to do
+    except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+        # Same "admin closed the tab" case as the other two - observed live
+        # in production stderr as an uncaught traceback on every SSE client
+        # disconnect (an external scanner hitting /admin/trace/stream and
+        # dropping the connection is enough to trigger it, not just a real
+        # admin). ConnectionResetError is a distinct class from
+        # BrokenPipeError, not a subclass of it - a write to a socket the
+        # peer already reset raises this one instead, and it was falling
+        # through to the bare exception logger. Cosmetic only (this thread
+        # exits either way, the server itself was never at risk - see
+        # ThreadingHTTPServer's per-request-thread model), but noisy.
+        pass
     finally:
         hub.unsubscribe(q)
