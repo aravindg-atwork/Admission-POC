@@ -195,6 +195,15 @@ picking the first. `_eligibility_guard` had exactly this bug through
 verdict against only the first-named programme's thresholds. Fixed; watch
 for the same shape elsewhere before adding a new `detect_program()` call.
 
+**`detect_programs_multi()`/`detect_program()` also tolerate a single-edit
+typo** in the three core abbreviations only (`bvsc`/`bfsc`/`btech`, via
+`programs._typo_matched_projects` — see its docstring). The longer
+descriptive aliases (`vet`, `dairy`, `fishery`...) deliberately do NOT get
+this: they're real, common enough words that fuzzing them misfires
+(`"dairy"` is edit-distance-1 from `"daily"`). Extend
+`_TYPO_EXCLUDED_WORDS` if a new common-word collision turns up — do not
+widen the abbreviation set or loosen the uniqueness rule to fix one.
+
 **Client-side (`static/app.js`/`admin-app.js`) React stale-closure
 gotcha**: `setState()` followed by an immediate function call in the *same*
 synchronous handler reads the PRE-update state, because the closure that
@@ -278,6 +287,9 @@ correctness of figures. All fixed to use `127.0.0.1` 2026-08-18;
 `test_clarification.py` also had its project id fixed (`mvsc` → `bvsc` — the
 old one was deleted in the 2026-08-14 retirement and the whole suite 404'd
 before it could check anything). `test_retrieval_hi_mr` is quota-free.
+`test_programme_typo_tolerance.py` (added 2026-08-18) is pure logic against
+`core/programs.py` directly, no backend needed — the odd one out among
+these, everything else here hits the live HTTP API.
 
 `tools/measure_latency_p95.py` (added 2026-08-18): reuses
 `eval_admissions.CASES`, records every response time, reports
@@ -343,11 +355,13 @@ trusting it as a description of current answer quality, not just latency.
   topic-menu chips.~~ **Done 2026-08-18** —
   `tools/test_conversation_flows.py`, 12/12 passing, stable across repeat
   runs.
-- **Programme-name typo tolerance not implemented** (e.g. "bfsv" for
-  "bfsc"). Deliberately deferred: the codebase's existing fuzzy-match helper
-  is gated to markers ≥6 characters specifically because short strings like
-  "bfsc"/"bvsc" (4 chars) risk false-positive collisions at edit-distance 1.
-  Needs its own design, not a blind reuse of the existing helper.
+- ~~Programme-name typo tolerance not implemented.~~ **Done 2026-08-18** —
+  `core/programs.py`'s `_typo_matched_projects` (see the "Architecture"
+  section above and `tools/test_programme_typo_tolerance.py`, 10/10
+  passing). Scoped narrowly to the three core abbreviations only, with a
+  uniqueness rule so "bvsc"/"bfsc" (mutually edit-distance-1 of each other)
+  can't typo-correct into one another, plus a small excluded-word set for
+  real words that happen to collide (`"tech"` → `"btech"`).
 - **Age/NCL-certificate facts only verified for `bvsc`.** The same sentence
   exists in `bfsc`/`btech-dairy`'s corpora but only inside the NRI/FN/PIO/OCI
   section — a materially different, unverified scope. Do not add
