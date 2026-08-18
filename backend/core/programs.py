@@ -587,13 +587,19 @@ def mentions_foreign_course(text):
     # this university's OWN admission-category term - every one of the three
     # programmes' own prospectuses uses it constantly (private-college seats
     # filled outside the state merit list, as opposed to "University Quota").
-    # Reproduced live: "Do I need NEET even if I'm taking management quota?"
-    # - squarely an in-scope MAFSU admission question - got refused with "I
-    # only cover admissions for..." because "management" alone was enough to
-    # trigger the foreign-course match. "quota" anywhere in the text is
-    # enough to disambiguate: nobody asks about a "management quota" wanting
-    # a business degree.
-    foreign_words = _FOREIGN_COURSE_WORDS - {"management"} if "quota" in words else _FOREIGN_COURSE_WORDS
+    # Reproduced live, twice, with two different disambiguating words: "Do I
+    # need NEET even if I'm taking management quota?" and "I have low NEET
+    # marks, can I take management seat?" - both squarely in-scope MAFSU
+    # admission questions, both refused with "I only cover admissions for...
+    # " because "management" alone was enough to trigger the foreign-course
+    # match. First fix only checked for "quota"; a student is at least as
+    # likely to say "seat"/"seats" for the exact same concept, so any of this
+    # admission-vocabulary set nearby is enough to disambiguate - nobody asks
+    # about a "management seat" or "management quota" wanting a business
+    # degree.
+    _MGMT_QUOTA_DISAMBIGUATORS = {"quota", "seat", "seats"}
+    foreign_words = (_FOREIGN_COURSE_WORDS - {"management"}
+                      if words & _MGMT_QUOTA_DISAMBIGUATORS else _FOREIGN_COURSE_WORDS)
     if words & foreign_words:
         return True
     stripped = re.sub(r"\b(mafsu|maharashtra|university|college|institute)\b", " ",
