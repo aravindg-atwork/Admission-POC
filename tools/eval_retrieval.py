@@ -118,8 +118,17 @@ CASES = [
      "Caste Validity Certificate (CVC)"),
     ("bvsc", "What is the domicile certificate requirement for B.V.Sc.?",
      "minimum 3 years stay in preceding 10 years in Maharashtra State"),
+    # Needle deliberately NOT "minimum 3 years stay in preceding 10 years in
+    # Maharashtra state" (used for bvsc/bfsc above) - in btech-dairy's own
+    # corpus that exact phrase straddles a line break inside the actually-
+    # correct chunk (OCR reconstruction put a "\n" between "stay in" and
+    # "preceding"), so it verbatim-matched a DIFFERENT, less relevant chunk
+    # (a documents checklist table) instead and reported a false MISS -
+    # retrieval was actually finding the right chunk at rank #1 the whole
+    # time. Confirmed directly via vectorstore.search 2026-08-19. This
+    # needle sits entirely within one OCR line inside the correct chunk.
     ("btech-dairy", "What is the domicile certificate requirement for B.Tech Dairy Technology?",
-     "minimum 3 years stay in preceding 10 years in Maharashtra state"),
+     "in the name of his/her parent indicating minimum 3 years stay in"),
     ("bfsc", "What certificate is needed for orphan category admission in B.F.Sc.?",
      "Orphaned certificate issued from Commissioner, Women and Child Development"),
 
