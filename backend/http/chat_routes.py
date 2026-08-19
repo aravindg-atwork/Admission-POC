@@ -18,7 +18,7 @@ import urllib.request
 from .. import config, rag
 from ..core import eligibility, programs, textclean
 from ..generation import speech
-from ..storage import apikeys, audiocache, faq, projects
+from ..storage import apikeys, audiocache, faq, projects, reviewlog
 
 
 # Allowed conversationState keys and how each is validated - the same
@@ -279,15 +279,43 @@ def handle_feedback(self):
         self._json(401, {"error": "Missing or inactive API key."})
         return
     body = self._read_json()
+    if "liked" not in body:
+        self._json(400, {"error": "faqId or traceId, and liked, are required."})
+        return
     faq_id = (body.get("faqId") or "").strip()
-    if not faq_id or "liked" not in body:
-        self._json(400, {"error": "faqId and liked are required."})
+    if faq_id:
+        ok = faq.apply_feedback(projects.faq_path(project_id), projects.flagged_path(project_id),
+                                 faq_id, bool(body.get("liked")))
+        if not ok:
+            self._json(404, {"error": "Unknown faqId - it may already have been removed."})
+            return
+        self._json(200, {"ok": True})
         return
-    ok = faq.apply_feedback(projects.faq_path(project_id), projects.flagged_path(project_id),
-                             faq_id, bool(body.get("liked")))
-    if not ok:
-        self._json(404, {"error": "Unknown faqId - it may already have been removed."})
+    # Guard-served answers (eligibility verdicts, the guided interview,
+    # comparisons, clarifications...) never get a faqId - they run BEFORE
+    # the FAQ cache and are deliberately never cached themselves (an
+    # eligibility verdict depends on per-conversation state, so it must
+    # always be recomputed, never served stale - see rag/guards.py's module
+    # docstring). Without this fallback, "no faqId" silently meant "no
+    # feedback buttons at all" for a large and growing share of real
+    # conversations - reported live 2026-08-19. There is no cache entry to
+    # update here, so this just records the event the same shape reviewlog
+    # already uses for the system's OWN self-detected near-misses (kind,
+    # reason/source, small discriminator fields, never question/answer
+    # text) - a STUDENT dislike on a guard answer is exactly the same kind
+    # of signal, just triggered by the student instead of a validation
+    # check.
+    trace_id = (body.get("traceId") or "").strip()
+    if not trace_id:
+        self._json(400, {"error": "faqId or traceId, and liked, are required."})
         return
+    source = body.get("source")
+    reviewlog.append(projects.review_log_path(project_id), {
+        "kind": "student_feedback",
+        "source": source if isinstance(source, str) else None,
+        "liked": bool(body.get("liked")),
+        "traceId": trace_id,
+    })
     self._json(200, {"ok": True})
 
 

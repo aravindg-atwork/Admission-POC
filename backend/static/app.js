@@ -627,14 +627,23 @@ function Message({ m, lang, onReplayBrowser, onPickProgram, onPickScope, onPickT
                   disabled=${state === "generating" || state === "unspeakable"} onClick=${handleClick}>
             ${state === "generating" ? html`<span class="dots" style=${{ padding: 0 }}><i></i><i></i><i></i></span>` : Icon.play}
           </button>
-          ${m.faqId && html`
+          ${/* Feedback targets EITHER a faqId (cache-entry path, unchanged)
+                OR a traceId (guard-served answers - eligibility verdicts,
+                comparisons, clarify-percentage/program... - which never get
+                a faqId, see chat_routes.handle_feedback). Excluded when the
+                bot is ASKING something rather than answering (interview/
+                clarify/scope/topic options present): rating a clarifying
+                question doesn't mean anything - there's no verdict yet to
+                agree or disagree with. */ ""}
+          ${(m.faqId || m.traceId) && !m.interviewOptions && !m.clarifyOptions
+            && !m.scopeOptions && !m.topicOptions && html`
             <span class="feedback-group">
               <button class=${"mini-btn" + (m.feedback === "liked" ? " on" : "")} title="This answer was correct and helpful"
-                      disabled=${!!m.feedback} onClick=${() => onFeedback(m.id, m.faqId, m.feedbackKey, true)}>
+                      disabled=${!!m.feedback} onClick=${() => onFeedback(m.id, m.faqId, m.traceId, m.source, m.feedbackKey, true)}>
                 ${Icon.thumbUp}
               </button>
               <button class=${"mini-btn warn" + (m.feedback === "disliked" ? " on" : "")} title="This answer was wrong or unhelpful"
-                      disabled=${!!m.feedback} onClick=${() => onFeedback(m.id, m.faqId, m.feedbackKey, false)}>
+                      disabled=${!!m.feedback} onClick=${() => onFeedback(m.id, m.faqId, m.traceId, m.source, m.feedbackKey, false)}>
                 ${Icon.thumbDown}
               </button>
             </span>`}
@@ -978,7 +987,7 @@ function App() {
         answeredForProgram: d.answeredForProgram || null,
         comparedPrograms: d.comparedPrograms || null,
         originalQuestion: d.carryQuestion || q, carryQuestion: d.carryQuestion || q,
-        faqId: d.faqId || null, feedback: null, feedbackKey: activeKey,
+        faqId: d.faqId || null, traceId: d.traceId || null, feedback: null, feedbackKey: activeKey,
       }]);
 
       if (speakOn && d.speakable) {
@@ -1094,13 +1103,16 @@ function App() {
   // message locally right
   // away so the buttons disable and show the choice - no need to wait on a
   // response to feel responsive, and a failure just leaves it retryable.
-  const sendFeedback = useCallback(async (messageId, faqId, feedbackKey, liked) => {
+  // faqId, when present, targets the cache-entry feedback path; otherwise
+  // traceId+source target the guard-answer path (see chat_routes.
+  // handle_feedback) - a message only ever has one or the other, never both.
+  const sendFeedback = useCallback(async (messageId, faqId, traceId, source, feedbackKey, liked) => {
     patchMessage(messageId, { feedback: liked ? "liked" : "disliked" });
     try {
       const res = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(feedbackKey ? { "X-API-Key": feedbackKey } : {}) },
-        body: JSON.stringify({ faqId, liked }),
+        body: JSON.stringify(faqId ? { faqId, liked } : { traceId, source, liked }),
       });
       if (!res.ok) throw new Error(String(res.status));
     } catch {

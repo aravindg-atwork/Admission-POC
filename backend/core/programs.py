@@ -125,6 +125,25 @@ _CLAUSE_BOUNDARY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Reproduced live 2026-08-19: "what all exam should i have passed for bfsc
+# eligibility?" matched _SELF_CREDENTIAL_RE on "i have passed" and treated
+# "bfsc" (in the window right after) as the student's OWN completed degree
+# to exclude - so a bfsc-scoped question, naming bfsc explicitly, silently
+# lost its programme and fell through to clarify-program asking which
+# programme the student meant. "should i have passed" is a question about a
+# FUTURE requirement ("what must I pass, to become eligible"), not a claim
+# of already holding a credential ("I have passed X") - the regex has no
+# way to tell those apart on its own. Checked here rather than folded into
+# _SELF_CREDENTIAL_RE itself: a modal word immediately before the match
+# changes what the WHOLE match means, which a lookbehind can't express
+# (Python's re requires fixed-width lookbehind, and the modal can be
+# preceded by a variable-length question stem - "what all exam should").
+_HYPOTHETICAL_MODAL_RE = re.compile(
+    r"\b(?:should|would|could|must|need\s+to|needs\s+to)\s*$",
+    re.IGNORECASE,
+)
+_HYPOTHETICAL_MODAL_WINDOW = 20  # chars immediately before the credential match
+
 
 def _self_credential_programs(text):
     """Project ids named only as the student's OWN prior/completed degree,
@@ -132,6 +151,9 @@ def _self_credential_programs(text):
     """
     found = set()
     for match in _SELF_CREDENTIAL_RE.finditer(text):
+        preceding = text[max(0, match.start() - _HYPOTHETICAL_MODAL_WINDOW):match.start()]
+        if _HYPOTHETICAL_MODAL_RE.search(preceding):
+            continue
         rest = text[match.end():match.end() + _SELF_CREDENTIAL_WINDOW]
         boundary = _CLAUSE_BOUNDARY_RE.search(rest)
         span = rest[:boundary.start()] if boundary else rest
