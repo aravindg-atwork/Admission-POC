@@ -169,6 +169,24 @@ def _fee_table_categories(chunks):
     return labels
 
 
+def _flagged_problems(unsourced, mislabelled):
+    """Flatten provenance.check()/check_labels()'s {pid: [numbers]} results
+    into the actual set of flagged (kind, pid, number) problems - used by
+    _answer_comparison's retry-acceptance check below, hoisted to module
+    level (rather than left as a local closure) so it can be unit-tested
+    directly - see tools/test_comparison_retry.py.
+
+    Module level, not a method: comparing dicts by `len()` counts
+    programme-KEYS with at least one problem, not the number of actual
+    flagged numbers - see the call site's comment for the bug this exists
+    to fix. The right unit to compare on is the individual problem, which
+    this makes an actual Python set so `<` (strict subset) does the
+    comparison correctly.
+    """
+    return ({("unsourced", pid, n) for pid, nums in unsourced.items() for n in nums}
+            | {("mislabel", pid, n) for pid, nums in mislabelled.items() for n in nums})
+
+
 def _answer_comparison(target_programs, question, script_pref, ui_language,
                         language, hint_language, hint, typed_romanized, cloud_ok, trace=None):
     """Answer a question that spans several programs by retrieving from each
@@ -302,14 +320,23 @@ def _answer_comparison(target_programs, question, script_pref, ui_language,
             still_labels = provenance.check_labels(candidate, program_contexts, program_names)
             trace("provenance", stage="after_regeneration", offenders=still,
                   labelOffenders=still_labels)
-            # Only accept the retry if it is strictly better across BOTH
-            # checks - a regeneration that fixes a borrowed figure by
-            # mislabelling a real one has not improved anything, and the
-            # original at least was not generated with a correction bolted
-            # onto its prompt.
-            before = len(offenders) + len(label_offenders)
-            after = len(still) + len(still_labels)
-            if after < before:
+            # Only accept the retry if it is strictly better - a
+            # regeneration that fixes a borrowed figure by mislabelling a
+            # real one has not improved anything, and the original at least
+            # was not generated with a correction bolted onto its prompt.
+            # "Strictly better" means the AFTER set of flagged problems is a
+            # strict subset of the BEFORE set (see _flagged_problems): every
+            # problem still present already existed (no new one introduced -
+            # the "not a lateral trade" guarantee this always had), and at
+            # least one original problem is now actually gone. Comparing
+            # dict LENGTHS instead (as this used to) undercounts by
+            # programme rather than by number - a programme with 3
+            # unsourced numbers reduced to 1 by the retry still reads as
+            # "1" before and "1" after, so an objectively-fixed problem got
+            # rejected as "no improvement". Reproduced directly.
+            before_flagged = _flagged_problems(offenders, label_offenders)
+            after_flagged = _flagged_problems(still, still_labels)
+            if after_flagged < before_flagged:
                 reply, model = candidate, retried[1]
                 offenders, label_offenders = still, still_labels
         if offenders or label_offenders:
