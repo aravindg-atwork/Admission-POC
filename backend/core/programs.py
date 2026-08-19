@@ -225,6 +225,31 @@ def _typo_matched_projects(text):
     return found
 
 
+# Real-world phrases that contain a programme alias as a SUBSTRING but name
+# something else entirely - stripped from the normalized text before alias
+# matching runs, so the alias inside them never counts as naming that
+# programme. "Indian Dairy Diploma" (IDD) is a real, named vocational
+# qualification some applicants already hold - it appears in bvsc's OWN
+# prospectus ("Indian Dairy Diploma shall not be considered equivalent to
+# XII (HSSC)"), and a student asking about ITS equivalence on the
+# B.V.Sc.-scoped widget got silently redirected to B.Tech (Dairy
+# Technology)'s own admission requirements instead of an answer about their
+# own diploma (_program_redirect_guard fires on ANY project, not just
+# `default`, whenever detect_program finds a different programme's alias in
+# the text - "dairy" being a deliberately bare alias for btech-dairy is
+# exactly what makes it collide here). Reproduced directly, live,
+# 2026-08-19. Same "extend the gate, don't redesign it" pattern as
+# _TYPO_EXCLUDED_WORDS above and mentions_foreign_course's management/quota
+# gate: add a phrase here if a new collision turns up.
+_NON_PROGRAMME_PHRASES = ("dairydiploma",)
+
+
+def _strip_non_programme_phrases(norm):
+    for phrase in _NON_PROGRAMME_PHRASES:
+        norm = norm.replace(phrase, "")
+    return norm
+
+
 def detect_programs_multi(text):
     """Return every project id a question explicitly names, ordered by where
     its first alias appears in the text - not just one (see detect_program).
@@ -241,7 +266,7 @@ def detect_programs_multi(text):
     _self_credential_programs) - never counted for comparison, redirect, or
     clarification decisions.
     """
-    norm = _normalize(text)
+    norm = _strip_non_programme_phrases(_normalize(text))
     self_credential = _self_credential_programs(text)
     found = []
     matched_ids = set()
