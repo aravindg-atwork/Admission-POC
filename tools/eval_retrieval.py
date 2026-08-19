@@ -86,6 +86,64 @@ CASES = [
     # --- duration
     ("bfsc", "How long is the B.F.Sc. course?", "four-year course divided into eight semesters"),
     ("btech-dairy", "How long is the B.Tech. Dairy Technology course?", "4 years"),
+
+    # --- application/grievance/NRI fees (added 2026-08-19: the original 14
+    # cases cover only eligibility/entrance/duration - fees, refund policy,
+    # documents and reservation figures were entirely untested categories,
+    # each a real recurring question shape per tools/bench_answer_quality.py
+    # and this session's adversarial testing)
+    ("bvsc", "What is the application fee for B.V.Sc. unreserved candidates?",
+     "for Unreserved candidate is Rs.1000/- and for Reserved candidate is Rs.700/-"),
+    ("bfsc", "What is the application fee for B.F.Sc.?",
+     "candidate is **Rs.1000/-** and for **Reserved** candidate is **Rs.700/-**"),
+    ("btech-dairy", "What is the application fee for B.Tech Dairy Technology?",
+     "Application Fees once paid will not be refunded"),
+    ("bvsc", "What is the grievance application fee for B.V.Sc.?",
+     "grievance application fees"),
+    ("bfsc", "What is the grievance fee for B.F.Sc.?",
+     "online grievance application fees"),
+    ("bvsc", "Is the B.V.Sc. NRI quota special fee refundable?",
+     "special fee paid by the candidate shall not be refunded in any case"),
+    ("bfsc", "What is the NRI special fee for B.F.Sc.?",
+     "3,000 U.S. $ per semester"),
+    ("btech-dairy", "What is the NRI special fee for B.Tech Dairy Technology?",
+     "3,000 U.S. $ per semester"),
+
+    # --- refund / cancellation policy
+    ("bvsc", "If I cancel my B.V.Sc. admission more than 30 days after the last date, do I get a refund?",
+     "More than 30 days"),
+
+    # --- documents
+    ("bvsc", "What documents are needed to claim caste reservation for B.V.Sc.?",
+     "Caste Validity Certificate (CVC)"),
+    ("bvsc", "What is the domicile certificate requirement for B.V.Sc.?",
+     "minimum 3 years stay in preceding 10 years in Maharashtra State"),
+    ("btech-dairy", "What is the domicile certificate requirement for B.Tech Dairy Technology?",
+     "minimum 3 years stay in preceding 10 years in Maharashtra state"),
+    ("bfsc", "What certificate is needed for orphan category admission in B.F.Sc.?",
+     "Orphaned certificate issued from Commissioner, Women and Child Development"),
+
+    # --- hostel (one confirms availability, one confirms the opposite -
+    # deliberately both, since a stress test found the bot answering this
+    # for B.F.Sc. without ever surfacing the contradicting girls-only
+    # exception; correct retrieval for BOTH facts is the prerequisite for
+    # ever fixing that synthesis gap)
+    ("bvsc", "Is hostel accommodation guaranteed for B.V.Sc. students?",
+     "Hostel accommodation for a limited number of stu"),
+    ("bfsc", "Is hostel accommodation available for B.F.Sc. students?",
+     "hostel accommodation is not available at the Fishery Colleges"),
+
+    # --- weightage / reservation figures
+    ("bfsc", "What is the maximum weightage points for B.F.Sc.?",
+     "restricted to 20 points only"),
+    ("btech-dairy", "What is the maximum weightage for B.Tech Dairy Technology?",
+     "restricted to 20 points only"),
+    ("btech-dairy", "Is Indian Dairy Diploma counted as a weightage subject for B.Tech Dairy Technology?",
+     "Indian Dairy Diploma"),
+    ("btech-dairy", "What is the SBC reservation percentage for B.Tech Dairy Technology?",
+     "adjusted reservation of Special Backward Class (SBC) will be 2% of intake capacity"),
+    ("bvsc", "What percentage of seats does SC reservation get for B.V.Sc.?",
+     "13.0"),
 ]
 
 
