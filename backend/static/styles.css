@@ -127,11 +127,24 @@ button { font-family: inherit; cursor: pointer; }
 .empty { margin: auto 0; max-width: 540px; }
 .empty h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.6rem, 1.1rem + 1.8vw, 2.3rem); letter-spacing: -0.03em; margin: 0 0 10px; line-height: 1.08; }
 .empty p { color: var(--ink-2); margin: 0 0 22px; font-size: 15.5px; }
-.chips { display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
+.chips { display: flex; flex-direction: column; gap: 9px; align-items: flex-start; max-width: 100%; }
 .chip {
+  /* max-width: 100% (not previously set) - a flex column item with
+     align-items: flex-start sizes to its own content's max-content width
+     by default, and a <button> doesn't wrap text unless something bounds
+     its width first. A long label (a full topic-menu question, a longer
+     programme name) had nothing stopping it from growing past the
+     viewport on a narrow screen and forcing the whole row to scroll
+     sideways - reported live as "garbled" chips, never reproduced on a
+     desktop viewport where every label already fits comfortably within
+     74% of an 860px-capped chat column. Fixed defensively even without a
+     confirmed live repro: this is a real, verifiable gap in the CSS
+     (missing width constraint on a flex-item button) regardless of
+     whether it is the exact cause of that one report. */
   font: inherit; font-size: 14px; color: var(--ink); text-align: left;
   background: var(--surface); border: 1px solid var(--border-2); border-radius: 12px;
   padding: 11px 15px; box-shadow: var(--shadow-sm); transition: all .15s ease;
+  max-width: 100%; white-space: normal; word-wrap: break-word;
 }
 .chip:hover { border-color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
 .chip:active { transform: translateY(0) scale(.99); }

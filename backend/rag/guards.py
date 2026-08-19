@@ -33,7 +33,8 @@ from ..prompts.canned import (_DISPUTE_PROMPT, _ELIGIBILITY_CATEGORY_OPTIONS,
                                _ELIGIBILITY_ENTRANCE_TEXT, _META_ACKNOWLEDGE_TEXT,
                                _OFF_TOPIC_TASK_PROMPT, _SUBJECT_PERCENT_ASK_TEXT,
                                _UNKNOWN_PROGRAMME_TEXT,
-                               _PROGRAM_LIST_TEXT, _TOPIC_MENU_LEAD_TEXT,
+                               _PROGRAM_LIST_TEXT, _SUBJECTIVE_COMPARISON_TEXT,
+                               _TOPIC_MENU_LEAD_TEXT,
                                _OFF_TOPIC_TRIVIA_PROMPT, _PERCENTAGE_CLARIFY_TEXT,
                                _PERCENTAGE_SCOPE_OPTIONS, _PROGRAM_CLARIFY_TEXT)
 
@@ -449,9 +450,20 @@ def _program_list_guard(ctx):
     ("which courses require NEET", "what are the fees for all courses") is a
     real comparison and must fall through - it is only the bare "what is on
     offer" that is answered here.
+
+    Checked against ctx.original_question, not ctx.question - the same
+    "detect from what the student actually typed" rule this file's module
+    docstring already states for programme detection, extended here after
+    a real miss: the router paraphrased "Since I'm clearly not eligible
+    for B.V.Sc., what other programme should I consider?" into something
+    like "what other programmes are available", stripping the word
+    "eligible" the _LIST_ATTRIBUTE_WORDS exclusion below depends on -
+    so this guard fired with the generic programme-list menu instead of
+    leaving an eligibility-shaped question to a guard that could actually
+    engage with the (unverified) premise. Reproduced directly 2026-08-19.
     """
-    question = ctx.question
-    words = programs._words(question)
+    original = getattr(ctx, "original_question", ctx.question)
+    words = programs._words(original)
     asks_for_set = bool(words & _LIST_TRIGGERS) and bool(words & _LIST_NOUNS)
     if not asks_for_set:
         return None
@@ -459,7 +471,7 @@ def _program_list_guard(ctx):
     # something, which the comparison path handles properly.
     if words & _LIST_ATTRIBUTE_WORDS:
         return None
-    if programs.detect_program(question):
+    if programs.detect_program(original):
         return None
 
     names = list(programs.PROGRAM_NAMES.values())
@@ -470,6 +482,45 @@ def _program_list_guard(ctx):
                for pid, name in programs.PROGRAM_NAMES.items()]
     return {"answer": body, "pages": [], "model": "guard", "language": ctx.language,
             "source": "program-list", "speakable": True, "clarifyOptions": options}
+
+
+_SUBJECTIVE_COMPARISON_WORDS = {"easier", "easiest", "harder", "hardest",
+                                 "tougher", "toughest", "better", "best"}
+
+
+def _subjective_comparison_guard(ctx):
+    """"Which is easier to get into, B.V.Sc. or B.F.Sc.?" - a subjective
+    opinion question with no factual answer, not a real comparison
+    request. Reported live 2026-08-19: the old behaviour lost the
+    question's intent entirely, falling back to a generic programme-list
+    menu via _program_list_guard's shared trigger words.
+
+    Answered directly, deterministically, no LLM call - NOT deferred to
+    _comparison_guard: _COMPARISON_SYSTEM_PROMPT's "give a direct,
+    complete verdict per program" instruction is written for eligibility
+    verdicts, but a subjective "which is easier" question risks pulling
+    the same instruction toward fabricating a difficulty RANKING that
+    isn't grounded in anything - the comparison prompt has no safeguard
+    against that shape of question, and this codebase's standing rule is
+    never to invent an answer the source can't support. Acknowledges
+    there is no factual "easier" and redirects to something genuinely
+    checkable (their own eligibility) instead.
+
+    Narrow on purpose: requires a comparative/superlative word from a
+    small set NEXT TO programme-shaped language (naming 2+ programmes, or
+    a bare "programme"/"course"/"degree" mention), so an unrelated
+    "better" ("is 55% better than 50%?") doesn't misfire.
+    """
+    original = getattr(ctx, "original_question", ctx.question)
+    words = programs._words(original)
+    if not (words & _SUBJECTIVE_COMPARISON_WORDS):
+        return None
+    if len(programs.detect_programs_multi(original)) < 2 and not (words & _LIST_NOUNS):
+        return None
+    lang = _clarify_language(ctx)
+    text = _SUBJECTIVE_COMPARISON_TEXT.get(lang, _SUBJECTIVE_COMPARISON_TEXT["en"])
+    return {"answer": text, "pages": [], "model": "guard", "language": ctx.language,
+            "source": "subjective-comparison", "speakable": True}
 
 
 def _topic_menu_guard(ctx):
@@ -907,7 +958,7 @@ def _eligibility_guard(ctx):
         rows = eligibility.thresholds_for(original, candidate)
         if rows:
             ctx.trace("eligibility", kind="threshold_lookup", rows=len(rows))
-            facts = _threshold_facts(rows)
+            facts = _threshold_facts(rows, original)
             spoken = llm.generate_scoped(
                 config.CHAT_PRIMARY, ELIGIBILITY_FACTS_PROMPT, facts + ctx.hint,
                 ctx.question, timeout=60, allow_cloud=ctx.cloud_ok)
@@ -1191,13 +1242,25 @@ def _which_programmes_facts(matches):
     return "\n".join(lines)
 
 
-def _threshold_facts(rows):
+_HORIZONTAL_QUOTA_WORDS = {"pwd", "physically", "handicapped", "disability",
+                            "disabled"}
+
+
+def _threshold_facts(rows, original=""):
     """The requirement table, written out for the model to say aloud.
 
     Every programme is listed when the question did not pin one down, because
     the reserved threshold really does differ between them - 47.50% for
     B.V.Sc. against 40% for the other two - so any single figure would be
     wrong for two thirds of the people asking.
+
+    `original`, when it names a HORIZONTAL quota (PWD/disability) alongside
+    the vertical reserved/unreserved question, gets one extra fact: PWD is a
+    separate 5%-of-intake seat quota (verified: "5% of total intake capacity
+    seats are reserved for Physically Handicapped candidate"), not a
+    different marks percentage - stacking it with SC/ST/OBC/etc. otherwise
+    got a technically-correct-but-shallow answer that never explained the
+    two mechanisms are different questions. Reported live 2026-08-19.
     """
     lines = ["FACTS (already verified against the prospectus, state exactly these "
              "and introduce no other number):"]
@@ -1213,6 +1276,12 @@ def _threshold_facts(rows):
                      "picking a single figure.")
     lines.append("Do not say the prospectus fails to specify a reserved-category "
                  "requirement - it specifies one, and it is listed above.")
+    if set(programs._words(original)) & _HORIZONTAL_QUOTA_WORDS:
+        lines.append("They also mentioned Physically Handicapped (PWD) status: this "
+                     "is a SEPARATE 5% seat quota carved from total intake capacity, "
+                     "not a different marks percentage - PWD does not change which "
+                     "of the figures above applies to them. Say this explicitly, "
+                     "do not just state the marks percentage and move on.")
     return "\n".join(lines)
 
 
@@ -1671,6 +1740,14 @@ GUARDS = [
     _dispute_guard,
     _meta_correction_guard,
     _off_topic_guard,
+    # Ahead of _program_list_guard: "which is easier, B.V.Sc. or B.F.Sc.?"
+    # shares _program_list_guard's own trigger words (a programme noun +
+    # a question word), and _program_list_guard's _LIST_ATTRIBUTE_WORDS
+    # exclusion has no notion of "easier/better/harder" - deliberately not
+    # added there (see _subjective_comparison_guard's own docstring for
+    # why this is its own guard rather than that set growing a fourth,
+    # unrelated kind of word), so this must run first to win.
+    _subjective_comparison_guard,
     _program_list_guard,
     _eligibility_guard,
     _percentage_clarify_guard,

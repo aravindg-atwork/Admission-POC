@@ -253,6 +253,25 @@ _PROGRAM_LIST_TEXT = {
           "मी त्याबद्दल काहीही सांगू शकतो - पात्रता, शुल्क, तारखा किंवा कागदपत्रे.",
 }
 
+# "Which is easier to get into?" - no factual "easier" exists (see
+# guards.py's _subjective_comparison_guard), so this is honest about that
+# rather than inventing a ranking, and redirects to something genuinely
+# checkable instead.
+_SUBJECTIVE_COMPARISON_TEXT = {
+    "en": "There's no single \"easier\" answer - each programme has its own "
+          "marks and subject requirements, and which one is easier for you "
+          "depends on your own percentage and subjects. Tell me your marks "
+          "and I can check your eligibility for both directly.",
+    "hi": "इसका कोई एक \"आसान\" जवाब नहीं है - हर कार्यक्रम की अपनी अलग अंक और "
+          "विषय आवश्यकताएँ हैं, और आपके लिए कौन-सा आसान है यह आपके प्रतिशत और "
+          "विषयों पर निर्भर करता है। अपने अंक बताइए, मैं दोनों के लिए आपकी "
+          "पात्रता सीधे जाँच सकता हूँ।",
+    "mr": "याचे एकच \"सोपे\" उत्तर नाही - प्रत्येक अभ्यासक्रमाच्या स्वतःच्या "
+          "गुण आणि विषय आवश्यकता आहेत, आणि तुमच्यासाठी कोणता सोपा आहे हे "
+          "तुमच्या टक्केवारी आणि विषयांवर अवलंबून आहे. तुमचे गुण सांगा, मी "
+          "दोन्हीसाठी तुमची पात्रता थेट तपासू शकतो.",
+}
+
 
 # Reply when a student names a course this university does not run - see
 # guards.py's _unknown_programme_guard. Fixed text, no retrieval, no model:
