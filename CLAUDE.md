@@ -68,6 +68,19 @@ plain `python3` process on the host, not in Docker.
   live smoke-test the specific fix → clear FAQ cache on all four projects.
 - SSH key: not committed (obviously). Ask the user if it isn't already in
   `~/.ssh/` or the session scratchpad.
+- **Local testing needs an SSH tunnel to reach the shared qwen/bge-m3
+  service.** `.env`'s `SELFHOSTED_URL=http://127.0.0.1:8000` is a LOCAL
+  port — on the Windows dev box this only resolves if something is
+  forwarding it to the production box's `docker-proxy` (also on
+  `127.0.0.1:8000`, production-side). If it drops (observed mid-session:
+  `netstat` showed nothing on local `:8000`, retrieval-backed chat requests
+  50x'd with `WinError 10061 ... actively refused`, while greeting/routing
+  requests — which don't need embeddings — kept working fine, which is the
+  tell), re-open it: `ssh -N -L 8000:127.0.0.1:8000 root@159.69.210.30`.
+  Opening a **backgrounded, persistent** tunnel may be blocked by the
+  permission classifier in auto mode — if so, don't fight it: fall back to
+  testing directly against production (`http://159.69.210.30`) instead,
+  which needs no tunnel and is where the fix has to work anyway.
 
 ## Scope
 
@@ -204,6 +217,22 @@ this: they're real, common enough words that fuzzing them misfires
 `_TYPO_EXCLUDED_WORDS` if a new common-word collision turns up — do not
 widen the abbreviation set or loosen the uniqueness rule to fix one.
 
+**`_program_redirect_guard` fires on ANY project, not just `default`** —
+a scoped widget's own API key doesn't protect it from being silently
+redirected elsewhere if `detect_program()` finds a different programme's
+alias in the text. This is what turned "dairy" being a bare `btech-dairy`
+alias into a real bug: "Is an Indian Dairy Diploma equivalent to 12th
+standard?", asked on the `bvsc`-scoped widget about a real prior
+qualification named in `bvsc`'s own prospectus, got silently redirected to
+`btech-dairy`'s admission requirements instead of answering from `bvsc`'s
+own content. Fixed with `programs._NON_PROGRAMME_PHRASES`/
+`_strip_non_programme_phrases` — known collision phrases are stripped from
+the normalized text before alias matching runs. Same lesson as the
+`detect_program()`-returns-only-first-match note above: a bare, short
+alias is powerful and cheap, but every new one is a new false-positive
+surface against ordinary English — sweep for collisions before trusting
+one, the way `_TYPO_EXCLUDED_WORDS` and this were both found.
+
 **Client-side (`static/app.js`/`admin-app.js`) React stale-closure
 gotcha**: `setState()` followed by an immediate function call in the *same*
 synchronous handler reads the PRE-update state, because the closure that
@@ -287,9 +316,10 @@ correctness of figures. All fixed to use `127.0.0.1` 2026-08-18;
 `test_clarification.py` also had its project id fixed (`mvsc` → `bvsc` — the
 old one was deleted in the 2026-08-14 retirement and the whole suite 404'd
 before it could check anything). `test_retrieval_hi_mr` is quota-free.
-`test_programme_typo_tolerance.py` (added 2026-08-18) is pure logic against
-`core/programs.py` directly, no backend needed — the odd one out among
-these, everything else here hits the live HTTP API.
+`test_programme_typo_tolerance.py`, `test_program_alias_false_positives.py`,
+and `test_comparison_retry.py` (added 2026-08-18/19) are pure logic against
+`core/programs.py`/`rag/comparison.py` directly, no backend needed — the odd
+ones out among these, everything else here hits the live HTTP API.
 
 `tools/measure_latency_p95.py` (added 2026-08-18): reuses
 `eval_admissions.CASES`, records every response time, reports
@@ -377,11 +407,13 @@ trusting it as a description of current answer quality, not just latency.
   figures — now compares the flattened problem set directly.
 - **Hindi/Marathi language-detection mismatch** on certain question
   phrasings — not yet isolated to a specific pattern.
-- **B.Tech-Dairy tangent hallucination** on `bvsc`'s own single-answer path —
-  the foreign-programme chunk filter added this session
-  (`rag/answer.py`, filters chunks whose `detect_programs_multi` names a
-  programme other than the current project) does not catch this specific
-  case yet.
+- ~~B.Tech-Dairy tangent hallucination on `bvsc`'s own single-answer
+  path.~~ **Done 2026-08-19** — wasn't the foreign-chunk filter at all: it
+  was `_program_redirect_guard` silently redirecting because "dairy" (a
+  deliberately bare `btech-dairy` alias) matched inside "Indian Dairy
+  Diploma", a real prior qualification named in `bvsc`'s own prospectus.
+  Fixed with `programs._NON_PROGRAMME_PHRASES` (see "Architecture" above),
+  reproduced and re-verified live on production.
 - **Retrieval golden set is thin.** `tools/eval_retrieval_full.py` (added
   2026-08-18) tried to derive gold chunks automatically from
   `eval_admissions.CASES`'s `expect` term lists and could only reliably
