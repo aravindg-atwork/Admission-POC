@@ -277,9 +277,34 @@ def _named_entrance_key(token):
     return None
 
 
+# Reproduced live 2026-08-19 in an adversarial stress test: "It is not true
+# that I haven't passed NEET" (a double negative - the student HAS passed)
+# matched _NOT_APPEARED_RE on "haven't passed NEET" and was told the exact
+# opposite of the truth: "you did not appear for NEET-UG-2026". Genuine
+# double-negation parsing is not something a regex can do reliably - this
+# does not attempt to flip the match back to a positive claim (asserting
+# "the student HAS passed" from a double negative is exactly as risky a
+# guess as the bug being fixed). Instead it recognises the common OUTER-
+# negation framings that flip an inner negation's meaning ("it is not true
+# that...", "it's false that...", "that's not correct, I...") and, when one
+# appears in front of the match, treats the exam status as UNKNOWN rather
+# than confidently asserting either way - same "don't guess when
+# ambiguous" discipline this guard already follows for entrance status
+# generally (see _eligibility_interview_ask, which just asks).
+_DOUBLE_NEGATION_FRAME_RE = re.compile(
+    r"\b(?:not\s+true|isn'?t\s+true|not\s+correct|isn'?t\s+correct|"
+    r"not\s+the\s+case|isn'?t\s+the\s+case|false)\s+that\b",
+    re.IGNORECASE,
+)
+_DOUBLE_NEGATION_WINDOW = 40  # chars immediately before the negation match
+
+
 def missing_entrance_exam(project_id, text):
     """The exam this programme admits on, when the student says they did not
-    sit it. None otherwise - including when they missed a DIFFERENT exam.
+    sit it. None otherwise - including when they missed a DIFFERENT exam, or
+    when an outer negation flips the inner one's meaning (see
+    _DOUBLE_NEGATION_FRAME_RE - status is treated as unknown, not asserted
+    the other way, when that happens).
 
     Returns the display name ("MHT-CET 2026") so the caller can name it back.
     """
@@ -289,8 +314,12 @@ def missing_entrance_exam(project_id, text):
     if _EXEMPTION_RE.search(text) or not _FIRST_PERSON_RE.search(text):
         return None
     for match in _NOT_APPEARED_RE.finditer(text):
-        if _named_entrance_key(match.group(1)) == rule["entrance_key"]:
-            return rule["entrance"]
+        if _named_entrance_key(match.group(1)) != rule["entrance_key"]:
+            continue
+        preceding = text[max(0, match.start() - _DOUBLE_NEGATION_WINDOW):match.start()]
+        if _DOUBLE_NEGATION_FRAME_RE.search(preceding):
+            continue
+        return rule["entrance"]
     return None
 
 
