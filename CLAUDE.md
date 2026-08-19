@@ -207,8 +207,15 @@ over what the student just typed.
 overclaimed certainty while entrance-exam clearance, age (17 by 31 Dec 2026 —
 verified for all three programmes, each on its own prospectus's general
 eligibility section), and category-certificate requirements were still
-outstanding. `_eligibility_facts()`/`_eligibility_fallback_sentence()`
-give those conditions equal weight to the verdict, not a footnote.
+outstanding. `_eligibility_facts()`/`_eligibility_fallback_sentence()` gave
+those conditions equal weight to the verdict, not a footnote — **except age,
+removed again 2026-08-19 on explicit request**: eligible verdicts no longer
+mention the age requirement at all (`age_requirement` is still computed in
+`core/eligibility.py`'s `RULES`/return dict, just no longer read by either
+guards.py function). Entrance-exam-clearance and category-certificate
+wording is unaffected. If this needs reverting, the removed blocks were two
+`if result["verdict"] == "eligible" and result.get("age_requirement"):`
+checks, one in each function.
 
 **`detect_program(text)` returns only the FIRST-named programme** when a
 question names several (`detect_programs_multi()[0]`) — by design, for the
