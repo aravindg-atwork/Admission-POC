@@ -81,6 +81,19 @@ plain `python3` process on the host, not in Docker.
   permission classifier in auto mode — if so, don't fight it: fall back to
   testing directly against production (`http://159.69.210.30`) instead,
   which needs no tunnel and is where the fix has to work anyway.
+- **Debugging a single guard's logic doesn't need the tunnel (or even a
+  running server) at all.** `rag.answer` is shadowed by `rag/__init__.py`'s
+  `from .answer import answer` re-export, so `from backend.rag import
+  answer` binds the FUNCTION, not the module — import the submodule
+  directly instead: `from backend.rag.answer import _build_context`. Build
+  a real `ctx` with `_build_context(project_id, question, "auto", "en")`
+  (pure language-detection/hint-building, no network call) and call any
+  guard directly, e.g. `guards._eligibility_guard(ctx)` — this only hits
+  the network for an actual LLM call (Mistral/NVIDIA, unaffected by the
+  local tunnel being down), never embeddings/retrieval. Far faster than a
+  full HTTP round-trip for isolating exactly which check inside a guard is
+  firing or bailing — this is how the "which programmes" branch-order bug
+  below was actually found.
 
 ## Scope
 
@@ -233,6 +246,70 @@ alias is powerful and cheap, but every new one is a new false-positive
 surface against ordinary English — sweep for collisions before trusting
 one, the way `_TYPO_EXCLUDED_WORDS` and this were both found.
 
+**`_SELF_CREDENTIAL_RE` (self-completed-degree exclusion) didn't
+distinguish a past claim from a future/hypothetical one.** "What all exam
+**should** i have passed for bfsc eligibility?" — naming `bfsc` explicitly
+— matched on "i have passed" and treated `bfsc` (named right after) as the
+student's OWN already-completed degree to exclude from routing, so the
+question lost its programme and fell through to `clarify-program` asking
+which one. "should i have passed" asks about a FUTURE requirement, not a
+claim of already holding a credential; "I completed my B.V.Sc." is the
+opposite. Fixed with `_HYPOTHETICAL_MODAL_RE` — a modal word (should/
+would/could/must/need to) immediately before the match means it isn't a
+genuine self-credential claim. Same lesson again: a regex built for one
+real case, tested only against that case, will eventually meet a second
+one it wasn't checked against.
+
+**Exam-based "which programme am I eligible for" matching**
+(`eligibility.is_which_programmes_by_exam_question`/`eligible_programmes_
+by_exam`, wired into `_eligibility_guard`) mirrors the existing
+subjects-based version on a different axis — NEET admits to `bvsc` only,
+CET/MHT-CET admits to `bfsc`+`btech-dairy`. **Checked BEFORE the subjects
+branch, not after** — found live: the subjects branch's own
+`describes_own_subjects` matches bare "I have" ("I have cleared MHT-CET"),
+so with subjects-first ordering it claimed the question, found zero
+subject matches (there are none), and hard-returned `None`, dead-ending
+the guard before the exam branch ever got a turn. Checking the exam
+branch first works because it requires one of ITS OWN specific verbs
+(passed/cleared/qualified/appeared/gave/took/sat/wrote) next to a
+recognised exam name — a genuine subjects-only question never matches
+that, so still falls through correctly. **The general lesson, not just
+this one bug**: when two independent "does this question belong to me"
+checks can both fire on the same text, whichever runs first and
+hard-returns `None` silently kills the other — always check by testing
+the ACTUAL guard/branch order with a real question, not just each
+detector function in isolation returning the right boolean.
+`is_which_programmes_by_exam_question` deliberately does NOT require the
+subjects branch's `_APPLY_RE` too — the literal reported phrasing typo'd
+"eligible" as "eligiblie", which `_APPLY_RE`'s exact match doesn't catch,
+and `_WHICH_PROGRAMMES_RE` combined with a clear first-person exam claim
+is unambiguous enough alone.
+
+**No typo tolerance on entrance-exam names** (`neet`/`cet`) — deliberately
+never added, unlike the programme abbreviations. Both are short enough
+that their edit-distance-1 neighbours are common real words ("meet",
+"feet", "neat" for neet; "get", "set", "yet", "vet" for cet), so fuzzing
+either would misfire constantly. A genuinely garbled name (reported live:
+"quet") stays unrecognised on purpose.
+
+**Thumbs up/down feedback only ever worked for `faqId`-backed answers**
+(plain RAG/FAQ-cache hits) — every guard-served answer (eligibility
+verdicts, the guided interview, comparisons, clarify-percentage/
+program...) never gets a `faqId` by design (guards run before the FAQ
+cache and are never cached themselves — see the guided-interview note
+above), so the feedback buttons silently never appeared for a large and
+growing share of real conversations. `/api/feedback` (`chat_routes.
+handle_feedback`) now accepts `traceId`+`source` as a fallback target for
+these, recorded via `reviewlog.append` (no cache entry exists to update,
+just an event — same shape/discipline the system's own self-detected
+near-misses already use). `app.js` stores `traceId` per message and shows
+feedback whenever either `faqId` or `traceId` is present AND the bot is
+actually answering rather than asking a clarifying question
+(`interviewOptions`/`clarifyOptions`/`scopeOptions`/`topicOptions` all
+absent). Scoped to the student widget only — the admin console's
+Playground already has full trace inspection, a richer diagnostic tool
+than a dislike button.
+
 **Client-side (`static/app.js`/`admin-app.js`) React stale-closure
 gotcha**: `setState()` followed by an immediate function call in the *same*
 synchronous handler reads the PRE-update state, because the closure that
@@ -317,8 +394,9 @@ correctness of figures. All fixed to use `127.0.0.1` 2026-08-18;
 old one was deleted in the 2026-08-14 retirement and the whole suite 404'd
 before it could check anything). `test_retrieval_hi_mr` is quota-free.
 `test_programme_typo_tolerance.py`, `test_program_alias_false_positives.py`,
-and `test_comparison_retry.py` (added 2026-08-18/19) are pure logic against
-`core/programs.py`/`rag/comparison.py` directly, no backend needed — the odd
+`test_comparison_retry.py`, and `test_exam_based_matching.py` (added
+2026-08-18/19) are pure logic against `core/programs.py`/`rag/
+comparison.py`/`core/eligibility.py` directly, no backend needed — the odd
 ones out among these, everything else here hits the live HTTP API.
 
 `tools/measure_latency_p95.py` (added 2026-08-18): reuses
