@@ -12,6 +12,7 @@ picking the chat model - one provider serves all languages.
 """
 
 import json
+import socket
 import threading
 from datetime import datetime, timezone
 
@@ -96,6 +97,22 @@ def _attempt_timeout(provider, timeout):
     return timeout
 
 
+def _is_timeout(exc):
+    """Whether `exc` is a genuine attempt-timed-out failure, as opposed to a
+    fast one (HTTP error, connection refused, malformed response).
+
+    providers.py's _post() uses urllib.request.urlopen(timeout=...), whose
+    timeout does NOT surface as a bare socket.timeout/TimeoutError - urllib
+    wraps it in urllib.error.URLError(TimeoutError(...)), so the real check
+    has to unwrap URLError.reason, not just isinstance() the exception
+    itself. Verified directly (urlopen against an unroutable address).
+    """
+    if isinstance(exc, (socket.timeout, TimeoutError)):
+        return True
+    reason = getattr(exc, "reason", None)
+    return isinstance(reason, (socket.timeout, TimeoutError))
+
+
 def generate(system_prompt, user_prompt, question, timeout=280, allow_cloud=True, model=None,
              temperature=None):
     """Generate an answer and return (answer_text, model_label).
@@ -137,6 +154,20 @@ def generate(system_prompt, user_prompt, question, timeout=280, allow_cloud=True
             # one extra call: the local fallback is markedly worse at exactly
             # these questions (it misread the hostel fee grid every time), so
             # silently dropping to it costs accuracy where it matters most.
+            #
+            # Only retry a FAST failure, though - an HTTP error or connection
+            # refused, the token-ceiling-exhaustion shape this retry exists
+            # for. A genuine TIMEOUT already consumed the full call_timeout
+            # budget once; retrying identically just pays that same budget
+            # again for no better odds of a different outcome, and is exactly
+            # what turned a slow primary into a 90s+ wait before the fallback
+            # even got a turn - measured live 2026-08-19: p95 80.5s, p99
+            # 240.1s, with >15s on 18.8% of a 80-question run. Skipping the
+            # retry on a timeout specifically (not on any other failure)
+            # roughly halves the worst case for exactly the slow-primary
+            # shape without touching the fast, already-good median path at
+            # all - a stalled call fails over to the fallback in one
+            # call_timeout instead of two.
             call_timeout = _attempt_timeout(primary, timeout)
             for attempt in (1, 2):
                 try:
@@ -148,7 +179,7 @@ def generate(system_prompt, user_prompt, question, timeout=280, allow_cloud=True
                 except Exception as exc:  # noqa: BLE001
                     if primary.is_cloud:
                         _record_sarvam_call()  # a truncated attempt still bills
-                    if attempt == 2:
+                    if attempt == 2 or _is_timeout(exc):
                         raise
                     print(f"[llm] {primary.name} attempt 1 failed ({exc!r}); retrying once")
         except Exception as exc:  # noqa: BLE001 - primary down/misconfigured -> fallback
