@@ -445,6 +445,24 @@ VALIDATION_MAX_ROUNDS = int(os.environ.get("VALIDATION_MAX_ROUNDS", "1"))
 # path where a deterministic check already found something to escalate.
 VALIDATION_TIMEOUT = int(os.environ.get("VALIDATION_TIMEOUT", "90"))
 
+# How long (seconds, wall-clock since the REQUEST started, not since the
+# validator call itself) a request may already have run before rag/
+# answer.py's _pipeline skips the LLM-check/regeneration escalation
+# entirely, serving the deterministically-checked draft as-is instead -
+# see validate.check_and_regenerate's `skip_llm_check` docstring. The
+# comment above VALIDATION_TIMEOUT already accepted its 90s cost as
+# "rare path only" - this budget is what keeps that rare path from
+# STACKING onto an already-slow main generation call rather than running
+# instead of a fast one. 20s: comfortably above the ~2-10s a normal
+# request's main generation takes (this project's own measured median is
+# 3-4s), so the fast/normal path is completely unaffected; comfortably
+# below the point where adding another 52-90s (Hetzner's own documented
+# range, or the full VALIDATION_TIMEOUT) would push an already-slow
+# request into the multi-hundred-second tail the 2026-08-18 P95/P99
+# measurement found.
+VALIDATION_LLM_CHECK_BUDGET_SECONDS = int(
+    os.environ.get("VALIDATION_LLM_CHECK_BUDGET_SECONDS", "20"))
+
 # Self-learning: how much flagged/review-log history counts, and how many
 # repeats of the same pattern justify surfacing it at all - low defaults
 # since this project's total daily volume is small (see stats).

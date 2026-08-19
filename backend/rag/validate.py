@@ -159,7 +159,7 @@ def llm_check(question, context_text, reply):
 
 
 def check_and_regenerate(question, context_text, reply, model, system_prompt, user_prompt,
-                          postprocess=None, own_project_id=None):
+                          postprocess=None, own_project_id=None, skip_llm_check=False):
     """The full bounded pipeline in one call, so rag.py's hook stays a
     one-liner: deterministic checks -> (only if flagged) one LLM check ->
     (only if that fails) one regeneration attempt. Never a loop - see the
@@ -178,6 +178,17 @@ def check_and_regenerate(question, context_text, reply, model, system_prompt, us
 
     `own_project_id` - see deterministic_checks's own docstring; forwarded
     through unchanged.
+
+    `skip_llm_check` - set by the caller (see rag/answer.py's _pipeline)
+    once the request has already run long enough that the LLM check/
+    regeneration step (config.ORCHESTRATOR_PROVIDER, "hetzner" by default -
+    documented at 52-77s for a TRIVIAL prompt) would stack an already-slow
+    request even higher, exactly the sequential-LLM-call compounding
+    behind the 2026-08-18 P95/P99 measurement. Deterministic checks still
+    run either way - only the expensive escalation is skipped, degrading
+    to the SAME already-proven-safe path this function already takes when
+    Hetzner itself fails to respond at all (flagged, never auto-cached,
+    logged, served as-is).
     """
     from .. import config
     from ..generation import llm
@@ -185,6 +196,9 @@ def check_and_regenerate(question, context_text, reply, model, system_prompt, us
     reasons = deterministic_checks(question, context_text, reply, own_project_id)
     if not reasons:
         return reply, model, [], False
+
+    if skip_llm_check:
+        return reply, model, reasons, False
 
     # topic_mismatch alone does NOT buy an LLM call any more. Measured from
     # the review logs on 2026-08-14: it was the flag on 37 of 40 escalations

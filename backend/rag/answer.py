@@ -40,6 +40,7 @@ def _build_context(project_id, question, script_pref, ui_language, history=None,
     can recursively call back into _answer() without guards.py importing
     this module (which would recreate the exact cycle this phase removes).
     """
+    started_at = time.time()
     question = question.strip()
     language = detect_script(question)
     cloud_ok = projects.allow_cloud(project_id)
@@ -176,6 +177,16 @@ def _build_context(project_id, question, script_pref, ui_language, history=None,
     return types.SimpleNamespace(
         project_id=project_id, question=effective_question, original_question=question,
         script_pref=script_pref,
+        # When this request actually started - see _pipeline's validation-
+        # skip check for why: the validator/regeneration role
+        # (config.ORCHESTRATOR_PROVIDER, "hetzner" by default) is
+        # documented at 52-77s for a TRIVIAL prompt, not a failure case -
+        # running it after an already-slow main generation call is exactly
+        # the kind of sequential-LLM-call compounding that produced the
+        # 2026-08-18 P95/P99 measurement (80.5s/240.1s). Captured here,
+        # not in answer()'s own t0, because that one is stats-only and
+        # never threaded into the pipeline for anything to act on.
+        started_at=started_at,
         ui_language=ui_language, language=language, hint_language=hint_language,
         hint=hint, typed_romanized=typed_romanized, cloud_ok=cloud_ok, route=route,
         history=history or [],
@@ -555,9 +566,25 @@ def _pipeline(ctx):
         if config.VALIDATION_ENABLED:
             if language == "latin" and not typed_romanized:
                 nri_postprocess = lambda r: _add_nri_scope_caveat(question, top, r)  # noqa: E731
+                # Skip the LLM-check/regeneration step (config.
+                # ORCHESTRATOR_PROVIDER, "hetzner" by default - documented
+                # at 52-77s for a TRIVIAL prompt, not a failure case) once
+                # this request has already run long - stacking that onto an
+                # already-slow main generation call is exactly the
+                # sequential-LLM-call compounding that produced the
+                # 2026-08-18 P95/P99 measurement. The deterministic checks
+                # (unsupported_number/topic_mismatch, free, no LLM call)
+                # still run either way; only the expensive escalation is
+                # skipped, and it degrades to the SAME already-proven-safe
+                # path this codebase already takes when Hetzner itself is
+                # down or slow to respond (llm_check/generate_scoped return
+                # None on any failure - see their own docstrings) - flagged,
+                # never auto-cached, logged to review, served as-is.
+                elapsed = time.time() - ctx.started_at
                 reply, model, reasons, regenerated = validate.check_and_regenerate(
                     question, context, reply, model, system_prompt, user_prompt,
-                    postprocess=nri_postprocess, own_project_id=project_id)
+                    postprocess=nri_postprocess, own_project_id=project_id,
+                    skip_llm_check=elapsed > config.VALIDATION_LLM_CHECK_BUDGET_SECONDS)
             else:
                 reasons = validate.deterministic_checks(question, context, reply, project_id)
                 regenerated = False
