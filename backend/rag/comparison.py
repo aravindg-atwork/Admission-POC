@@ -7,6 +7,7 @@ _COMPARISON_TOP_K_PER_PROGRAM and _answer_comparison's own docstring for
 why.
 """
 
+import itertools
 import re
 
 from .. import config
@@ -78,6 +79,31 @@ _ELIGIBILITY_RETRIEVAL_BOOST = (
     "Biotechnology Mathematics English percentage marks qualifying examination"
 )
 
+# A compound question ("what is the fee, and also am I eligible with 55% in
+# PCM, and also is hostel compulsory?") embedded as ONE blended query
+# dilutes similarity for each sub-topic individually - reproduced live
+# 2026-08-19: that exact question never surfaced B.V.Sc.'s own fee chunk at
+# all under a single blended embedding, even though the identical fee
+# question asked alone retrieves it cleanly. Deliberately narrow - matches
+# the connective phrases a compound admission question actually uses in
+# practice, not a general clause-boundary parser (this codebase's
+# established style throughout, see programs.py's alias-collision
+# comments for the same "narrow pattern, extend later if a new case turns
+# up" reasoning).
+_COMPOUND_CONNECTIVE_RE = re.compile(r"\band\s+also\b|\bas\s+well\s+as\b", re.I)
+
+
+def _split_compound_query(text):
+    """Split a compound, multi-topic question into its component
+    sub-questions for RETRIEVAL purposes only - the generation prompt
+    still receives the original, unmodified question text; only WHICH
+    chunks get retrieved changes. Returns [text] unchanged (a single
+    "sub-question") when no connective is found, so every caller can
+    treat the single- and multi-topic cases identically.
+    """
+    parts = [p.strip() for p in _COMPOUND_CONNECTIVE_RE.split(text) if p and p.strip()]
+    return parts if len(parts) > 1 else [text]
+
 # Found 2026-08-17: "whats the admission fees" against B.Tech. (Dairy
 # Technology)'s own store filled 8 of the 10 slots with near-identical
 # repeats of the SAME unreserved-fee sentence (OCR-chunked with overlapping
@@ -129,6 +155,45 @@ def _dedupe_chunks(chunks, keep):
         if len(out) >= keep:
             break
     return out
+
+
+def _retrieve_top(store, query_vector, retrieval_text, k):
+    """Wider pool than the final k, deduped down - the single-query-vector
+    half of what _answer_comparison's per-programme retrieval loop already
+    did, extracted so _split_compound_query's multi-sub-query case can call
+    it once per sub-query and merge (see that call site).
+    """
+    pool = vectorstore.search(store, query_vector, k * _DEDUPE_POOL_MULTIPLIER, retrieval_text)
+    return _dedupe_chunks(pool, k)
+
+
+def _retrieve_top_multi(store, sub_queries, k):
+    """Retrieve for EACH sub-query separately (own embedding, own pool),
+    then merge round-robin - one chunk from sub-query 1, one from sub-query
+    2, and so on - rather than concatenating and re-ranking by raw
+    similarity to any single sub-query. Round-robin guarantees every
+    sub-topic gets SOME representation; a merge-then-rank-by-score would
+    let whichever sub-topic's chunks happen to score highest overall crowd
+    out the others, which is exactly the dilution problem this exists to
+    fix, just moved one step later. A per-sub-query share of k (never
+    below 4) keeps the total prompt size close to what a single-query
+    comparison already pays, rather than growing with the number of
+    sub-questions asked.
+
+    The final _dedupe_chunks pass (content/Jaccard-based, not identity-
+    based) is what actually removes a chunk two sub-queries both surfaced -
+    vectorstore.search returns a fresh COPY of each entry on every call
+    (see its own comment - attached scores must never mutate the shared
+    cached store), so two calls never return the SAME object even for the
+    identical underlying chunk; only a content comparison catches that.
+
+    `sub_queries` is [(query_vector, retrieval_text), ...].
+    """
+    share = max(4, k // len(sub_queries))
+    per_query_lists = [_retrieve_top(store, qv, rt, share) for qv, rt in sub_queries]
+    merged = [entry for group in itertools.zip_longest(*per_query_lists)
+              for entry in group if entry is not None]
+    return _dedupe_chunks(merged, k)
 
 
 # Found 2026-08-18 via direct trace inspection: a "compare NRI fees" question
@@ -208,12 +273,20 @@ def _answer_comparison(target_programs, question, script_pref, ui_language,
     # a query_text-only nudge is far too weak to pull a near-zero-overlap
     # chunk (a program's OWN required subjects, when the student named a
     # DIFFERENT combination) into the top-K.
-    embed_text = question
-    if (set(faq._words(question)) & _SUBJECT_STREAM_MARKERS
-            or _ADMISSION_PROCESS_PHRASE in question.lower()):
-        embed_text = question + _ELIGIBILITY_RETRIEVAL_BOOST
-    query_vector = embeddings.embed_query(embed_text)
-    retrieval_text = _build_retrieval_text(embed_text, language, hint_language, ui_language)
+    #
+    # One (query_vector, retrieval_text) pair per detected sub-question
+    # (see _split_compound_query) - each gets its OWN eligibility boost
+    # check rather than one applied to the whole compound text, so a
+    # boost relevant to sub-question 2 doesn't get diluted across
+    # sub-question 1's genuinely different embedding.
+    sub_queries = []
+    for sub_text in _split_compound_query(question):
+        embed_text = sub_text
+        if (set(faq._words(sub_text)) & _SUBJECT_STREAM_MARKERS
+                or _ADMISSION_PROCESS_PHRASE in sub_text.lower()):
+            embed_text = sub_text + _ELIGIBILITY_RETRIEVAL_BOOST
+        sub_queries.append((embeddings.embed_query(embed_text),
+                             _build_retrieval_text(embed_text, language, hint_language, ui_language)))
 
     sections = []
     included = []
@@ -228,13 +301,14 @@ def _answer_comparison(target_programs, question, script_pref, ui_language,
         store = vectorstore.load(projects.store_path(pid))
         if not store:
             continue
-        # Wider pool than the final K, then dedupe down - see
-        # _dedupe_chunks's comment for why the raw top-K alone can waste
-        # most of its slots on OCR-chunked repeats of the same sentence.
-        pool = vectorstore.search(store, query_vector,
-                                   _COMPARISON_TOP_K_PER_PROGRAM * _DEDUPE_POOL_MULTIPLIER,
-                                   retrieval_text)
-        top = _dedupe_chunks(pool, _COMPARISON_TOP_K_PER_PROGRAM)
+        # A single sub-query takes the plain path (identical behaviour to
+        # before _split_compound_query existed); 2+ sub-queries merge
+        # round-robin - see _retrieve_top_multi.
+        if len(sub_queries) > 1:
+            top = _retrieve_top_multi(store, sub_queries, _COMPARISON_TOP_K_PER_PROGRAM)
+        else:
+            qv, rt = sub_queries[0]
+            top = _retrieve_top(store, qv, rt, _COMPARISON_TOP_K_PER_PROGRAM)
         if not top:
             continue
         included.append(pid)

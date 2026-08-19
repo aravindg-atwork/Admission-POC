@@ -777,7 +777,25 @@ def _eligibility_guard(ctx):
         # (Dairy Technology) because they had no Mathematics - a confident
         # verdict about a course they never mentioned. Same corroboration rule
         # the redirect guard already follows, and the same reason.
-        candidate = named or (routed[0] if len(routed) == 1 else None)
+        #
+        # `not multi_named`, not just `named is None` - reproduced live
+        # 2026-08-19: a compound question naming BOTH B.V.Sc. and B.F.Sc.
+        # ("What is the B.V.Sc. fee, and also am I eligible with 55% in PCM
+        # for B.F.Sc., and also is hostel compulsory?") has `named=None`
+        # (correctly, per the multi-programme guard above) but the router
+        # classified target_programs as the single-item ['bvsc'] anyway, so
+        # the OLD `named or (routed[0] if len(routed)==1 ...)` fell straight
+        # through to trusting that single router guess - reintroducing the
+        # exact "silently pick one, drop the rest" bug the multi-programme
+        # check above exists to prevent, just via the router path instead of
+        # detect_program's own first-match bias. A router single-target
+        # verdict is only trustworthy when the student's OWN text names
+        # ZERO programmes (genuinely ambiguous, the router is the only
+        # signal); when it names two or more, that is not ambiguity to
+        # resolve, it is a real multi-programme question, and must fall
+        # through to _percentage_clarify_guard/_comparison_guard exactly
+        # like the fully-deterministic case above does.
+        candidate = named or (routed[0] if len(routed) == 1 and not multi_named else None)
         # P1 addition: fall back to the programme carried in
         # ctx.conversationState ONLY while continuing a guided-eligibility
         # interview THIS guard itself started (see _eligibility_interview_ask

@@ -614,6 +614,13 @@ ELIGIBILITY_FACTS_PROMPT_BASE = (
     "never say a requirement is unspecified when it is listed below.\n"
     "- If several programmes are listed, give each one - the requirement "
     "genuinely differs between them.\n"
+    "- Each of these programmes admits on exactly one entrance exam: "
+    "B.V.Sc. & A.H. on NEET-UG-2026; B.F.Sc. and B.Tech. (Dairy Technology) "
+    "on MHT-CET 2026. If the student's OWN question names a DIFFERENT exam "
+    "(JEE, CAT, GATE, or any exam other than the one just named), briefly "
+    "correct that before answering - e.g. \"B.V.Sc. admission is based on "
+    "NEET-UG-2026, not JEE.\" Do not silently answer past a wrong "
+    "assumption they stated as fact.\n"
     "- Plain spoken prose, no markdown, no bullet markers, no headings. Keep "
     "it short."
 )
