@@ -799,6 +799,47 @@ def _eligibility_guard(ctx):
             candidate = resolve_conversation_slot(candidate, ctx.conversationState.get("programme"))
     else:
         candidate = project_id
+    # "I passed NEET, which course am I eligible for?" - checked BEFORE the
+    # subjects branch below, not after. Reproduced live 2026-08-19:
+    # "I have cleared MHT-CET, which programmes can I apply to?" ALSO
+    # matches the subjects branch's own is_which_programmes_question -
+    # describes_own_subjects's "i\s+(?:have|...)" alternative matches the
+    # bare "I have" in "I have cleared", with no actual subject anywhere in
+    # the sentence. Subjects-first order meant that branch claimed the
+    # question, found zero subject matches (nothing to match - there are no
+    # subjects here), and hard-returned None, dead-ending the guard before
+    # this exam branch ever ran - the exact bug the exam-based feature was
+    # built to fix, just reintroduced by branch ORDER rather than by never
+    # existing. Exam-first avoids this because is_which_programmes_by_exam_
+    # question requires one of ITS OWN specific verbs (passed/cleared/
+    # qualified/appeared/gave/took/sat/wrote) next to a recognised exam
+    # name - a genuine subjects-only question ("I have PCB, which course
+    # can I apply for?") never matches this, so falls through to the
+    # subjects branch exactly as before.
+    #
+    # A garbled/unrecognised exam name (named_entrance_keys returns
+    # nothing - the literal reported "quet") falls through to `return None`
+    # below and on to the subjects branch, same fallback behaviour as
+    # everywhere else in this guard, not a special case.
+    if eligibility.is_which_programmes_by_exam_question(original):
+        exam_keys = eligibility.named_entrance_keys(original)
+        matches = sorted({pid for key in exam_keys
+                           for pid in eligibility.eligible_programmes_by_exam(key)})
+        if matches and len(exam_keys) == 1:
+            ctx.trace("eligibility", kind="which_programmes_by_exam",
+                      exam=next(iter(exam_keys)), programmes=matches)
+            spoken = llm.generate_scoped(
+                config.CHAT_PRIMARY, ELIGIBILITY_PROGRAMMES_PROMPT,
+                _which_programmes_by_exam_facts(matches, next(iter(exam_keys))) + ctx.hint,
+                ctx.question, timeout=60, allow_cloud=ctx.cloud_ok)
+            if spoken is not None:
+                text, model = spoken
+                return {"answer": textclean.clean_for_display(text),
+                        "pages": sorted({eligibility.RULES[m]["page"] for m in matches}),
+                        "model": model, "language": ctx.language,
+                        "source": "eligibility", "speakable": True}
+        return None
+
     # "Which courses can I apply for?" - answered from the student's own
     # subjects against all three programmes, before anything programme-scoped
     # runs. This family kept collapsing to a single programme: a PCB student
@@ -1078,6 +1119,35 @@ def _eligibility_fallback_sentence(result):
 def original_subjects(text):
     """The subjects the student says they studied."""
     return eligibility.extract(text)["subjects"]
+
+
+_EXAM_DISPLAY = {"neet": "NEET-UG", "cet": "MHT-CET"}
+
+
+def _which_programmes_by_exam_facts(matches, exam_key):
+    """Which programmes this entrance exam admits to, and which it does not
+    - the exam-axis counterpart to _which_programmes_facts above. Kept
+    separate rather than parameterised into one function: the exclusion
+    reason is a different fact entirely ("admits on a different exam" vs
+    "your subjects don't cover it"), and conflating the two risks the
+    model stating the wrong reason for the wrong axis.
+    """
+    eligible = [eligibility.RULES[m] for m in matches]
+    excluded = [r for pid, r in eligibility.RULES.items() if pid not in matches]
+    exam_name = _EXAM_DISPLAY.get(exam_key, exam_key.upper())
+    lines = ["FACTS (already checked against the prospectus, state exactly these):"]
+    for rule in eligible:
+        lines.append(f"- {rule['label']} admits on {exam_name} - this exam "
+                     f"qualifies you for it.")
+    for rule in excluded:
+        lines.append(f"- NOT {rule['label']}: it admits on {rule['entrance']} "
+                     f"instead, a different exam.")
+    lines.append("List every programme above. Do not say one of them is the ONLY "
+                 "option unless exactly one is listed as eligible.")
+    lines.append("This is about the entrance exam only - they still need the "
+                 "minimum percentage and the right subject combination, so say "
+                 "that briefly at the end.")
+    return "\n".join(lines)
 
 
 def _which_programmes_facts(matches):

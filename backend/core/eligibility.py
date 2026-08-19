@@ -421,6 +421,22 @@ def eligible_programmes(subjects):
     return [pid for pid in RULES if subject_verdict(pid, subjects)[0]]
 
 
+def eligible_programmes_by_exam(exam_key):
+    """Every programme that admits on this entrance exam ('neet' or 'cet').
+
+    The exam-axis counterpart to eligible_programmes() above - same
+    reasoning, different question. Reported live 2026-08-19: "if i have
+    passed [exam] exam what course im eligible for?" had no subject
+    description (so eligible_programmes() had nothing to match against) and
+    named no programme either, so it fell all the way through to
+    clarify-program asking "which programme?" - a strange question to ask
+    back when the student had just told us the ONE thing that actually
+    narrows it. NEET admits to bvsc only; CET/MHT-CET admits to bfsc and
+    btech-dairy - so naming CET should list two programmes, not one.
+    """
+    return [pid for pid in RULES if RULES[pid]["entrance_key"] == exam_key]
+
+
 _ASKS_THRESHOLD_RE = re.compile(
     r"\b(what|how much|how many|minimum|min|required|require|need|needed|"
     r"cut ?off|cutoff|criteria|eligibility)\b", re.I)
@@ -578,6 +594,62 @@ def is_which_programmes_question(text):
     if not text or not describes_own_subjects(text):
         return False
     return bool(_WHICH_PROGRAMMES_RE.search(text) and _APPLY_RE.search(text))
+
+
+# Reuses the same exam-name alternation _NOT_APPEARED_RE already matches
+# (neet/mht-cet/mh-cet/cet), just without requiring a negation in front of
+# it - this is the AFFIRMATIVE case ("I passed NEET"), not "I missed it".
+# Deliberately NOT typo-tolerant, unlike the programme-abbreviation typo
+# tolerance elsewhere in this codebase: "neet"/"cet" are only 3-4 characters
+# and their edit-distance-1 neighbours are common real words ("meet",
+# "feet", "neat" for neet; "get", "set", "yet", "vet" for cet) - fuzzing
+# either would misfire constantly. A genuinely garbled exam name (reported
+# live: "quet") is edit-distance 2+ from both and stays unrecognised on
+# purpose; the existing clarify-program fallback still handles that case,
+# just without this feature's benefit.
+_EXAM_NAME_RE = re.compile(r"\b(neet|mht[\s.\-]*cet|mh[\s.\-]*cet|cet)\b", re.I)
+
+
+def named_entrance_keys(text):
+    """Every DISTINCT exam key ('neet'/'cet') named anywhere in `text` -
+    reuses _named_entrance_key, the same recognition missing_entrance_exam
+    already relies on, rather than a second, possibly-inconsistent pattern.
+    """
+    if not text:
+        return set()
+    return {key for key in (_named_entrance_key(m.group(1))
+                             for m in _EXAM_NAME_RE.finditer(text)) if key}
+
+
+_OWN_EXAM_RE = re.compile(
+    r"\bi(?:'ve|\s+have)?\s+(?:passed|cleared|qualified|appeared\s+(?:for|in)|"
+    r"gave|took|sat|wrote)\b", re.I)
+
+
+def describes_own_exam_result(text):
+    """Whether the student is telling us THEY sat/passed an entrance exam,
+    as opposed to asking a general rule question about one ("do I need to
+    appear for MHT-CET?"). Same discipline as describes_own_subjects.
+    """
+    return bool(_OWN_EXAM_RE.search(text or ""))
+
+
+def is_which_programmes_by_exam_question(text):
+    """"I passed NEET, which course am I eligible for?" - answerable from
+    the entrance exam alone. The exam-axis counterpart to
+    is_which_programmes_question above.
+
+    Deliberately does NOT also require _APPLY_RE like the subjects version
+    does: reported live, the actual phrasing was "...what course im
+    eligiblie for?" - a typo ("eligiblie") that _APPLY_RE's exact "eligible"
+    match doesn't catch. _WHICH_PROGRAMMES_RE ("what ... course ... for")
+    combined with a clear first-person exam claim is already unambiguous
+    enough on its own; requiring the second check here just added fragility
+    against phrasing typos without meaningfully reducing false positives.
+    """
+    if not text or not describes_own_exam_result(text):
+        return False
+    return bool(_WHICH_PROGRAMMES_RE.search(text))
 
 
 def evaluate(project_id, text):
