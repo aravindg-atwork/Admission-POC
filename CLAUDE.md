@@ -221,6 +221,20 @@ picking the first. `_eligibility_guard` had exactly this bug through
 verdict against only the first-named programme's thresholds. Fixed; watch
 for the same shape elsewhere before adding a new `detect_program()` call.
 
+**Fixing the deterministic multi-programme check does NOT automatically
+protect the router-fallback path — they are two separate guesses that
+both need the same guard.** `_eligibility_guard`'s candidate resolution is
+`named or (routed[0] if len(routed) == 1 else None)`: the 2026-08-18 fix
+above corrected `named`'s multi-programme handling, but left the `routed`
+fallback trusting the router's single-target classification unconditionally
+— found live 2026-08-19, a compound question naming both `bvsc` and `bfsc`
+still got a confident single-programme `bvsc` verdict because the router
+(independently, wrongly) classified `target_programs` as `['bvsc']`. Fixed
+by gating the router fallback on `not multi_named` too, not just on
+`named is None`. When two signals feed the same decision (a deterministic
+check and a router opinion), a fix to one is not a fix to the combination
+— test the combined behaviour, not each input in isolation.
+
 **`detect_programs_multi()`/`detect_program()` also tolerate a single-edit
 typo** in the three core abbreviations only (`bvsc`/`bfsc`/`btech`, via
 `programs._typo_matched_projects` — see its docstring). The longer
@@ -394,10 +408,16 @@ correctness of figures. All fixed to use `127.0.0.1` 2026-08-18;
 old one was deleted in the 2026-08-14 retirement and the whole suite 404'd
 before it could check anything). `test_retrieval_hi_mr` is quota-free.
 `test_programme_typo_tolerance.py`, `test_program_alias_false_positives.py`,
-`test_comparison_retry.py`, and `test_exam_based_matching.py` (added
-2026-08-18/19) are pure logic against `core/programs.py`/`rag/
-comparison.py`/`core/eligibility.py` directly, no backend needed — the odd
-ones out among these, everything else here hits the live HTTP API.
+`test_comparison_retry.py`, `test_exam_based_matching.py`, `test_double_
+negation.py`, `test_raw_marks_conversion.py`, and `test_compound_query_
+split.py` (added 2026-08-18/19) are pure logic against `core/programs.py`/
+`rag/comparison.py`/`core/eligibility.py` directly, no backend needed —
+the odd ones out among these, everything else here hits the live HTTP
+API. `test_eligibility_candidate_resolution.py` is the one exception that
+needs a constructed `ctx` (via `rag.answer._build_context`) with a
+simulated `ctx.route` rather than either extreme — the bug it covers is in
+how a guard COMBINES a deterministic check with the router's opinion, not
+in either one alone.
 
 `tools/measure_latency_p95.py` (added 2026-08-18): reuses
 `eval_admissions.CASES`, records every response time, reports
@@ -436,29 +456,36 @@ trusting it as a description of current answer quality, not just latency.
 
 ## Open
 
-- **P95 latency — measured, and it is bad.** First real run, 2026-08-18,
-  `measure_latency_p95.py` against production, cold cache, all 80
-  `eval_admissions.CASES`:
+- **P95 latency — measured, partially fixed, still open.** First run
+  2026-08-18 (production, cold cache, all 80 `eval_admissions.CASES`):
+  p50 3.0s, p90 56.0s, **p95 80.5s, p99 240.1s**, max 240.2s, 3/80 errors,
+  15/80 (18.8%) over 15s. Root cause traced to `llm.generate()`'s
+  primary-provider retry: a genuine TIMEOUT already consumed its full
+  `call_timeout` budget, and retrying identically paid that same budget
+  again before the fallback even got a turn — up to 2×`CLOUD_ATTEMPT_TIMEOUT`
+  wasted on the worst-case shape. Fixed (`_is_timeout`, only skips the
+  retry on a genuine timeout, not on a fast HTTP/connection error, which
+  still gets the original retry-then-fallback behaviour). Re-measured
+  2026-08-19, same 80 questions, cold cache:
 
-  | | |
-  |---|---|
-  | min / p50 | 1.0s / 3.0s — median is fine, matches the old benchmark |
-  | p90 / p95 / p99 | **56.0s / 80.5s / 240.1s** |
-  | max / mean | 240.2s / 18.7s |
-  | >15s | 15/80 (18.8%) |
-  | errors | 3/80 timed out or dropped outright (Q49, Q56, Q66 — reservation-policy and seat-count questions) |
+  | | before | after |
+  |---|---|---|
+  | errors | 3/80 | **0/80** |
+  | max | 240.2s | **180.9s** (−25%) |
+  | p99 | 240.1s | **165.0s** (−31%) |
+  | mean | 18.7s | 16.1s |
+  | >15s | 18.8% | 13.8% |
+  | p50 / p90 / p95 | 3.0s / 56.0s / 80.5s | 4.4s / 62.4s / 89.4s |
 
-  This is the number HANDOFF.md's P0 section predicted but never measured:
-  median latency hid a tail that 1 in 5 real students would actually hit,
-  plus outright failures on ~4% of questions. The fast end (sections A/G,
-  1.0-1.1s) is entirely the deterministic paths (eligibility verdicts,
-  retired-programme refusals) that skip the LLM round trip — the slow tail
-  clusters in reservation/fees/colleges, the sections that go through
-  retrieval + generation. **This is now the top-priority open item** — a
-  retry/timeout policy on the slow provider path, not a better model (see
-  the answer-quality ceiling note above). Re-run
-  `tools/measure_latency_p95.py` after any change here rather than trusting
-  this table indefinitely; provider tail latency drifts.
+  Honest read: the fix eliminated the catastrophic worst case (every
+  outright failure gone, max/p99 both cut by a quarter to a third) — that
+  part is real and verified. p50/p90/p95 ticked up slightly, most likely
+  ordinary run-to-run provider variance (a live cloud call, not a
+  controlled benchmark) rather than a regression — the change structurally
+  can only *reduce* time on the retry-then-fallback path, never add to the
+  fast path. **Still the top-priority open item**: the tail is less
+  catastrophic, not fixed. Re-run `tools/measure_latency_p95.py` after any
+  further change here rather than trusting either table indefinitely.
 - ~~No regression coverage for the guided eligibility interview or
   topic-menu chips.~~ **Done 2026-08-18** —
   `tools/test_conversation_flows.py`, 12/12 passing, stable across repeat
@@ -485,6 +512,61 @@ trusting it as a description of current answer quality, not just latency.
   figures — now compares the flattened problem set directly.
 - **Hindi/Marathi language-detection mismatch** on certain question
   phrasings — not yet isolated to a specific pattern.
+- ~~Double negation gave the exact opposite eligibility verdict.~~ **Done
+  2026-08-19** — found via an adversarial stress test built specifically
+  to answer "what still fails on twisted questions": "It is not true that
+  I haven't passed NEET" (= HAS passed) matched `missing_entrance_exam`'s
+  negation pattern on the inner "haven't passed NEET" and told the student
+  the exact opposite of the truth. Genuine double-negation parsing isn't
+  something a regex can do reliably, so the fix does NOT try to flip the
+  match into a positive claim (equally risky a guess) — `core/eligibility.
+  py`'s `_DOUBLE_NEGATION_FRAME_RE` recognises the outer-negation framings
+  that flip an inner negation's meaning ("it is not true that...", "it's
+  false that...") and treats exam status as UNKNOWN rather than asserting
+  either way — same "don't guess when ambiguous" discipline the guided
+  interview already follows. `tools/test_double_negation.py`, 5/5.
+- ~~Raw marks fractions ("300 out of 500") were silently ignored.~~ **Done
+  2026-08-19** — found in the same stress test: `extract()` only ever
+  recognised an explicit "%"/"percent" marker, so a stated fraction with
+  no percentage sign got treated as no marks at all and fell into the
+  guided interview instead of a real verdict. `_MARKS_OUT_OF_RE` converts
+  a fraction into the same value space `_PERCENT_RE` already produces,
+  then runs through the IDENTICAL subject/overall cue-scoping — protected
+  against false positives (dates, unrelated fractions like a document
+  count) by that same pre-existing cue requirement. `tools/test_raw_
+  marks_conversion.py`, 7/7.
+- ~~False-premise exam questions weren't corrected.~~ **Done 2026-08-19** —
+  "Since B.V.Sc. admission is based on JEE score, what JEE score do I
+  need?" never repeated the false "JEE" claim as fact, but never named
+  the real exam either. `ELIGIBILITY_FACTS_PROMPT` now states the fixed
+  exam-to-programme mapping and instructs the model to correct a wrong
+  assumption explicitly. LLM phrasing, not a deterministic guarantee (the
+  underlying verdict/facts were always correct) — verified 2/2 on retry
+  and live on production.
+- ~~Compound/multi-part questions degrade through the comparison path.~~
+  **Done 2026-08-19** — a 3-part question ("what is the fee, and also am
+  I eligible..., and also is hostel compulsory?") embedded as ONE blended
+  query diluted retrieval for each sub-topic; the B.V.Sc. fee chunk never
+  surfaced at all, even though it retrieves cleanly asked alone.
+  `comparison._split_compound_query`/`_retrieve_top_multi` split on the
+  connective phrases a compound question actually uses ("and also", "as
+  well as"), retrieve each sub-question separately, and merge round-robin
+  so no sub-topic gets crowded out. `tools/test_compound_query_split.py`.
+  **While verifying this live, found a second, related bug**: the same
+  compound question (naming BOTH B.V.Sc. and B.F.Sc.) still answered as a
+  single confident B.V.Sc. verdict with B.F.Sc. dropped — the router
+  classified `target_programs` as the single-item `['bvsc']`, and
+  `_eligibility_guard`'s router-fallback (`named or (routed[0] if
+  len(routed)==1 else None)`) trusted that single router guess even
+  though the student's own text plainly named two programmes,
+  reintroducing the exact "silently pick one, drop the rest" bug the
+  2026-08-18 fix closed for the deterministic path — just via the router
+  path instead. Fixed: a single-target router classification is only
+  trusted when the text names ZERO programmes; naming two or more falls
+  through regardless of what the router thinks.
+  `tools/test_eligibility_candidate_resolution.py`. Both verified live:
+  the compound question now compares both programmes and correctly
+  states B.V.Sc.'s real fee.
 - ~~B.Tech-Dairy tangent hallucination on `bvsc`'s own single-answer
   path.~~ **Done 2026-08-19** — wasn't the foreign-chunk filter at all: it
   was `_program_redirect_guard` silently redirecting because "dairy" (a
@@ -492,13 +574,49 @@ trusting it as a description of current answer quality, not just latency.
   Diploma", a real prior qualification named in `bvsc`'s own prospectus.
   Fixed with `programs._NON_PROGRAMME_PHRASES` (see "Architecture" above),
   reproduced and re-verified live on production.
-- **Retrieval golden set is thin.** `tools/eval_retrieval_full.py` (added
-  2026-08-18) tried to derive gold chunks automatically from
-  `eval_admissions.CASES`'s `expect` term lists and could only reliably
-  label 2/80 cases — those lists were built for loose answer-checking, not
-  verbatim chunk-grounding. A real golden set needs hand-labeling, not
-  reuse of the existing eval cases.
+- ~~Retrieval golden set is thin.~~ **Expanded 2026-08-19** —
+  `tools/eval_retrieval.py` (the hand-verified-needle file, NOT
+  `eval_retrieval_full.py`'s failed auto-derivation attempt — that one's
+  2/80 problem is a different file and still unfixed if anyone revisits
+  it) grew from 14 to 34 cases, covering fees/refund/documents/hostel/
+  weightage/reservation — categories the original 14 (eligibility
+  thresholds, entrance exams, duration only) never touched. Every new
+  needle verified present verbatim in its own project's vector-store.json
+  before being added. Run against production (needs the embedding
+  service — see the SSH-tunnel note above; `tools/eval_retrieval.py` was
+  copied to `/opt/admission-poc/tools/` and run there directly, sidestepping
+  the local tunnel issue entirely):
+
+  **recall@15: 32/34 = 0.94, MRR: 0.619** — confirms the previously-reported
+  ~0.93/~0.65 figures hold under a much larger, more diverse set, not an
+  artifact of the narrow original 14. Two genuine misses: "can i do dairy
+  tech with biology" (pre-existing, already documented as an unfixable-
+  by-reranking query-rewriting case) and a NEW one — **"What is the
+  domicile certificate requirement for B.Tech Dairy Technology?" never
+  retrieves the right chunk, not yet investigated.**
 - **Indic TTS still broken** — needs the Docker service running or a funded
   `gpt-4o-mini-tts` key.
 - No suite covers presentation, tone, or Indic answer *quality* (as opposed
   to source/figure correctness) — repeatedly raised, still open.
+- **Softer gaps found in a 2026-08-19 adversarial stress test, not yet
+  fixed** (none produce a wrong verdict — all lower priority than anything
+  above):
+  - A leading/false-premise question ("since I'm clearly not eligible for
+    B.V.Sc., what other programme should I consider?") doesn't push back
+    on the unverified premise — it just lists all three programmes
+    (`_program_list_guard` fires on the same deterministic pattern as a
+    genuine "what programmes do you offer" question; the two shapes
+    collide and untangling them needs real guard-routing work, not a
+    one-line fix).
+  - Multi-category stacking ("I am OBC and also PWD and also EWS, what
+    percentage do I need?") gets a technically-correct but shallow answer
+    — doesn't explain the categories combine differently for different
+    purposes (marks threshold vs. seat quota).
+  - A subjective/trick comparison ("which is easier to get into, B.V.Sc.
+    or B.F.Sc.?") loses the question's intent entirely and falls back to
+    the generic programme-list menu instead of explaining there's no
+    factual "easier."
+  - A chip-rendering "garbled UI" report could not be reproduced live on
+    the widget (tried twice, desktop viewport, matching the reported flow
+    exactly) — possibly mobile-viewport-specific; needs a screenshot if
+    it recurs.
