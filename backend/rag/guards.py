@@ -1108,6 +1108,8 @@ def _eligibility_fallback_sentence(result):
                 f"{result['category']} category requirement of {result['required']}%.")
     if result["verdict"] == "eligible" and result.get("entrance"):
         sentence += f" This is not the same as being admitted - you must also clear (not just appear for) {result['entrance']}."
+    if result["verdict"] == "eligible" and result.get("age_requirement"):
+        sentence += f" You must also meet the age requirement: {result['age_requirement']}."
     if result["verdict"] == "eligible" and result.get("category") == "reserved":
         sentence += (" If you belong specifically to VJ, DT(a), NT(b/c/d), OBC, SEBC or SBC "
                      "category, you will also need a Non-Creamy Layer Certificate.")
@@ -1252,6 +1254,10 @@ def _eligibility_facts(result):
                      f"{result['entrance']}. State this with the SAME weight as "
                      f"the marks verdict, in the same short answer, not as a "
                      f"trailing footnote.")
+    if result["verdict"] == "eligible" and result.get("age_requirement"):
+        lines.append(f"They must also meet the age requirement: "
+                     f"{result['age_requirement']}. State this too, with equal "
+                     f"weight, not as an afterthought.")
     if result["verdict"] == "eligible" and result.get("category") == "reserved":
         lines.append("If they belong specifically to VJ, DT(a), NT(b/c/d), OBC, "
                      "SEBC or SBC category (not SC/ST, which use only a caste "
