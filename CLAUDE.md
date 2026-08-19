@@ -136,6 +136,25 @@ Every key is in `.env`, which is gitignored. Never commit one.
 | OCR | `mistral-ocr-latest` | ingest only |
 | STT | `voxtral-mini-latest` | English 0.5s, Hindi 1.2s |
 
+**Mistral has a real rate limit, and heavy same-session testing hits it.**
+Observed live 2026-08-19: a session that ran three full 80-question P95
+measurements plus dozens of other test scripts back-to-back started
+getting `HTTPError 429: Too Many Requests` on every `mistral` call, which
+cascaded — every request fell back to `nvidia` (20-130s), and
+`nvidia-fast` (the ROUTER's own provider) independently started timing
+out too, triggering `[router] all providers failing - pausing
+classification for 120s, using keyword routing`. The THIRD P95 re-run
+that session stalled for 20+ minutes on a single question because of
+this, not because of an application bug — checked via `journalctl`/the
+stdout log on the server, not guessed. **If a live measurement run looks
+anomalously slow partway through, check `backend_stdout.log` for `429`/
+`TimeoutError` lines before concluding the code regressed** — a normal,
+lightweight single request (`curl`/one Python script) succeeding quickly
+right after is the tell that it's rate-limit pressure from your OWN
+recent test volume, not a real slowdown. Space out heavy test batches
+rather than firing them back-to-back; there is no code fix for this, it
+is a quota ceiling.
+
 Dead or exhausted, do not rely on:
 - **Sarvam** — HTTP 402, no credits. Was `CHAT_PRIMARY` for most of this project's life.
 - **Groq** — 100k tokens/**day** free ceiling, reached inside one test run.
@@ -417,7 +436,13 @@ API. `test_eligibility_candidate_resolution.py` is the one exception that
 needs a constructed `ctx` (via `rag.answer._build_context`) with a
 simulated `ctx.route` rather than either extreme — the bug it covers is in
 how a guard COMBINES a deterministic check with the router's opinion, not
-in either one alone.
+in either one alone. `test_validation_skip_budget.py`, `test_program_
+list_original_question.py`, `test_horizontal_quota_note.py`, and
+`test_subjective_comparison_guard.py` (added 2026-08-19) are the same
+constructed-`ctx` style. `test_presentation_quality.py` hits the live
+HTTP API like most of this list, covering Marathi script-consistency,
+tone robustness, and markdown-leak checks — not yet run against
+production, see the rate-limit note under "Providers".
 
 `tools/measure_latency_p95.py` (added 2026-08-18): reuses
 `eval_admissions.CASES`, records every response time, reports
@@ -483,9 +508,35 @@ trusting it as a description of current answer quality, not just latency.
   ordinary run-to-run provider variance (a live cloud call, not a
   controlled benchmark) rather than a regression — the change structurally
   can only *reduce* time on the retry-then-fallback path, never add to the
-  fast path. **Still the top-priority open item**: the tail is less
-  catastrophic, not fixed. Re-run `tools/measure_latency_p95.py` after any
-  further change here rather than trusting either table indefinitely.
+  fast path.
+
+  **Second fix, same day**: `config.ORCHESTRATOR_PROVIDER` (`hetzner` by
+  default, documented at 52-77s for a TRIVIAL prompt) is the LLM-check/
+  regeneration escalation a flagged answer triggers
+  (`VALIDATION_LLM_CHECK_ENABLED=true` on production) — running that
+  AFTER an already-slow main generation call is exactly the same
+  sequential-compounding shape, just a second instance of it. `ctx.
+  started_at` (`rag/answer.py`) plus `config.VALIDATION_LLM_CHECK_BUDGET_
+  SECONDS` (default 20s) now skip that escalation once a request has
+  already run long — deterministic checks still run either way, only the
+  expensive LLM step is skipped, degrading to the same already-proven-
+  safe path Hetzner's own failures already take. `tools/test_validation_
+  skip_budget.py`. Verified live: happy path unaffected (2.4s).
+
+  **A third re-measurement attempt the same day was inconclusive** —
+  stalled 20+ minutes on one question, traced to `mistral` (the primary)
+  hitting its own rate limit (`HTTPError 429`) from this session's own
+  test volume (three 80-question P95 runs plus dozens of other scripts
+  back to back), cascading into `nvidia` fallback + the router's own
+  `nvidia-fast` timing out too. Killed, not trusted as data — see the
+  new rate-limit note under "Providers" above. **A clean re-run is still
+  needed** to know whether the second fix moved the needle; do it in
+  its own session/after a gap from other heavy testing, not stacked
+  onto more test volume.
+
+  **Still the top-priority open item**: the tail is less catastrophic,
+  not fixed. Re-run `tools/measure_latency_p95.py` after any further
+  change here rather than trusting any of these tables indefinitely.
 - ~~No regression coverage for the guided eligibility interview or
   topic-menu chips.~~ **Done 2026-08-18** —
   `tools/test_conversation_flows.py`, 12/12 passing, stable across repeat
@@ -596,27 +647,77 @@ trusting it as a description of current answer quality, not just latency.
   retrieves the right chunk, not yet investigated.**
 - **Indic TTS still broken** — needs the Docker service running or a funded
   `gpt-4o-mini-tts` key.
-- No suite covers presentation, tone, or Indic answer *quality* (as opposed
-  to source/figure correctness) — repeatedly raised, still open.
-- **Softer gaps found in a 2026-08-19 adversarial stress test, not yet
-  fixed** (none produce a wrong verdict — all lower priority than anything
-  above):
-  - A leading/false-premise question ("since I'm clearly not eligible for
-    B.V.Sc., what other programme should I consider?") doesn't push back
-    on the unverified premise — it just lists all three programmes
-    (`_program_list_guard` fires on the same deterministic pattern as a
-    genuine "what programmes do you offer" question; the two shapes
-    collide and untangling them needs real guard-routing work, not a
-    one-line fix).
-  - Multi-category stacking ("I am OBC and also PWD and also EWS, what
-    percentage do I need?") gets a technically-correct but shallow answer
-    — doesn't explain the categories combine differently for different
-    purposes (marks threshold vs. seat quota).
-  - A subjective/trick comparison ("which is easier to get into, B.V.Sc.
-    or B.F.Sc.?") loses the question's intent entirely and falls back to
-    the generic programme-list menu instead of explaining there's no
-    factual "easier."
-  - A chip-rendering "garbled UI" report could not be reproduced live on
-    the widget (tried twice, desktop viewport, matching the reported flow
-    exactly) — possibly mobile-viewport-specific; needs a screenshot if
-    it recurs.
+- ~~No suite covers presentation, tone, or Indic answer quality.~~
+  **Partially done 2026-08-19** — `tools/test_presentation_quality.py`:
+  Marathi script-consistency (native + romanized; `test_hinglish.py`
+  only ever covered Hindi), tone robustness (rude/terse input still
+  gets a real, substantive answer), and a markdown-leak check (plain
+  spoken prose must never contain `#`/`-`/`**bold**` markers). Honest
+  about the limit, stated in the file's own docstring: whether an
+  answer genuinely reads WELL in Marathi is a judgement call a script-
+  ratio check cannot make — that still needs a human pass (or a future
+  LLM-judge, deliberately not added given this project's repeated
+  latency-over-an-extra-LLM-call tradeoffs elsewhere, see the
+  `ORCHESTRATOR_PROVIDER` history). Not yet run against production —
+  see the rate-limit note under "Providers": deliberately deferred to
+  avoid adding more load right after the P95 rate-limit incident.
+- ~~Softer gaps found in a 2026-08-19 adversarial stress test~~ — all
+  three fixed 2026-08-19:
+  - ~~Leading/false-premise question doesn't push back.~~ **Done** — root
+    cause was `_program_list_guard` reading `ctx.question` (the router's
+    paraphrase) instead of `ctx.original_question`, the same bug class
+    CLAUDE.md already documents, just never audited for in this guard.
+    "Since I'm clearly not eligible for B.V.Sc., what other programme
+    should I consider?" got paraphrased into something like "what other
+    programmes are available", dropping the word "eligible" the guard's
+    own attribute-word exclusion depends on. Fixed; now falls through to
+    the grounded RAG pipeline instead of a confident generic menu.
+    `tools/test_program_list_original_question.py`.
+  - ~~Multi-category stacking gets a shallow answer.~~ **Done** for the
+    PWD half — verified against the source ("5% of total intake capacity
+    seats... reserved for Physically Handicapped candidate"): PWD is a
+    SEPARATE horizontal seat quota, not a different marks percentage.
+    `_threshold_facts` now says so explicitly when PWD/disability is
+    mentioned. `tools/test_horizontal_quota_note.py`. **EWS's own
+    classification deliberately left untouched and unresolved** — see
+    the new item below, this is a real open question, not settled by
+    this fix.
+  - ~~Subjective/trick comparison loses intent.~~ **Done** — new
+    `_subjective_comparison_guard` (checked ahead of `_program_list_guard`
+    in `GUARDS`) answers "which is easier to get into?"-shaped questions
+    directly and deterministically, acknowledging there's no factual
+    "easier" rather than falling into the generic menu OR being deferred
+    to `_comparison_guard` (deliberately NOT done — that prompt's "give a
+    direct, complete verdict per program" instruction has no safeguard
+    against fabricating a difficulty ranking for a subjective question).
+    `tools/test_subjective_comparison_guard.py`.
+  - ~~Chip-rendering "garbled UI" report could not be reproduced.~~ Still
+    unreproduced live, but a real, verifiable gap was found by reading
+    the CSS directly: `.chip` had no `max-width` at all — a flex-column
+    item with `align-items: flex-start` sizes to its own content's
+    max-content width by default, and a `<button>` doesn't wrap text
+    unless something bounds its width first, so a long label had nothing
+    stopping it from overflowing a narrow viewport. Fixed defensively
+    (`max-width: 100%`, `word-wrap: break-word` on `.chip`) even without
+    a confirmed live repro — this is real regardless of whether it's the
+    exact cause of that one report.
+- **NEW, genuinely unresolved: does EWS get the reserved (47.5%) or
+  unreserved (50%) marks threshold?** `core/eligibility.py`'s
+  `_RESERVED_WORDS` currently includes `"ews"`, treating an EWS-
+  identifying student as needing only the reserved-category percentage.
+  Checked against the source 2026-08-19 and found genuinely ambiguous:
+  `bvsc`'s prospectus (page 14, "6.4 Reservation for female candidates")
+  lists "*Unreserved, EWS, SC, ST, VJ/DT(a), NT(b), NT(c), NT(d), OBC,
+  SEBC & SBC*" — EWS named as its OWN category, distinct from both
+  "Unreserved" and the caste-based reserved categories, matching how
+  India's EWS reservation works nationally (economically weaker section
+  WITHIN the general/open category, not a caste-based reservation) — but
+  that confirms EWS has its own SEAT allocation, not which MARKS
+  threshold applies to it. The actual eligibility-criteria section (page
+  4) states only a binary Unreserved/Reserved split and never mentions
+  EWS by name. Deliberately NOT changed without an explicit source
+  statement — this codebase's standing rule is never to state a number
+  the source doesn't support, and getting an EWS student's qualifying
+  percentage wrong in either direction is a real-stakes mistake, not a
+  cosmetic one. Needs someone to find (or ask the admissions office for)
+  the explicit rule before `_RESERVED_WORDS` is touched.
