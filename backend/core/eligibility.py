@@ -121,6 +121,19 @@ _OVERALL_CUES = ("overall", "aggregate", "total", "in 12th", "in 12", "hsc",
 
 _PERCENT_RE = re.compile(r"(\d{1,3}(?:\.\d+)?)\s*(?:%|percent|per cent)", re.I)
 
+# Raw marks stated as a fraction ("300 out of 500", "300/500") rather than
+# already as a percentage. Found in an adversarial stress test 2026-08-19:
+# "I scored 300 out of 500 in Physics, Chemistry, Biology and English
+# combined, unreserved category. Am I eligible?" was answered by asking
+# "have you appeared for NEET-UG-2026?" - extract() found no percentage at
+# all (there wasn't one - only a raw fraction) and the guard fell into the
+# guided interview instead of recognising 300/500 = 60%. Converted here
+# into the same value space _PERCENT_RE already produces, so every
+# downstream consumer (subject/overall cue-scoping, the threshold
+# comparison) needs no changes.
+_MARKS_OUT_OF_RE = re.compile(
+    r"(\d{1,4}(?:\.\d+)?)\s*(?:marks\s+)?(?:out\s*of|/)\s*(\d{1,4}(?:\.\d+)?)", re.I)
+
 _SUBJECT_ALIASES = {
     "physics": "physics", "chemistry": "chemistry", "english": "english",
     "biology": "biology", "bio": "biology", "biotechnology": "biotechnology",
@@ -182,11 +195,21 @@ def extract(text):
     raw = text or ""
     low = raw.lower()
     subject_percent = overall_percent = None
-    for match in _PERCENT_RE.finditer(raw):
-        value = float(match.group(1))
+    # Both "48%" and "300 out of 500" resolve to the same (start, end, value)
+    # shape, then run through IDENTICAL cue-scoping below - a raw-marks
+    # fraction is scoped by nearby subject/overall words exactly like an
+    # already-stated percentage is, no separate logic needed.
+    found = [(m.start(), m.end(), float(m.group(1))) for m in _PERCENT_RE.finditer(raw)]
+    for m in _MARKS_OUT_OF_RE.finditer(raw):
+        numerator, denominator = float(m.group(1)), float(m.group(2))
+        if denominator <= 0 or numerator > denominator:
+            continue
+        found.append((m.start(), m.end(), round(numerator / denominator * 100, 2)))
+    found.sort()
+    for start, end, value in found:
         if value > 100:
             continue
-        scope, _ = _nearest_cue(raw, match.start(), match.end())
+        scope, _ = _nearest_cue(raw, start, end)
         if scope == "subject" and subject_percent is None:
             subject_percent = value
         elif scope == "overall" and overall_percent is None:
