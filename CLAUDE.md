@@ -217,6 +217,23 @@ wording is unaffected. If this needs reverting, the removed blocks were two
 `if result["verdict"] == "eligible" and result.get("age_requirement"):`
 checks, one in each function.
 
+**That guards.py fix only covers the `_eligibility_guard`'s own computed-
+verdict path** — a bare, impersonal "What is the eligibility for B.V.Sc.
+admission?" never reaches it at all (`_looks_like_eligibility_question`
+requires first-person language; see its docstring) and falls straight
+through to plain retrieval instead. Reproduced live the same day: that exact
+question still answered with the age line, because the source prospectus
+states it in the SAME list item as marks/NEET (page 4 item 3) and the
+general-answer prompt was simply narrating the excerpt it was given. Fixed
+by adding an explicit suppression rule ("NEVER state the age-eligibility
+requirement... even when an excerpt states it in the same sentence...") to
+all three excerpt-composing prompts in `prompts/system.py` —
+`SYSTEM_PROMPT_BASE`, `_COMPARISON_SYSTEM_PROMPT_BASE`, and
+`_ORCHESTRATOR_SYSTEM_PROMPT_BASE` — not just the guard. **Any future "stop
+mentioning X" request needs the same two-part check**: the deterministic
+guard path AND the plain-retrieval prompt(s), since the guard is only one of
+several ways a given fact can reach the student.
+
 **`detect_program(text)` returns only the FIRST-named programme** when a
 question names several (`detect_programs_multi()[0]`) — by design, for the
 single-programme redirect/lookup callers it was built for. Any NEW call site
