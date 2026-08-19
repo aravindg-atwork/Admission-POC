@@ -370,10 +370,11 @@ trusting it as a description of current answer quality, not just latency.
   position as `bvsc`'s). All three `RULES` entries now carry
   `age_requirement`; the NCL-certificate note in `guards.py` was already
   programme-agnostic and needed no change.
-- **Comparison-path retry/accept-reject logic bug.** A retry that
-  objectively fixed the reported problem was being rejected because the
-  accept check compares raw flag counts rather than checking whether the
-  SAME original problem was resolved.
+- ~~Comparison-path retry/accept-reject logic bug.~~ **Done 2026-08-19** —
+  `rag/comparison.py`'s `_flagged_problems` (see `tools/test_comparison_
+  retry.py`, 7/7 passing). The old check compared `len({pid: [numbers]})`,
+  which counts programmes-with-a-problem, not the number of actual flagged
+  figures — now compares the flattened problem set directly.
 - **Hindi/Marathi language-detection mismatch** on certain question
   phrasings — not yet isolated to a specific pattern.
 - **B.Tech-Dairy tangent hallucination** on `bvsc`'s own single-answer path —
