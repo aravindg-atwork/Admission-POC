@@ -577,6 +577,29 @@ TOP_K = int(os.environ.get("TOP_K", "15"))
 CHUNK_CHARS = int(os.environ.get("CHUNK_CHARS", "1200"))
 CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "200"))
 
+# Retrieval confidence floor (2026-08-20): below this, the #1-ranked chunk
+# from vectorstore.search() (its own hybrid cosine+keyword+topic score - see
+# that module's docstring) is judged not genuinely relevant enough to
+# generate a free-form answer from at all - rag/helpers.py's
+# retrieval_is_confident() gates on it, and the plain-generation path in
+# answer.py/orchestrator.py degrades to an honest "I'm not confident I have
+# the right information for this" reply instead of answering fluently on
+# noise. Deliberately narrow in what it's FOR: catching the "every
+# retrieved chunk is irrelevant" case (an out-of-corpus or garbled
+# question), not re-tuning retrieval precision generally - TOP_K/the
+# topic-boost weights above already do that job, and a verified table-
+# lookup hit (tablelookup.py's own, stricter, independent margin check) is
+# never blocked by this.
+#
+# UNMEASURED as of this writing - deliberately conservative rather than
+# guessed at a "reasonable-sounding" number. TOP_K (15) and FAQ_THRESHOLD
+# (0.88) above were both tuned against real measured score distributions
+# (see their own comments); this one has not been, for lack of a labeled
+# negative set (genuinely off-corpus questions) to measure against. Ship
+# conservative so it only catches clear cases at first, then re-measure the
+# same way before trusting the exact number.
+RETRIEVAL_CONFIDENCE_FLOOR = float(os.environ.get("RETRIEVAL_CONFIDENCE_FLOOR", "0.30"))
+
 # --- Prospectus auto-refresh (Firecrawl) ---
 # Detects when a project's live source page/PDF changes (new academic year, a
 # mid-year fee revision) and re-runs the extract/chunk/embed pipeline without

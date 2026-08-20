@@ -426,3 +426,84 @@ def _build_retrieval_text(question, language, hint_language, ui_language):
                                        _english_eligibility_boost(translated)]))
     return question
 
+
+def retrieval_is_confident(top):
+    """Whether the best-ranked chunk in `top` (vectorstore.search's own
+    hybrid cosine+keyword+topic score - see that module's docstring)
+    clears config.RETRIEVAL_CONFIDENCE_FLOOR, the bar worth trusting before
+    generating a free-form answer from it.
+
+    Deliberately checks ONLY the #1-ranked score, not every chunk in `top` -
+    the point is to catch "retrieval came back with nothing genuinely
+    relevant" (an out-of-corpus or garbled question, where every candidate
+    is noise) and degrade to an honest "not confident" reply instead of
+    generating fluently on it, not to re-run precision tuning on the whole
+    retrieval system (TOP_K/the topic-boost weights already do that job -
+    see vectorstore.py). A verified table-lookup hit is unaffected: it has
+    its own independent, stricter margin check (tablelookup.py's
+    _MIN_SCORE/_MIN_MARGIN) and callers apply this gate only on the
+    plain-generation path, after a verified check has already had its turn.
+
+    False for an empty list too, so callers don't need a separate check -
+    though every current call site already guards `top` non-empty ahead of
+    this anyway, for its own earlier (different) reason.
+    """
+    return bool(top) and top[0].get("score", 0) >= config.RETRIEVAL_CONFIDENCE_FLOOR
+
+
+# Appended to the user prompt on the plain-generation/orchestrated paths only
+# (never the verified-fact or eligibility/comparison paths, which are already
+# deterministic and have nothing to self-check). Asks for a brief internal
+# self-check ahead of the real reply, split back out by split_reasoning()
+# immediately after generation - before clean_for_display/validate/FAQ-
+# caching ever see it, so it can never leak into the cache or the student-
+# facing answer (see split_reasoning's own docstring for the same point from
+# the parsing side). English-only regardless of the question's language: an
+# admin reading the trace shouldn't need Hindi/Marathi literacy to read a
+# debug note, and keeping it in one language keeps the marker-parsing below
+# uncomplicated by translation drift.
+#
+# The marker is a standalone dashed line rather than a plain word like
+# "ANSWER:" or "REPLY:" specifically because either of those is a real
+# English word that can legitimately appear inside a genuine answer ("you
+# can reply by email...") - a plain-word marker risks split_reasoning()
+# cutting a good answer in half at the wrong occurrence. Case-insensitive on
+# the parsing side to tolerate the model's own capitalization choices.
+REASONING_PROMPT_SUFFIX = (
+    "\n\n(Before your reply: in ONE short English sentence, note to yourself "
+    "whether the excerpts above genuinely contain everything needed to "
+    "answer this fully, or say briefly what's missing or uncertain if they "
+    "don't. This sentence is never shown to the student. Then, on its own "
+    "line, write exactly ---REPLY--- with nothing else on that line. "
+    "Immediately after it, write the actual reply to give the student - "
+    "only the text after ---REPLY--- is ever shown to them.)"
+)
+
+_REASONING_MARKER_RE = re.compile(r"-{2,}\s*reply\s*-{2,}", re.IGNORECASE)
+
+
+def split_reasoning(text):
+    """Split a reply generated with REASONING_PROMPT_SUFFIX into
+    (answer, reasoning). `reasoning` (the model's own brief self-check note,
+    or None) is for the trace only - it must never reach clean_for_display,
+    validate.py, FAQ caching, or the student, so callers must call this
+    FIRST, immediately after llm.generate() returns, before any of those run.
+
+    Fail-open by design, same safe-degrade rule validate.llm_check already
+    uses for its own unparseable output: if the marker is missing (the
+    instruction shares space with a much larger "answer the question"
+    instruction and won't always be followed) or matched with nothing
+    after it, the WHOLE text is treated as the answer and reasoning is
+    None - never truncate or discard an otherwise-good answer just because
+    it didn't use the marker.
+    """
+    if not text:
+        return text, None
+    m = _REASONING_MARKER_RE.search(text)
+    if not m:
+        return text, None
+    reasoning, answer = text[:m.start()].strip(), text[m.end():].strip()
+    if not answer:
+        return text, None
+    return answer, (reasoning or None)
+

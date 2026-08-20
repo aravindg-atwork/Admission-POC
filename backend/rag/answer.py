@@ -28,7 +28,8 @@ from . import validate
 from .helpers import (_add_nri_scope_caveat, _apply_script_pref, _build_retrieval_text,
                        _compact_readings, _system_prompt, _ui_language_matches,
                        _english_reply_hint, _language_hint, _romanized_input_hint,
-                       _UI_LANGUAGE_NAMES)
+                       _UI_LANGUAGE_NAMES, REASONING_PROMPT_SUFFIX, retrieval_is_confident,
+                       split_reasoning)
 
 
 def _build_context(project_id, question, script_pref, ui_language, history=None, route=None,
@@ -516,6 +517,20 @@ def _pipeline(ctx):
                     "language": language, "source": "faq-cache", "speakable": speakable,
                     "faqId": hit.get("id")}
 
+    # Bug fixed 2026-08-20: `flagged` was assigned only inside the `else`
+    # branch below (added 2026-08-17 alongside the "never cache a flagged
+    # answer" rule - see the FAQ_AUTOCACHE check's own comment further
+    # down), never here in the `verified` branch it sits right next to.
+    # Every FRESH (not-yet-cached) verified-fact answer - a table-looked-up
+    # fee/date figure, this codebase's own deterministic fast path - hit
+    # `if config.FAQ_AUTOCACHE and not flagged:` with `flagged` unbound and
+    # raised UnboundLocalError, caught by chat_routes.py's try/except and
+    # returned to the student as a bare 500 instead of the figure.
+    # Reproduced in isolation before this fix (see the session's repro
+    # script) - not a guess. A verified answer is never flagged by
+    # construction (there is no validate.deterministic_checks call on this
+    # path at all), so False here is always correct, not a placeholder.
+    flagged = False
     if verified:
         # Locked-template path: phrase the resolved fact alone, with none of
         # the raw excerpts in context (see _VERIFIED_FACT_SYSTEM's docstring
@@ -543,11 +558,51 @@ def _pipeline(ctx):
             reply = f"{verified['descriptor']}: {verified['value']}"
         pages = sorted({e["page"] for e in top})
         source = "verified-fact"
+    elif not retrieval_is_confident(top):
+        # Retrieval found chunks (top is non-empty - that's the `if not
+        # top:` branch above), but the best of them doesn't clear
+        # config.RETRIEVAL_CONFIDENCE_FLOOR - not "nothing was retrieved",
+        # but "nothing retrieved looks genuinely relevant" (an
+        # out-of-corpus or garbled question, where every candidate is
+        # noise). Same reasoning as the no-context branch above: an honest
+        # "I'm not confident" beats generating fluently on a weak match,
+        # and this is NOT cached, for the identical reason - the real
+        # answer should appear the moment retrieval actually finds
+        # something relevant, not stay stuck on this message. Checked only
+        # on the plain-generation path (verified table lookups have
+        # already had their own, stricter, independent check above and are
+        # never blocked by this - see retrieval_is_confident's docstring).
+        trace("retrieval", note="below confidence floor - degrading honestly",
+              topScore=top[0].get("score"), confidenceFloor=config.RETRIEVAL_CONFIDENCE_FLOOR)
+        low_confidence_prompt = (
+            "The prospectus excerpts retrieved for this question do not clearly "
+            "cover what is being asked. State honestly and briefly that you are "
+            "not confident you have the right information for this specific "
+            "question, and suggest the student rephrase it or check with "
+            "admissions directly. Do NOT guess, do NOT invent a figure or "
+            "policy, and do NOT answer from outside knowledge.\n\n"
+            "Question: " + question + hint
+        )
+        reply, model = llm.generate(system_prompt, low_confidence_prompt, question, allow_cloud=cloud_ok)
+        reply = textclean.clean_for_display(reply)
+        display, speakable = _apply_script_pref(reply, language, script_pref, typed_romanized)
+        trace("final_answer", answer=display, source="low-confidence", model=model,
+              pages=[], speakable=speakable, language=language)
+        return {"answer": display, "pages": [], "model": model, "language": language,
+                "source": "low-confidence", "speakable": speakable}
     else:
         user_prompt = ("Prospectus excerpts:\n" + context
-                       + "\n\nQuestion: " + question + hint + page_reminder)
+                       + "\n\nQuestion: " + question + hint + page_reminder
+                       + REASONING_PROMPT_SUFFIX)
         reply, model = llm.generate(system_prompt, user_prompt, question, allow_cloud=cloud_ok)
-        trace("generation", model=model,
+        # Split BEFORE anything else touches `reply` - the model's own
+        # self-check note must never reach clean_for_display, validate.py,
+        # the FAQ cache, or the student (see split_reasoning's docstring).
+        # Logged onto the SAME "generation" trace event rather than a new
+        # step type, so it shows up in the admin console's existing
+        # expandable-detail view for free, with no frontend change needed.
+        reply, reasoning = split_reasoning(reply)
+        trace("generation", model=model, reasoning=reasoning,
               promptId="payment_system_prompt" if payment_issue else "system_prompt_base")
         reply = textclean.clean_for_display(reply)
         reply = validate.autofix(reply)

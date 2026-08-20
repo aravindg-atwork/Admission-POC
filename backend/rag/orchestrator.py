@@ -25,7 +25,8 @@ from ..core import programs
 from ..prompts.system import _ORCHESTRATOR_SYSTEM_PROMPT
 from ..storage.faq import _discriminators, _words
 from .helpers import (_add_nri_scope_caveat, _apply_script_pref, _build_retrieval_text,
-                       _compact_readings, _program_name)
+                       _compact_readings, _program_name, REASONING_PROMPT_SUFFIX,
+                       retrieval_is_confident, split_reasoning)
 
 # Reuses programs._PROGRAM_SPECIFIC_MARKERS (the same vocabulary that
 # already decides whether a question needs program-level clarification)
@@ -134,17 +135,36 @@ def answer_complex(project_id, question, script_pref, ui_language, language,
     if not store:
         return None
 
-    sections, all_chunks = [], []
+    sections, all_chunks, low_confidence_subtopics = [], [], []
     for subtopic in subtopics:
         retrieval_text = _build_retrieval_text(subtopic, language, hint_language, ui_language)
         top = vectorstore.search(store, query_vector, config.ORCHESTRATOR_TOP_K_PER_SUBTASK, retrieval_text)
+        # A subtopic whose best-ranked chunk misses config.
+        # RETRIEVAL_CONFIDENCE_FLOOR is dropped the same way an empty `top`
+        # already is - not "nothing was retrieved for this part", but
+        # "nothing retrieved for this part looks genuinely relevant" (see
+        # helpers.retrieval_is_confident's docstring). If EVERY subtopic
+        # drops for either reason, `sections` stays empty and this
+        # function returns None below exactly as it already does for
+        # all-empty retrieval - the caller (answer.py's _pipeline) falls
+        # back to the normal single-pass flow, which applies the identical
+        # confidence gate to the whole original question and produces the
+        # honest low-confidence reply itself. No new fallback machinery
+        # needed for the "every part is weak" case; only a genuinely mixed
+        # result (some parts confident, some not) is new behaviour here -
+        # the weak part is silently dropped from context, same as an
+        # empty one always was.
         if not top:
+            continue
+        if not retrieval_is_confident(top):
+            low_confidence_subtopics.append(subtopic)
             continue
         all_chunks.extend(top)
         excerpt_text = "\n\n".join(_compact_readings(e["text"]) for e in top)
         sections.append(f"=== Part: {subtopic} ===\n{excerpt_text}")
 
     trace("retrieval", topK=config.ORCHESTRATOR_TOP_K_PER_SUBTASK, subtopics=subtopics,
+          lowConfidenceSubtopics=low_confidence_subtopics,
           chunks=[{"page": e.get("page"), "score": e.get("score"), "snippet": e["text"][:160]}
                   for e in all_chunks])
 
@@ -158,9 +178,17 @@ def answer_complex(project_id, question, script_pref, ui_language, language,
         "themselves, and do not mention page numbers at all.)"
     )
     system_prompt = _system_prompt(project_id)
-    user_prompt = "Prospectus excerpts:\n" + context + "\n\nQuestion: " + question + hint + page_reminder
+    user_prompt = ("Prospectus excerpts:\n" + context + "\n\nQuestion: " + question
+                   + hint + page_reminder + REASONING_PROMPT_SUFFIX)
     reply, model = llm.generate(system_prompt, user_prompt, question, allow_cloud=cloud_ok)
-    trace("generation", model=model, promptId="orchestrator_system_prompt")
+    # Split BEFORE anything else touches `reply` - see helpers.
+    # split_reasoning's docstring: the self-check note must never reach
+    # clean_for_display/validate/the student. Logged onto this SAME
+    # "generation" trace event so it shows up in the admin console's
+    # existing expandable-detail view with no frontend change needed
+    # (same choice as answer.py's single-pass path).
+    reply, reasoning = split_reasoning(reply)
+    trace("generation", model=model, reasoning=reasoning, promptId="orchestrator_system_prompt")
     reply = textclean.clean_for_display(reply)
     reply = validate.autofix(reply)
     reply = _add_nri_scope_caveat(question, all_chunks, reply)

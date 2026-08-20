@@ -186,10 +186,18 @@ twice this project already and will again):
 
 ```
 injection → topic_menu → greeting → dispute → meta_correction → off_topic →
-program_list → eligibility → percentage_clarify → comparison →
-program_redirect → unknown_programme → program_clarify → general_fanout →
-low_confidence_clarify
+subjective_comparison → program_list → eligibility → percentage_clarify →
+comparison → program_redirect → unknown_programme → program_clarify →
+general_fanout → low_confidence_clarify
 ```
+
+(Corrected 2026-08-20 — `_subjective_comparison_guard`, added 2026-08-19,
+was missing from this list entirely. It runs right after `_off_topic_guard`
+and before `_program_list_guard`, deliberately, since it shares
+`_program_list_guard`'s own trigger words — see its docstring in
+`guards.py`. This is exactly the kind of drift this list's own "verify
+against the file" warning exists for; re-check `GUARDS` in `rag/guards.py`
+again before trusting this copy next time a guard is added.)
 
 `rag/router.py` classifies intent in one call. It returns `None` on **any**
 failure and every guard falls back to deterministic keyword logic — the

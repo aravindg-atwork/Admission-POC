@@ -758,8 +758,11 @@ def evaluate(project_id, text):
             "category_assumed": category is None,
             "programme": rule["label"], "required_subjects": rule["subject_label"],
             "entrance": rule["entrance"], "page": rule["page"],
-            # .get(), not rule[...]: only bvsc's RULES entry currently has
-            # this key (see its own comment on why bfsc/btech-dairy are
-            # deliberately left out) - None here for the other two, which
-            # _eligibility_facts reads as "nothing to mention".
+            # .get(), not rule[...]: stale as of 2026-08-18 - all three
+            # RULES entries carry age_requirement now (see each entry's own
+            # comment; the original bvsc-only assumption for bfsc/btech-dairy
+            # was checked against the source and found wrong). Kept as
+            # .get() anyway rather than rule[...] - a FUTURE programme added
+            # to RULES without this key should degrade to "nothing to
+            # mention" (see _eligibility_facts), not a KeyError.
             "age_requirement": rule.get("age_requirement")}
