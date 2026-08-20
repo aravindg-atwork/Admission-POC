@@ -1,0 +1,85 @@
+# Local-only stack for the platform/ vertical-slice checkpoint. Ports are
+# deliberately chosen to avoid the pre-existing `ai-platform` Docker stack
+# already running on this machine (host 80/3000/3001/5433/8000/8001/9090/
+# 11434 are all taken by it) - found live, not assumed, before this file was
+# written. `name:` namespaces every container/volume/network under
+# `admission-platform-*` so `docker ps`/`docker volume ls` never gets
+# confused between the two stacks.
+name: admission-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: platform
+      POSTGRES_DB: platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
+  api:
+    build:
+      context: ../services/api
+    env_file:
+      - ../services/api/.env
+    environment:
+      POSTGRES_DSN: postgresql+psycopg://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      # Overrides .env's SELFHOSTED_URL=http://127.0.0.1:8000, which inside
+      # a container means the CONTAINER's own loopback, not the host's -
+      # the SSH tunnel to the embedding service is bound to the HOST's
+      # 127.0.0.1:8000. host.docker.internal is Docker Desktop's own DNS
+      # name for "the machine running Docker", which is what actually
+      # reaches it. Same class of bug as the frontend's VITE_API_BASE
+      # build arg - caught here before testing, not after a confusing
+      # connection-refused.
+      SELFHOSTED_URL: http://host.docker.internal:8000
+    ports:
+      - "8100:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  web:
+    build:
+      context: ../services/web
+      args:
+        VITE_API_BASE: http://localhost:8100
+    ports:
+      - "5180:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  qdrantdata:

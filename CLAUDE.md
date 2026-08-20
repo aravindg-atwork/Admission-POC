@@ -5,6 +5,11 @@ Companion file: `HANDOFF.md` (machine-migration setup, gitignored data transfer)
 This file is the one kept current session-to-session — if the two disagree,
 trust this one and fix HANDOFF.md's claim, not the other way round.
 
+**`platform/` is a separate, from-0 rebuild of this same product** — its
+own `platform/CLAUDE.md` is the working-notes file for it, not this one.
+`backend/` (everything below) is untouched and still the live system;
+`platform/` doesn't replace it yet.
+
 ## Running it
 
 Windows box. No native/compiled dependencies (see HANDOFF.md §2 for why).

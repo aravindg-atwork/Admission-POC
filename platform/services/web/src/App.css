@@ -1,0 +1,15 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  background: var(--paper);
+}
+
+@media (min-width: 960px) {
+  .app {
+    border-left: 1px solid var(--mist);
+    border-right: 1px solid var(--mist);
+  }
+}

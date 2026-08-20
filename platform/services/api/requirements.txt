@@ -1,0 +1,14 @@
+# Pinned to the exact versions confirmed to install and import cleanly on
+# this machine (including the compiled pydantic-core extension) before this
+# file was written - see the session that scaffolded platform/ for how that
+# was verified, not assumed.
+fastapi==0.141.1
+pydantic==2.13.4
+pydantic-settings==2.7.0
+uvicorn[standard]==0.52.4
+sqlalchemy==2.0.52
+qdrant-client==1.19.0
+redis==5.2.1
+psycopg[binary]==3.2.3
+httpx==0.28.1
+pypdf==5.1.0

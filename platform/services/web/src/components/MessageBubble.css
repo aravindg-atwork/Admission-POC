@@ -1,0 +1,56 @@
+.bubble-row {
+  display: flex;
+  justify-content: flex-start;
+  animation: bubble-in 0.25s var(--ease-out);
+  animation-duration: calc(0.25s * var(--motion-scale, 1));
+}
+
+.bubble-row--student {
+  justify-content: flex-end;
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bubble {
+  max-width: min(72ch, 80%);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubble--assistant {
+  background: var(--paper-raised);
+  border: 1px solid var(--mist);
+  color: var(--ink);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.bubble--student {
+  background: var(--marigold-tint);
+  color: var(--ink);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.bubble--failed {
+  background: var(--clay-tint);
+  border: 1px solid var(--clay);
+  color: var(--clay);
+}
+
+@media (max-width: 560px) {
+  .bubble {
+    max-width: 88%;
+  }
+}

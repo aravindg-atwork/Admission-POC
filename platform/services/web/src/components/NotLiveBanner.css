@@ -1,0 +1,10 @@
+.not-live-banner {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-4);
+  background: var(--marigold-tint);
+  color: #7a5215;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  text-align: center;
+}

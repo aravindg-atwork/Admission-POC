@@ -1,0 +1,319 @@
+<mxfile host="app.diagrams.net" agent="Claude Code">
+  <diagram id="admission-bot-e2e-system-flow" name="Admission Assistant - End-to-End System Flow">
+    <mxGraphModel dx="1400" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="2560" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" parent="1" vertex="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#222222;" value="Admission Assistant — End-to-End System Flow&#xa;From a student's query in the widget, through every agent decision, retrieval and validation step, to the pipeline that built the knowledge behind it">
+          <mxGeometry x="480" y="-70" width="1240" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend" parent="1" vertex="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fffce0;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=8;spacingTop=6;" value="Shape key&#xa;— Green pill = start / end of the journey&#xa;— Blue rectangle = a step the system does automatically&#xa;— Orange diamond = a decision point (always Yes / No)&#xa;— Cream rectangle = a short-circuit / fast-exit step&#xa;— Purple cylinder = a stored dataset the flow reads or writes&#xa;— Grey note = reference only, not a sequential step&#xa;— Dashed box = one of the two major halves of the system">
+          <mxGeometry x="120" y="20" width="340" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ref1" parent="1" vertex="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;align=left;spacingLeft=8;spacingTop=6;" value="Model providers (reference only)&#xa;— Answers: primary provider, one fallback provider&#xa;— Routing / greetings: a separate fast provider&#xa;— Embeddings: a self-hosted multilingual model&#xa;— Every call has its own timeout and an&#xa;   automatic fallback chain if it fails or stalls">
+          <mxGeometry x="1720" y="20" width="300" height="170" as="geometry" />
+        </mxCell>
+
+        <mxCell id="box_runtime" parent="1" vertex="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#666666;verticalAlign=top;align=left;fontSize=16;fontStyle=1;spacingLeft=14;spacingTop=12;" value="RUNTIME QUERY FLOW — runs on every single chat message">
+          <mxGeometry x="560" y="260" width="1500" height="1780" as="geometry" />
+        </mxCell>
+
+        <mxCell id="start1" parent="1" vertex="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" value="Student asks a query — typed or spoken, in English, Hindi or Marathi">
+          <mxGeometry x="620" y="300" width="380" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="proc1" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Frontend sends the query to the backend, together with any conversation state built up so far">
+          <mxGeometry x="620" y="390" width="380" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="proc2" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Backend detects language &amp; script; a fast router call gives a first-guess intent — a hint only, every rule below re-checks it with its own logic">
+          <mxGeometry x="620" y="490" width="380" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dec1" parent="1" vertex="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="Does a guard claim this query? (prompt-injection, greeting, dispute, eligibility, comparison, redirect, clarification, off-topic, ...)">
+          <mxGeometry x="620" y="610" width="380" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dec2" parent="1" vertex="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="Is there an already-cached answer close enough to this exact query?">
+          <mxGeometry x="620" y="790" width="380" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="proc3" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Search the vector store — hybrid similarity + keyword + topic scoring, best matches only">
+          <mxGeometry x="620" y="970" width="380" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dec3" parent="1" vertex="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="Confidence check — is the best match actually relevant enough to trust?">
+          <mxGeometry x="620" y="1100" width="380" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dec4" parent="1" vertex="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="Does one exact table cell answer this, unambiguously?">
+          <mxGeometry x="620" y="1280" width="380" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="proc4" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="LLM generates the answer from the retrieved excerpts — plus a private one-line self-check, kept only for the admin trace">
+          <mxGeometry x="620" y="1460" width="380" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dec5" parent="1" vertex="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="Validation — any unsupported number, off-topic drift, or wrong-programme mention?">
+          <mxGeometry x="620" y="1610" width="380" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="proc5" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" value="Apply the student's script preference (native / romanized) and format for display">
+          <mxGeometry x="620" y="1790" width="380" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="end1" parent="1" vertex="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" value="Answer, and its full trace, shown to the student">
+          <mxGeometry x="620" y="1910" width="380" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sh1" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="Guard builds the response directly — no cache, no retrieval, most need no LLM call at all">
+          <mxGeometry x="1140" y="610" width="380" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sh2" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="Serve the cached answer instantly — a cached FIGURE is re-checked against a fresh table lookup first, so a stale number is never served">
+          <mxGeometry x="1140" y="790" width="380" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sh3" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="Answer honestly — &quot;not confident for this question&quot; — never cached, so a real answer can still appear once retrieval finds one">
+          <mxGeometry x="1140" y="1100" width="380" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sh4" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="Phrase the verified fact from a locked template — the model only phrases it, code already chose the number">
+          <mxGeometry x="1140" y="1280" width="380" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sh5" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="One bounded re-check + retry, only if there's time left in budget — otherwise serve as-is, log it for review, never cache it">
+          <mxGeometry x="1140" y="1610" width="380" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="store1" parent="1" vertex="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;boundedLbl=1;" value="Vector store — one per programme (chunk text + embeddings; table cells also carry one precomputed exact reading each)">
+          <mxGeometry x="1620" y="960" width="280" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="box_ingest" parent="1" vertex="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#666666;verticalAlign=top;align=left;fontSize=16;fontStyle=1;spacingLeft=14;spacingTop=12;" value="INGESTION / TRAINING PIPELINE — admin uploads a prospectus, or an automatic watch detects a change">
+          <mxGeometry x="140" y="2140" width="1900" height="300" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ing1" parent="1" vertex="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" value="New or changed prospectus PDF">
+          <mxGeometry x="200" y="2220" width="260" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ing2" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="OCR extracts clean markdown + tables (falls back to plain-text extraction if OCR is off)">
+          <mxGeometry x="520" y="2220" width="280" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ing3" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Chunk into ~1200-character pieces, tag each chunk's topic; every table cell also gets one precomputed exact reading">
+          <mxGeometry x="860" y="2220" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ing4" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Embed every chunk">
+          <mxGeometry x="1220" y="2220" width="260" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ing5" parent="1" vertex="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;boundedLbl=1;" value="Written into that programme's vector store (atomic write)">
+          <mxGeometry x="1540" y="2220" width="280" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note_cache" parent="1" vertex="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fffce0;strokeColor=#d6b656;fontSize=10;align=left;spacingLeft=8;spacingTop=6;" value="Right after this: that programme's cache must be cleared, on EVERY project, not just this one — an old cached answer must never outlive the content it came from.">
+          <mxGeometry x="200" y="2340" width="1300" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- edges: main sequential spine -->
+        <mxCell id="e1" parent="1" edge="1" source="start1" target="proc1" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" parent="1" edge="1" source="proc1" target="proc2" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" parent="1" edge="1" source="proc2" target="dec1" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" parent="1" edge="1" source="dec1" target="dec2" value="No" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" parent="1" edge="1" source="dec1" target="sh1" value="Yes" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" parent="1" edge="1" source="sh1" target="proc5" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;dashed=1;strokeColor=#d6b656;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" parent="1" edge="1" source="dec2" target="proc3" value="No" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" parent="1" edge="1" source="dec2" target="sh2" value="Yes" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" parent="1" edge="1" source="sh2" target="proc5" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;dashed=1;strokeColor=#d6b656;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" parent="1" edge="1" source="proc3" target="store1" value="reads" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#9673a6;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" parent="1" edge="1" source="proc3" target="dec3" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" parent="1" edge="1" source="dec3" target="dec4" value="Yes — confident" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" parent="1" edge="1" source="dec3" target="sh3" value="No — not confident" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" parent="1" edge="1" source="sh3" target="proc5" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;dashed=1;strokeColor=#d6b656;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" parent="1" edge="1" source="dec4" target="store1" value="reads" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#9673a6;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e16" parent="1" edge="1" source="dec4" target="sh4" value="Yes" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e17" parent="1" edge="1" source="dec4" target="proc4" value="No" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e18" parent="1" edge="1" source="sh4" target="proc5" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;dashed=1;strokeColor=#d6b656;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e19" parent="1" edge="1" source="proc4" target="dec5" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e20" parent="1" edge="1" source="dec5" target="proc5" value="Clean → cache it" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e21" parent="1" edge="1" source="dec5" target="sh5" value="Flagged" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e22" parent="1" edge="1" source="sh5" target="proc5" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;dashed=1;strokeColor=#d6b656;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e23" parent="1" edge="1" source="proc5" target="end1" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- edges: ingestion spine -->
+        <mxCell id="ie1" parent="1" edge="1" source="ing1" target="ing2" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie2" parent="1" edge="1" source="ing2" target="ing3" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie3" parent="1" edge="1" source="ing3" target="ing4" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie4" parent="1" edge="1" source="ing4" target="ing5" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie5" parent="1" edge="1" source="ing5" target="store1" value="feeds the runtime flow above" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=10;dashed=1;strokeColor=#9673a6;exitX=1;exitY=0.2;entryX=1;entryY=0.9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="admission-bot-infra-architecture" name="Infrastructure and Deployment Architecture">
+    <mxGraphModel dx="1400" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2600" pageHeight="1350" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="i_title" parent="1" vertex="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#222222;" value="Admission Assistant — Infrastructure &amp; Deployment Architecture&#xa;How the platform is deployed, scaled, and kept observable under concurrent load">
+          <mxGeometry x="200" y="-70" width="2100" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="i_legend" parent="1" vertex="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fffce0;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=8;spacingTop=6;" value="Shape key&#xa;— Grey box = an external actor&#xa;— Amber box = a traffic-routing / edge component&#xa;— Blue rectangle = a containerized service (stateless, replicated)&#xa;— Purple cylinder = a stateful datastore&#xa;— Solid line = live request traffic&#xa;— Dashed line = async / data / observability / config / deploy&#xa;— Dashed big box = a logical infrastructure boundary">
+          <mxGeometry x="80" y="20" width="460" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="i_actor_student" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="Student&#xa;browser / mobile chat widget">
+          <mxGeometry x="700" y="20" width="260" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="i_actor_admin" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="Admin&#xa;console">
+          <mxGeometry x="1000" y="20" width="260" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="i_edge_cdn" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="CDN + WAF (edge)&#xa;TLS termination · bot &amp; DDoS filtering · static asset caching">
+          <mxGeometry x="700" y="140" width="560" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="i_edge_lb" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="Load Balancer (L7, health-checked)&#xa;Spreads concurrent requests across every service replica">
+          <mxGeometry x="700" y="260" width="560" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="i_box_k3s" parent="1" vertex="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#666666;verticalAlign=top;align=left;fontSize=15;fontStyle=1;spacingLeft=14;spacingTop=12;" value="k3s CLUSTER — containerized services, horizontally autoscaled">
+          <mxGeometry x="660" y="380" width="640" height="530" as="geometry" />
+        </mxCell>
+        <mxCell id="i_ingress" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Ingress Controller (Traefik)">
+          <mxGeometry x="700" y="430" width="560" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="i_frontend_svc" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Frontend Service — stateless pods, N replicas">
+          <mxGeometry x="700" y="520" width="560" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="i_backend_svc" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Backend / API Service — stateless pods, N replicas&#xa;Hosts the agent &amp; retrieval-grounded generation logic">
+          <mxGeometry x="700" y="620" width="560" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="i_ingest_svc" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Ingestion Worker Service — stateless pods, N replicas&#xa;Consumes ingestion jobs from the queue">
+          <mxGeometry x="700" y="740" width="560" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="i_hpa" parent="1" vertex="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fffce0;strokeColor=#d6b656;fontSize=10;align=left;spacingLeft=8;spacingTop=6;" value="HorizontalPodAutoscaler — scales Backend &amp; Ingestion Worker pods on CPU and queue depth">
+          <mxGeometry x="700" y="830" width="560" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="i_box_data" parent="1" vertex="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#666666;verticalAlign=top;align=left;fontSize=15;fontStyle=1;spacingLeft=14;spacingTop=12;" value="STATEFUL DATA LAYER">
+          <mxGeometry x="1420" y="380" width="620" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="i_db_pg" parent="1" vertex="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;boundedLbl=1;" value="PostgreSQL&#xa;Transactional store — accounts, cached answers, audit/review logs">
+          <mxGeometry x="1450" y="430" width="270" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="i_db_redis" parent="1" vertex="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;boundedLbl=1;" value="Redis&#xa;Shared cache, session state, rate limits, job queue">
+          <mxGeometry x="1740" y="430" width="270" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="i_db_vector" parent="1" vertex="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;boundedLbl=1;" value="Vector Database&#xa;Per-programme embeddings, ANN indexed, replicated">
+          <mxGeometry x="1450" y="560" width="270" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="i_db_object" parent="1" vertex="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;boundedLbl=1;" value="Object Storage&#xa;Source PDFs &amp; corpus artifacts">
+          <mxGeometry x="1740" y="560" width="270" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="i_box_infer" parent="1" vertex="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#666666;verticalAlign=top;align=left;fontSize=15;fontStyle=1;spacingLeft=14;spacingTop=12;" value="INFERENCE LAYER">
+          <mxGeometry x="1420" y="850" width="620" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="i_gateway" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="LLM Gateway&#xa;Unified rate-limiting, cost tracking, circuit-breaking, fallback routing">
+          <mxGeometry x="1450" y="900" width="560" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="i_providers" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="External Model Providers&#xa;Fast classifier · Primary answer model · Fallback model · Embedding model">
+          <mxGeometry x="1450" y="990" width="560" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="i_secrets" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="Secrets Manager&#xa;Vault / cloud KMS — every credential scoped &amp; rotated">
+          <mxGeometry x="1420" y="1160" width="300" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="i_box_obs" parent="1" vertex="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#666666;verticalAlign=top;align=left;fontSize=15;fontStyle=1;spacingLeft=14;spacingTop=12;" value="OBSERVABILITY">
+          <mxGeometry x="2100" y="380" width="380" height="540" as="geometry" />
+        </mxCell>
+        <mxCell id="i_otel" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="OpenTelemetry Collector">
+          <mxGeometry x="2130" y="430" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="i_traces" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Distributed Tracing Store">
+          <mxGeometry x="2130" y="510" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="i_metrics" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Metrics (Prometheus)">
+          <mxGeometry x="2130" y="590" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="i_dashboards" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Dashboards (Grafana)">
+          <mxGeometry x="2130" y="670" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="i_logs" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Log Aggregator">
+          <mxGeometry x="2130" y="750" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="i_alerts" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Alerting — on-call paging">
+          <mxGeometry x="2130" y="830" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="i_box_cicd" parent="1" vertex="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#666666;verticalAlign=top;align=left;fontSize=15;fontStyle=1;spacingLeft=14;spacingTop=12;" value="DELIVERY PIPELINE">
+          <mxGeometry x="80" y="380" width="520" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="i_git" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Git — source of truth">
+          <mxGeometry x="110" y="430" width="460" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="i_build" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Automated Build">
+          <mxGeometry x="110" y="510" width="460" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="i_testgate" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Test &amp; Evaluation Gate&#xa;Regression + ground-truth evaluation suites">
+          <mxGeometry x="110" y="590" width="460" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="i_staging" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Staging Cluster&#xa;Mirrors production configuration exactly">
+          <mxGeometry x="110" y="690" width="460" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="i_promote" parent="1" vertex="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Canary Release → Promote">
+          <mxGeometry x="110" y="800" width="460" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- primary request path -->
+        <mxCell id="ie1" parent="1" edge="1" source="i_actor_student" target="i_edge_cdn" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie2" parent="1" edge="1" source="i_actor_admin" target="i_edge_cdn" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie3" parent="1" edge="1" source="i_edge_cdn" target="i_edge_lb" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie4" parent="1" edge="1" source="i_edge_lb" target="i_ingress" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie5" parent="1" edge="1" source="i_ingress" target="i_frontend_svc" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie6" parent="1" edge="1" source="i_ingress" target="i_backend_svc" value="API calls" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie7" parent="1" edge="1" source="i_frontend_svc" target="i_backend_svc" value="calls the API" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie11" parent="1" edge="1" source="i_backend_svc" target="i_gateway" value="inference calls" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie12" parent="1" edge="1" source="i_gateway" target="i_providers" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- data plane -->
+        <mxCell id="ie8" parent="1" edge="1" source="i_backend_svc" target="i_db_pg" value="reads / writes" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#9673a6;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie9" parent="1" edge="1" source="i_backend_svc" target="i_db_redis" value="cache, sessions, rate limits, queue" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#9673a6;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie10" parent="1" edge="1" source="i_backend_svc" target="i_db_vector" value="retrieval" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#9673a6;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie13" parent="1" edge="1" source="i_ingest_svc" target="i_db_object" value="reads uploads" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#9673a6;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie14" parent="1" edge="1" source="i_ingest_svc" target="i_db_vector" value="writes embeddings" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#9673a6;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie15" parent="1" edge="1" source="i_ingest_svc" target="i_db_redis" value="consumes jobs" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#9673a6;"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- secrets -->
+        <mxCell id="ie16" parent="1" edge="1" source="i_backend_svc" target="i_secrets" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#666666;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie17" parent="1" edge="1" source="i_ingest_svc" target="i_secrets" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#666666;"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- observability -->
+        <mxCell id="ie18" parent="1" edge="1" source="i_backend_svc" target="i_otel" value="traces / metrics / logs" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#666666;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie19" parent="1" edge="1" source="i_ingest_svc" target="i_otel" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#666666;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie20" parent="1" edge="1" source="i_otel" target="i_traces" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie21" parent="1" edge="1" source="i_otel" target="i_metrics" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie22" parent="1" edge="1" source="i_metrics" target="i_dashboards" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie23" parent="1" edge="1" source="i_otel" target="i_logs" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie24" parent="1" edge="1" source="i_dashboards" target="i_alerts" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- delivery pipeline -->
+        <mxCell id="ie25" parent="1" edge="1" source="i_git" target="i_build" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie26" parent="1" edge="1" source="i_build" target="i_testgate" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie27" parent="1" edge="1" source="i_testgate" target="i_staging" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie28" parent="1" edge="1" source="i_staging" target="i_promote" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ie29" parent="1" edge="1" source="i_promote" target="i_box_k3s" value="deploys new image versions" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=9;dashed=1;strokeColor=#d79b00;exitX=1;exitY=0.5;entryX=0;entryY=0.9;"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
