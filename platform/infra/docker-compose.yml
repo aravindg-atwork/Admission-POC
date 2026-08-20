@@ -73,8 +73,8 @@ services:
   web:
     build:
       context: ../services/web
-      args:
-        VITE_API_BASE: http://localhost:8100
+      # No VITE_API_BASE build arg - see the Dockerfile's own comment.
+      # The frontend calls a relative /api/... path, proxied by nginx.conf.
     ports:
       - "5180:80"
     depends_on:
