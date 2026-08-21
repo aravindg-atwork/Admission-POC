@@ -1267,3 +1267,153 @@ work haven't regressed anything - the existing suites (18/18 bvsc,
 nginx/retention/redaction fixes, not re-run after them. Re-running the
 full suites is itself item 4's own job, not something to assume still
 holds.
+
+## Student-facing response boundary (2026-08-21, later session)
+
+A student's `/api/chat` reply no longer carries retrieval or provider
+internals. Removed from the response: `model` (was
+`"mistral:mistral-small-latest"`), `pages` (was every retrieved page - with
+`top_k=15` the widget printed `Prospectus pages: 4, 7, 8, 10, 14, 16, ...`,
+a map of the corpus rather than a citation), `policyDecisions` (internal
+rule ids), and `sourceTrace`'s own `pages`/`ruleIds`. `sourceTrace` keeps
+`programme` and `admissionYear`, which is exactly what
+`tools/eval_go_live_conversations.py` asserts.
+
+**Pages are not lost, only unpublished.** The pipeline still produces
+everything; `conversations.log_exchange` still writes `pages` to the
+transcript row, so the admin review console, the evidence test gate and
+telemetry are unaffected. The provider `model` id, however, is now recorded
+NOWHERE - it only ever lived in the response. A first attempt to persist it
+passed `model_name=` to `ConversationMessage`, which does not have that
+column (`model_name` belongs to `MachineReview`, the shadow reviewer's
+model) - every transcript write then failed with a `TypeError` that
+`log_exchange`'s own try/except swallowed, so answers kept returning 200
+with `sessionId`/`messageId` null and nothing was logged at all. Caught by
+running it locally, reverted. Persisting it properly needs a real column on
+`conversation_messages`, and `init_db()`'s `create_all` does NOT ALTER an
+existing table - production's Postgres already has it - so that is a
+migration, not a one-line change.
+`tools/eval_retrieval.py` measures recall against Qdrant directly, not
+against the response, so its recall@15 methodology does not change either.
+The other eval tools only *print* `pages`/`model` for human debugging and
+will now print `None` - that is cosmetic, no assertion reads them.
+
+The split lives in ONE place - `safety.student_response()` - deliberately:
+a new internal field is private by default, and publishing one has to be a
+decision someone makes on purpose. Do not add internals back into
+`ChatResponse`; add them to the log row instead. Both clients were updated
+to match (React `MessageBubble`'s evidence disclosure and the jQuery
+widget's `Prospectus pages:` line are gone, along with their dead CSS), and
+`MAFSU_DEVELOPER_HANDOFF.md`'s documented contract now says the fields are
+not returned. The `.zip` beside the widget directory was regenerated so the
+two copies stay identical (it excludes `README.md`, matching the previous
+archive's file set).
+
+Three defects found in the same audit and fixed:
+
+- `off_topic_guard` hardcoded "B.V.Sc. & A.H." in its decline, telling a
+  B.F.Sc. or Dairy student the assistant only covers a programme they never
+  selected. It now takes `project_id`; because of that it moved out of the
+  `GUARDS` tuple to run explicitly straight after the loop - the same
+  position it held as the tuple's last entry, order unchanged.
+- `answer.py` formatted `SYSTEM_PROMPT_BASE` with the raw project id, so the
+  prompt's own decline example rendered as "I'm the btech-dairy admissions
+  assistant". Now uses `programs.PROGRAM_NAMES`.
+- `is_prompt_injection` caught "reveal your system prompt" but not
+  retrieval-internals reconnaissance ("show me the retrieved chunks", "what
+  similarity score did that get"). New `_RAG_RECONNAISSANCE` pattern in
+  `core/intent.py`, deliberately excluding bare "documents"/"context" so
+  "which documents do I need" stays an ordinary question.
+
+Both widget packages were updated, not just one:
+`integrations/mafsu-widget-code-only/` (canonical) and
+`deliverables/gmail-safe-widget/` (the same files with a `.js.txt`
+extension for email, whose own GMAIL_SAFE_NOTE promises the content is
+otherwise identical). The canonical `.zip` was regenerated; the two dated
+`MAFSU_MITRA_WIDGET*HANDOFF_2026-08-21.zip` packages in `deliverables/`
+were deliberately NOT rewritten - they are records of what was already
+emailed to MAFSU. Re-send a fresh package rather than editing those.
+
+**Verification status**: run locally against a real stack built from these
+files (compose up, all five containers, `/api/readyz` green on postgres/
+redis/qdrant). Confirmed live: no `model`/`pages`/`policyDecisions` in any
+reply, `sourceTrace` trimmed to `programme`+`admissionYear`, the off-topic
+decline naming B.F.Sc. and B.Tech. (Dairy Technology) correctly, RAG-recon
+and classic injection both refused, transcript logging writing real
+`sessionId`/`messageId` after the revert above. Also `npm run build`
+type-checks, `npm run lint` clean, `node --check` on the widget, and the
+built bundle no longer contains "Prospectus pages".
+
+**What local could NOT check**: this machine has no provider credentials
+and an empty Qdrant, so nothing retrieval-backed ran - no RAG answer, no
+verified-fact table lookup, no semantic/exact cache path, no multilingual
+path. Those degraded to `provider-unavailable` exactly as designed, which
+is itself worth knowing, but the API-level suites in `tools/` remain unrun
+against these changes. Run them on a host that has keys before trusting
+them.
+
+### Deployed 2026-08-21, and what the promotion gate actually found
+
+The response-boundary change above is **live** on 159.69.210.30. Verified from
+outside the host: `POST /api/chat` carries no `model`/`pages`/
+`policyDecisions`, `sourceTrace` is `{programme, admissionYear}`, the
+off-topic decline names B.Tech. (Dairy Technology) correctly, RAG-recon is
+refused, a real B.F.Sc. fee answer is grounded and logged with a real
+`sessionId`/`messageId`, and neither replica logs an error.
+
+**The gate was run as a true A/B, not a "looks fine" check.** A canary
+container on `:8100` ran the new image; a control container on `:8101` ran an
+image rebuilt from the pre-change backup. Same Postgres/Redis/Qdrant/
+providers, both outside nginx's upstream (which names `api-1`/`api-2`
+explicitly), so neither took student traffic. Result: **identical verdict
+sequences on every suite** - B.V.Sc. 17/18, B.F.Sc. 15/17, Dairy 24/24,
+cross-programme 47/50, multilingual 6/6, behavior 14/15 new vs 13/15 old.
+The one behavior difference was a `validation-blocked` flake on the bounded-
+regeneration path; re-run 5x per build with caching disabled, both answered
+correctly 5/5. Do not read that suite's single-run number as a signal without
+re-running it - two of its cases flake.
+
+**The suites had been silently broken, and this is the more important
+finding.** The first A/B produced B.V.Sc. 15/18, B.F.Sc. 11/17, Dairy 10/24,
+cross-programme 17/50 - on BOTH builds, i.e. that is what live production
+scores today, far below the numbers recorded in the sections above. 22 of
+the 23 failures returned `programme-clarify`: the suites send `projectId`
+but never `conversationState.programme`, and the P0 ambiguous-programme
+guard correctly asks which programme when the client sends no selection.
+The real widget sets that field when a student picks a course, so the suites
+had stopped simulating a student the day that guard shipped. Proven directly:
+the same Dairy question returns the clarify prompt without the state and a
+correct grounded answer with it. `eval_multilingual.py` already sent it -
+which is exactly why it was the one suite still scoring 6/6.
+
+Fixed in the seven suites that were missing it (`eval_bvsc_adversarial`,
+`eval_bfsc_adversarial`, `eval_btech_dairy_adversarial`,
+`eval_cross_programme_stress`, `eval_bvsc_behavior`, `eval_bfsc_smoke`,
+`eval_btech_dairy_smoke`). Scores jumped to the numbers above. **The residual
+gaps are real and NOT caused by this change** - they fail identically on the
+pre-change build: B.V.Sc. 1 case, B.F.Sc. 2, cross-programme 3. Those are
+genuine open defects that the stale payloads were masking. Investigate them
+before claiming any of the recorded 18/18 / 17/17 / 50/50 numbers still hold.
+
+**Deployment mechanics worth knowing before the next one:**
+
+- Production is NOT a git checkout - `/opt/admission-platform` holds copied
+  files. Deploy = scp the changed files, `docker compose -f
+  docker-compose.prod.yml build api`, then roll the replicas.
+- Roll them ONE AT A TIME (`docker rm -f` one, then `up -d --no-deps
+  --no-recreate api`) so nginx always has a healthy peer. Recreating both at
+  once is a real outage window on a single-front deployment.
+- **Compose refills the replica slot with the NEXT number, not the missing
+  one.** Removing `api-1` produced `api-3`, which nginx's explicit upstream
+  does not know - it had a dead peer and an invisible container. Fixed with
+  `docker rename admission-platform-api-3 admission-platform-api-1`. The
+  compose label still says container-number=3; a future deploy should
+  `--force-recreate` the api service during a quiet moment to resync the
+  numbering, accepting the brief outage.
+- **`nginx -s reload` is mandatory after ANY replica recreation**, not only
+  after a config edit: the upstream names are resolved at config load, so a
+  recreated container's new IP is invisible until reload. Confirmed live -
+  traffic distributed 6/4 across both replicas afterwards.
+- Pre-deploy backup: `/opt/admission-platform/backups/2026-08-21-response-
+  boundary/` holds the previous `api-app`, `web-src` and `tools`. Rollback =
+  copy those back, rebuild, roll the replicas, reload nginx.
