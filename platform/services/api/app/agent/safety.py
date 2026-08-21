@@ -86,6 +86,25 @@ def decision_state(result: dict) -> str:
     return "informational"
 
 
+# Retrieval/provider internals are used everywhere INSIDE the service - the
+# transcript row, the admin evidence view, telemetry, the eval tools reading
+# the database - but they are never part of what a student receives. Keeping
+# the split at one function means a new internal field is private by default:
+# adding it to the pipeline does not publish it. Anything genuinely meant for
+# the student has to be named in _STUDENT_FIELDS on purpose.
+_INTERNAL_ONLY = ("model", "pages", "policyDecisions")
+_INTERNAL_TRACE_KEYS = ("pages", "ruleIds")
+
+
+def student_response(result: dict) -> dict:
+    """Strip internal retrieval/provider detail from a student-facing reply."""
+    public = {key: value for key, value in result.items() if key not in _INTERNAL_ONLY}
+    trace = result.get("sourceTrace")
+    if isinstance(trace, dict):
+        public["sourceTrace"] = {k: v for k, v in trace.items() if k not in _INTERNAL_TRACE_KEYS}
+    return public
+
+
 def _passed_deadlines(answer: str) -> list[str]:
     passed, today = [], date.today()
     for match in _DATE_2026.finditer(answer):

@@ -75,10 +75,8 @@ export default function App() {
         id: newId(), role: "assistant", text: result.response.answer,
         interviewOptions: result.response.interviewOptions,
         interviewField: result.response.interviewField,
-        pages: result.response.pages,
         source: result.response.source,
         cacheHit: result.response.cacheHit,
-        policyDecisions: result.response.policyDecisions,
       },
     ]);
     setConversationState((previous) => ({
@@ -124,10 +122,8 @@ export default function App() {
       id: newId(), role: "assistant", text: result.response.answer,
       interviewOptions: result.response.interviewOptions,
       interviewField: result.response.interviewField,
-      pages: result.response.pages,
       source: result.response.source,
       cacheHit: result.response.cacheHit,
-      policyDecisions: result.response.policyDecisions,
     }]);
     setConversationState((previous) => ({
       ...(programmeSwitched ? {} : previous),

@@ -65,14 +65,12 @@
     $messages.stop(true).animate({ scrollTop: Math.max(0, target) }, 180);
   }
 
-  function addMessage(role, text, meta) {
+  // No prospectus page list, model id or rule id is shown to a student: the
+  // API no longer returns them, and the widget must not reintroduce them.
+  function addMessage(role, text) {
     $messages.find(".mafsu-chat__welcome").remove();
     var className = role === "user" ? " mafsu-chat__message--user" : "";
-    var evidence = "";
-    if (meta && meta.pages && meta.pages.length) {
-      evidence = '<p class="mafsu-chat__evidence">Prospectus pages: ' + escapeHtml(meta.pages.join(", ")) + "</p>";
-    }
-    var $message = $('<div class="mafsu-chat__message' + className + '"><div class="mafsu-chat__bubble"><p>' + escapeHtml(text) + "</p>" + evidence + "</div></div>");
+    var $message = $('<div class="mafsu-chat__message' + className + '"><div class="mafsu-chat__bubble"><p>' + escapeHtml(text) + "</p></div></div>");
     $messages.append($message);
     if (role === "assistant") scrollToMessageTop($message);
     else scrollToLatest();
@@ -197,7 +195,7 @@
       setHealth("online");
       setBusy(false);
       updateFromResponse(response);
-      addMessage("assistant", response.answer, { pages: response.pages || [] });
+      addMessage("assistant", response.answer);
       addOptions(response.interviewOptions || [], response.interviewField);
     }).fail(function (xhr) {
       if (xhr.status === 0 || xhr.status >= 500) setHealth("offline");

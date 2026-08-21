@@ -186,20 +186,23 @@ Representative response:
 {
   "answer": "Yes—based on the details shared so far...",
   "source": "eligibility",
-  "model": "guard",
-  "pages": [4],
   "interviewField": null,
   "interviewOptions": [],
   "carryQuestion": null,
   "slotUpdate": {
     "programme": "bvsc"
   },
-  "policyDecisions": [],
   "language": "en",
   "cacheHit": false,
   "projectId": "bvsc",
   "sessionId": "generated-session-id",
-  "messageId": 123
+  "messageId": 123,
+  "admissionYear": "2026-27",
+  "decisionState": "eligible_so_far",
+  "sourceTrace": {
+    "programme": "bvsc",
+    "admissionYear": "2026-27"
+  }
 }
 ```
 
@@ -212,10 +215,10 @@ Response-handling rules:
 4. Store the returned `sessionId` and send it with the next question.
 5. Render `interviewOptions` as buttons. When a button is clicked, store its
    value using `interviewField` as the key and resend `carryQuestion`.
-6. `pages` may be displayed as prospectus evidence.
-7. Do not expose `model`, internal rule identifiers, or policy debug data in
-   the public UI.
-8. Disable composer and programme controls while a request is in progress to
+6. The response carries no prospectus page list, model id or policy rule ids.
+   These exist server-side for review and evaluation, and are deliberately
+   not part of a student-facing reply - do not display or reintroduce them.
+7. Disable composer and programme controls while a request is in progress to
    prevent duplicate submissions.
 
 The supplied jQuery file already implements these rules.

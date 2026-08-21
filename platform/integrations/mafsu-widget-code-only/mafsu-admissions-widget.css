@@ -61,7 +61,6 @@
 .mafsu-chat__bubble { max-width: 90%; padding: 11px 13px; border: 1px solid var(--mafsu-line); border-radius: 16px 16px 16px 5px; color: var(--mafsu-ink); background: var(--mafsu-green-100); white-space: pre-wrap; overflow-wrap: anywhere; }
 .mafsu-chat__message--user .mafsu-chat__bubble { border-color: var(--mafsu-green-800); border-radius: 16px 16px 5px 16px; color: #fff; background: var(--mafsu-green-800); }
 .mafsu-chat__bubble p { margin: 0; }
-.mafsu-chat__evidence { margin: 7px 0 0; color: var(--mafsu-muted); font-size: 10px; }
 .mafsu-chat__options { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 14px; }
 .mafsu-chat__typing { display: inline-flex; gap: 4px; padding: 13px 15px; border-radius: 14px 14px 14px 4px; background: #fff; }
 .mafsu-chat__typing i { width: 5px; height: 5px; border-radius: 50%; background: #7d8a82; animation: mafsu-dot 1s infinite ease-in-out; }

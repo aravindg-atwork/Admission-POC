@@ -49,15 +49,17 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    """What a student receives. Deliberately carries no retrieval or provider
+    internals: no prospectus page list, no model id, no policy rule ids. All
+    three are still produced, logged and reviewable server-side - see
+    safety.student_response, which is what removes them here."""
+
     answer: str
     source: str
-    model: str
-    pages: list[int] = Field(default_factory=list)
     interviewField: str | None = None
     interviewOptions: list[dict] = Field(default_factory=list)
     carryQuestion: str | None = None
     slotUpdate: dict = Field(default_factory=dict)
-    policyDecisions: list[dict] = Field(default_factory=list)
     language: str = "en"
     cacheHit: bool = False
     projectId: str = "bvsc"
@@ -108,4 +110,4 @@ def chat(req: ChatRequest) -> ChatResponse:
     except Exception as exc:  # logging must not block a student's answer
         print(f"[conversation-log] write failed: {exc!r}")
     telemetry.record_chat(project_id, result, round((time.monotonic() - started) * 1000))
-    return ChatResponse(**result)
+    return ChatResponse(**safety.student_response(result))

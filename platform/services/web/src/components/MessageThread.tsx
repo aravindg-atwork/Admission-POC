@@ -42,7 +42,7 @@ export function MessageThread({ language, messages, isThinking, onPickExample, o
     <div className="message-thread">
       <div className="message-thread__list" ref={listRef}>
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} language={language} onPickInterview={onPickInterview} />
+          <MessageBubble key={m.id} message={m} onPickInterview={onPickInterview} />
         ))}
         {isThinking && <ThinkingIndicator language={language} />}
         <div ref={endRef} />
