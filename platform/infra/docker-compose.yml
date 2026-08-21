@@ -51,6 +51,7 @@ services:
       POSTGRES_DSN: postgresql+psycopg://platform:platform@postgres:5432/platform
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
       # Overrides .env's SELFHOSTED_URL=http://127.0.0.1:8000, which inside
       # a container means the CONTAINER's own loopback, not the host's -
       # the SSH tunnel to the embedding service is bound to the HOST's

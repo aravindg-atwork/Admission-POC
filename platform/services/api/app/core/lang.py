@@ -83,7 +83,7 @@ def detect_romanized_indic(text):
     # never matches "kya"/"hai" in the marker sets, silently undercounting hits
     # (seen in testing: a real 2-hit sentence measured as 1 because the second
     # marker word had a "?" stuck to it, missing the threshold entirely).
-    words = {w.strip(".,?!\"'()") for w in text.lower().split()}
+    words = {w.strip(".,?!:;\"'()") for w in text.lower().split()}
     hi_hits = len(words & _HINGLISH_MARKERS)
     mr_hits = len(words & _MARATHINGLISH_MARKERS)
     if mr_hits > hi_hits and mr_hits >= _ROMANIZED_INDIC_MIN_HITS:

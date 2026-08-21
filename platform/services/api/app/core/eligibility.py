@@ -134,12 +134,73 @@ _PERCENT_RE = re.compile(r"(\d{1,3}(?:\.\d+)?)\s*(?:%|percent|per cent)", re.I)
 _MARKS_OUT_OF_RE = re.compile(
     r"(\d{1,4}(?:\.\d+)?)\s*(?:marks\s+)?(?:out\s*of|/)\s*(\d{1,4}(?:\.\d+)?)", re.I)
 
+_SUBJECT_MARK_RE = re.compile(
+    r"\b(physics|chemistry|english|biology|biotechnology|biotech|mathematics|maths|math)"
+    r"\b\s*(?:marks?|score|scored)?\s*[-:=]?\s*(\d{1,3}(?:\.\d+)?)\b",
+    re.I,
+)
+_REVERSE_SUBJECT_MARK_RE = re.compile(
+    r"\b(\d{1,3}(?:\.\d+)?)\s*(?:marks?\s*)?(?:in|for)\s+"
+    r"(physics|chemistry|english|biology|biotechnology|biotech|mathematics|maths|math)\b",
+    re.I,
+)
+_GROUP_MARKS_RE = re.compile(
+    r"((?:\d{1,3}(?:\.\d+)?\s*[,/]\s*){2,4}\d{1,3}(?:\.\d+)?)"
+    r"\s*(?:marks?\s*)?(?:on|in|for)\s*(pcbm|pcbe|pcme|pcb|pcm)\b",
+    re.I,
+)
+_GROUP_ORDERS = {
+    "pcbm": ("physics", "chemistry", "biology", "mathematics"),
+    "pcbe": ("physics", "chemistry", "biology", "english"),
+    "pcme": ("physics", "chemistry", "mathematics", "english"),
+    "pcb": ("physics", "chemistry", "biology"),
+    "pcm": ("physics", "chemistry", "mathematics"),
+}
+
 _SUBJECT_ALIASES = {
     "physics": "physics", "chemistry": "chemistry", "english": "english",
     "biology": "biology", "bio": "biology", "biotechnology": "biotechnology",
     "biotech": "biotechnology", "mathematics": "mathematics",
     "maths": "mathematics", "math": "mathematics",
 }
+
+
+def extract_subject_marks(text):
+    """Extract per-subject marks stated on a 0-100 scale."""
+    marks = {}
+    for match in _SUBJECT_MARK_RE.finditer(text or ""):
+        value = float(match.group(2))
+        if value <= 100:
+            marks[_SUBJECT_ALIASES[match.group(1).lower()]] = value
+    for match in _REVERSE_SUBJECT_MARK_RE.finditer(text or ""):
+        value = float(match.group(1))
+        if value <= 100:
+            marks[_SUBJECT_ALIASES[match.group(2).lower()]] = value
+    for match in _GROUP_MARKS_RE.finditer(text or ""):
+        values = [float(value) for value in re.findall(r"\d{1,3}(?:\.\d+)?", match.group(1))]
+        order = _GROUP_ORDERS[match.group(2).lower()]
+        if len(values) == len(order) and all(value <= 100 for value in values):
+            marks.update(dict(zip(order, values)))
+    return marks
+
+
+def subject_marks_percentage(project_id, marks):
+    """Return (percentage, missing subjects) for a programme's combination."""
+    rule = RULES.get(project_id)
+    if not rule:
+        return None, set()
+    required = set(rule["subjects"])
+    if rule["either"]:
+        chosen = next((subject for subject in rule["either"] if subject in marks), None)
+        if chosen:
+            required.add(chosen)
+        else:
+            required.add("biology or biotechnology")
+    missing = {subject for subject in required if subject not in marks}
+    if missing:
+        return None, missing
+    values = [float(marks[subject]) for subject in required]
+    return round(sum(values) / len(values), 2), set()
 
 
 # Programme names contain their own category false-positives: "B.V.Sc." and

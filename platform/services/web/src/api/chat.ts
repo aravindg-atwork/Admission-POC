@@ -1,10 +1,7 @@
-// Talks to the real, eventual /api/chat contract - deliberately, so this
-// client needs no rework once app/agent's guard pipeline actually exists
-// on the backend (see ../../CLAUDE.md's phased plan). Right now that route
-// doesn't exist yet, so every call 404s; askQuestion() reports that as
-// {live: false} rather than throwing, so the UI can show an honest "not
-// connected yet" state instead of a raw fetch error.
-import type { ChatResponse, ConversationState, Language } from "../types";
+// Talks to the real /api/chat contract. askQuestion() reports connection
+// failures as {live: false}, allowing the UI to show an honest unavailable
+// state instead of exposing a raw fetch error.
+import type { ChatResponse, ConversationState, Language, Programme } from "../types";
 
 // Empty by default - a relative "/api/chat" resolves against whatever
 // origin the page itself was loaded from (proxied server-side to the real
@@ -23,13 +20,15 @@ export type AskResult =
 export async function askQuestion(
   question: string,
   language: Language,
+  projectId: Programme,
   conversationState: ConversationState = {},
+  sessionId: string | null = null,
 ): Promise<AskResult> {
   try {
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, uiLanguage: language, projectId: "bvsc", conversationState }),
+      body: JSON.stringify({ question, uiLanguage: language, projectId, conversationState, sessionId }),
     });
     if (!res.ok) return { live: false };
     const response = (await res.json()) as ChatResponse;

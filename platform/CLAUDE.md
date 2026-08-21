@@ -363,6 +363,75 @@ need it), then `docker compose logs api`.
 
 ## Full remaining roadmap
 
+### Evaluation checkpoint completed 2026-08-20
+
+- Added platform-native B.V.Sc. slices of the two legacy ground-truth suites
+  under `tools/`. They target `http://127.0.0.1:8100/api/chat`, use the new
+  response schema, and measure the Qdrant-backed retrieval path directly.
+- Answer quality: **4/4 correct**, 2.0s average on the final run (legacy
+  B.V.Sc. slice: 4/4; legacy full-suite non-outlier average: 3.0s).
+- Initial retrieval: 11/12 scored needles, recall@15 0.92, MRR 0.656; the
+  SC/ST/OBC threshold query was the genuine miss. Increasing the Qdrant ANN
+  candidate pool from 4x to 8x and 16x did not change it, ruling out the new
+  ANN cutoff as the cause.
+- Fixed by porting `backend/core/vocabulary.py`'s English additive query
+  expansion and the English branch of `_build_retrieval_text` into the live
+  answer path (including table lookup). Final retrieval: **12/12 scored
+  needles, recall@15 1.00, MRR 0.614**. This is above the legacy suite's
+  overall recall@15 of 0.94; MRR is comparable to its 0.619.
+- One of 13 B.V.Sc. labels is unscored, not failed: fresh OCR does not contain
+  the legacy NRI-refund needle verbatim. Keep it visible until that label is
+  re-verified against the fresh corpus/PDF; do not silently count it as a
+  retrieval miss or pass.
+
+### B.V.Sc. parity work in progress 2026-08-20
+
+- Added an explicit pre-retrieval guard layer for the B.V.Sc. slice. Prompt
+  injection, greetings, conservative off-topic cases, and the guided
+  eligibility interview now short-circuit before embedding/retrieval.
+- The guided interview runs NEET status -> category -> required-subject
+  percentage, carries `conversationState` through the API, and is wired to
+  real option chips in the React frontend. Overall-vs-subject percentage
+  clarification and subject-specific-question non-hijacking are covered.
+- Added deterministic post-generation checks for unsupported numbers and
+  foreign-programme mentions, one bounded regeneration, and a safe refusal if
+  regeneration remains invalid. Numbered-list markup is mechanically removed.
+- Broader live evaluation initially found three real defects: a reserved
+  B.V.Sc. question hallucinated B.F.Sc.'s 40% threshold, a missed-NEET case
+  returned HTTP 500, and "How do I apply?" was hijacked by the eligibility
+  interview. All three were fixed and retained as regression cases.
+- Current live results: answer figures **4/4**, guided conversation/injection
+  **9/9**, broader English B.V.Sc. behavior **15/15**, retrieval **12/12
+  scored** (one OCR-drift label remains unscored as documented above).
+- This does NOT yet mean B.V.Sc. has "no flaws." Dispute/citation and
+  meta-correction guards, FAQ cache, full legacy-suite adaptation, and
+  Hindi/Marathi remain open. Do not ingest B.F.Sc. until the requested
+  B.V.Sc.-first gate is completed.
+
+### User-supplied B.V.Sc. promotion gate + B.F.Sc. start 2026-08-20
+
+- Added `tools/eval_bvsc_adversarial.py`, preserving all 15 user-supplied
+  multi-rule scenarios as an executable promotion gate. The first run exposed
+  scope collapse, quota-rule contradictions, NCL/CVC confusion, missing
+  photocopy requirements, an HTTP 500 on provider timeout, and unsupported
+  seat-retention claims. These were fixed using deterministic eligibility and
+  source-transcribed policy guards plus bounded RAG validation.
+- Final B.V.Sc. promotion result: **15/15 grounded assertions pass**. The last
+  full run printed 14/15 only because the assertion accepted "no documents"
+  but not the equivalent returned phrase "no additional documents"; the
+  assertion was corrected and that unchanged grievance case passed in
+  isolation. No application code changed between those two runs.
+- B.F.Sc. was then ingested fresh through this platform's own pipeline: **63
+  OCR pages, 231 chunks**, Qdrant collection `bfsc`, and Postgres project row.
+- Removed the B.V.Sc. hardcode from the eligibility guard before B.F.Sc.
+  testing. The frontend remains explicitly pinned to B.V.Sc.; B.F.Sc. is not
+  offered to students yet.
+- Added `tools/eval_bfsc_smoke.py`; current B.F.Sc. smoke result is **8/8**:
+  application/admission fees, unreserved/reserved thresholds, subjects,
+  MHT-CET, duration, and a deterministic reserved-category personal verdict.
+  Broader B.F.Sc. retrieval/adversarial testing remains the next step before
+  frontend exposure. B.Tech Dairy remains un-ingested.
+
 Two tiers. Tier A finishes what "the vertical slice actually works"
 means - do this before Tier B. Tier B is the breadth phases from
 `../docs/admission-assistant-platform-architecture.md`'s own "Delivery
@@ -370,7 +439,7 @@ sequence," made concrete against what already exists here.
 
 ### Tier A — finish the vertical slice
 
-1. **The actual success checkpoint.** `tools/bench_answer_quality.py` and
+1. **The actual success checkpoint. DONE 2026-08-20.** `tools/bench_answer_quality.py` and
    `tools/eval_retrieval.py` (repo root) are the POC's ground-truth
    suites. Filter both to their B.V.Sc.-only cases, re-point their HTTP
    calls at `http://127.0.0.1:8100/api/chat` instead of the old backend's
@@ -380,6 +449,99 @@ sequence," made concrete against what already exists here.
    eligibility/RAG/off-topic and all came back correct, but that is not a
    substitute for the real suite - do not skip this step because the
    manual spot-check looked good.
+
+   B.V.Sc. NRI exception regression (2026-08-20): the general deterministic
+   missed-NEET verdict incorrectly overrode clause 9(iv)'s more specific rule.
+   Candidates who passed XII/equivalent abroad are exempt from NEET for the
+   NRI/FN/PIO/OCI quota; those who passed XII in India must have appeared.
+   `tools/eval_bvsc_adversarial.py` now includes both sides plus a conditional-
+   eligibility case and passes 18/18. The answer must not infer final eligibility
+   from the exemption alone: 50% PCBE, age, category status/documents, and other
+   requirements remain. MAFSU also states that NRI-sponsored seats do not exist.
+
+   Cross-programme stress checkpoint (2026-08-20): the attached 101-question
+   exact-phrasing sweep was executed across B.V.Sc., B.F.Sc., B.Tech Dairy, and
+   six compound cases. It exposed and fixed additional rule-priority/trigger
+   failures: foreign-subject equivalence, OCI status-date branching, VCI/ICAR
+   processes and reversions, NRI special-round fees, B.F.Sc. PH/hearing and EWS
+   rules, non-stackable 12-point weightage, Dairy PCM-CET and management-exam
+   priority, plus cross-programme B.V.Sc./NEET leakage in a Dairy answer.
+   `tools/eval_cross_programme_stress.py` now asserts the 50 newly exposed/high-
+   risk surfaces and passes 50/50. After the final fixes, the established gates
+   also pass: B.V.Sc. 18/18, B.F.Sc. 17/17, and B.Tech Dairy 24/24. Treat this as
+   a strong English safe-zone checkpoint, not proof against every unseen wording;
+   Hindi/Marathi, full guard breadth, cache, and deployment remain unfinished.
+
+   Structured-policy milestone (2026-08-20): `services/api/app/core/policy.py`
+   now represents facts, rules, independent decision dimensions, explicit
+   priorities, prospectus pages, and winning rule IDs. It runs before the
+   legacy phrase guards. The first migrated conflict is B.V.Sc. NRI NEET:
+   the quota-specific abroad/India rule (priority 100) overrides the general
+   NEET rule only in the entrance-exam dimension. The engine also composes
+   explicit NRI qualifying marks, so an abroad NEET exemption plus less than
+   50% returns an overall negative decision instead of an exemption-shaped
+   answer. `policyDecisions` makes the applied rules observable in the API.
+   Focused policy tests initially passed 7/7; after integration, the established live
+   gates still pass B.V.Sc. 18/18, B.F.Sc. 17/17, B.Tech Dairy 24/24, and
+   cross-programme 50/50.
+
+   Parallel hardening checkpoint (2026-08-20): structured-policy composition
+   now also covers age, reserved-category NRI threshold behavior, NCL status,
+   and pending CVC status. The expanded policy/paraphrase suite passes 12/12;
+   legacy guards remain during incremental parity migration. The web now selects
+   and persists `bvsc`, `bfsc`, or `btech-dairy`, sends that project on every
+   request, and resets conversation state when the programme changes. Web build
+   and lint both pass.
+
+   Server-side routing now supports English, Hindi, and Marathi, including
+   native Devanagari and high-confidence romanized Hindi/Marathi. Translation to
+   English is used for retrieval while the original question controls the reply.
+   Fixed answers use bounded localization retries; numbers and official tokens
+   such as NEET, MHT-CET, CUET, and ICAR are protected and restored exactly.
+   `tools/eval_multilingual.py` covers Hindi and Marathi across all three
+   programmes and passes 6/6 twice consecutively.
+
+   Redis exact-answer caching is live. Keys include the source revision,
+   programme, resolved language, and normalized question. Unsafe/error and
+   guided-interview replies are skipped; Redis failures degrade to normal answer
+   generation; `cacheHit` is returned to clients; changing
+   `faq_cache_revision` atomically invalidates old answers. A live repeated
+   request verified uncached first delivery and identical cached second delivery.
+   Matching is intentionally exact rather than semantic because one changed
+   admission fact can reverse a verdict.
+
+   Demo auto-routing checkpoint (2026-08-20): the API boundary now detects an
+   explicitly named single UG programme and overrides a stale selector before
+   retrieval. It returns the effective `projectId`; the web persists and shows
+   that programme and discards old programme-specific interview slots. Strict
+   word-bounded routing patterns are used instead of the broader search aliases
+   (a reproduced `vet` substring false positive in "have to" was fixed). Live
+   requests sent as B.V.Sc. but naming B.Tech Dairy or B.F.Sc. reached the
+   correct corpus, the web proxy returned `btech-dairy`, routing tests pass 3/3,
+   and the cross-programme gate remains 50/50. Undefined-programme choice,
+   multi-programme comparison, and bounded session reference resolution remain
+   part of the unfinished expanded routing task.
+
+   Public marks-interview/data checkpoint (2026-08-21): production failures
+   reproduced at `159.69.210.30:8080` showed two separate problems. First,
+   eligibility accepted only a precomputed subject-combination percentage.
+   It now extracts named marks (`Physics-45`) and ordered PCB/PCM/PCBM/PCBE/PCME
+   lists, averages only the programme's required subjects, and asks for missing
+   English rather than guessing. Fractions such as `500/600 in 12th` are
+   converted (83.33%) but remain classified as overall unless the student
+   confirms they cover the required combination. A bare `48%` asks whether it
+   is overall or subject-combination marks and preserves that value through the
+   interview. Focused marks/help tests pass 8/8; B.V.Sc. remains 18/18 and the
+   cross-programme gate 50/50.
+
+   Second, public routing to B.F.Sc. was correct but production Qdrant contained
+   only `bvsc`. The exact locally evaluated Qdrant snapshots were promoted:
+   production now has `bfsc` (231 points) and `btech-dairy` (188 points), and
+   Postgres has all three project rows. Public acceptance verifies typo-tolerant
+   B.F.Sc. help, its `sure?` follow-up, subject-mark continuation, safe fraction
+   and bare-percent clarification, Nagpur seat facts, and Dairy MHT-CET-first /
+   CUET-(ICAR-UG)-remaining-vacancies priority. Pre-deploy API files are backed
+   up under `/opt/admission-platform/backups/2026-08-21-marks/`.
 
 2. **The full guard pipeline**, porting `backend/rag/guards.py` (the
    documented order lives in `backend/CLAUDE.md`'s Architecture section:
@@ -426,7 +588,7 @@ sequence," made concrete against what already exists here.
      already sends `uiLanguage`, `app/api/chat.py`'s `ChatRequest` already
      accepts it, nothing downstream reads it yet.
 
-4. **Ingest the remaining two programmes.** The PDFs already exist at
+4. **Ingest the remaining two programmes. B.F.Sc. DONE 2026-08-20; B.Tech Dairy remains.** The PDFs already exist at
    `data/projects/bfsc/prospectus.pdf` and `data/projects/btech-dairy/
    prospectus.pdf` (repo root, same layout as bvsc's). Just re-run:
    ```bash
@@ -437,6 +599,29 @@ sequence," made concrete against what already exists here.
    No code changes needed for this part - `run.py` is already project-id
    agnostic. Comparison/program-list/redirect guards (step 2) only become
    meaningful once this is done.
+
+   B.F.Sc. promotion evidence (2026-08-20): fresh OCR ingestion produced
+   231 chunks; `tools/eval_bfsc_smoke.py` passed 8/8; the 17 user-supplied
+   multi-rule cases in `tools/eval_bfsc_adversarial.py` passed 17/17 with
+   explicit assertions. Fixes included programme-aware eligibility,
+   age-boundary handling, OBC/CVC/NCL consequences, weightage arithmetic,
+   college/seat counts, and the separate ICAR procedure. Visual inspection
+   of prospectus PDF page 11 also confirmed that the merged `10` cell applies
+   to both vocational rows, including Fresh Water Fish Culture (C1); OCR had
+   dropped that association. Keep the frontend pinned to B.V.Sc. until the
+   remaining multi-programme routing/exposure work is deliberately enabled.
+
+   B.Tech. Dairy promotion checkpoint (2026-08-20): fresh OCR processed 72
+   pages and indexed 188 chunks into Qdrant collection `btech-dairy`; the
+   `projects` row was upserted and the collection count was independently
+   verified as 188. `tools/eval_btech_dairy_smoke.py` passes 9/9 covering
+   fees, thresholds, PCME subjects, MHT-CET, duration, constituent-seat quota
+   split, and a reserved-category personal verdict. The 24 user-supplied
+   multi-rule cases in `tools/eval_btech_dairy_adversarial.py` pass 24/24.
+   The fixes cover the exact age boundary, college/quota classification,
+   outside-Maharashtra restrictions, CVC/NCL consequences, horizontal female
+   reservation, agriculturist and defence exceptions, and the first-/second-
+   year exit and re-entry rules. B.F.Sc. smoke regression remained 8/8.
 
 ### Tier B — breadth, per the architecture doc's delivery sequence
 
@@ -500,6 +685,144 @@ cd platform/infra
 docker compose up -d --build
 curl http://127.0.0.1:8100/healthz
 ```
+
+### WebForms/jQuery widget handoff (2026-08-21)
+
+A standalone senior-developer handoff now lives in
+`integrations/mafsu-widget/`: one demo `index.html`, namespaced CSS, jQuery-only
+interaction code, and a deployment README. It uses the real `/api/chat`
+contract, carries `conversationState`, uses the returned `interviewField` for
+guided option buttons, and follows the returned `projectId` after explicit
+programme auto-routing. It deliberately does not require a programme selector
+before a student can ask a question. This is an integration artifact, not a
+claim that roadmap item 7 is finished: ambiguous questions, general 10-turn
+reference resolution, and safe multi-programme comparison are still open.
+
+For the real HTTPS MAFSU site, proxy `/api/chat` through the same website
+origin (preferred) or place the API behind HTTPS with narrowly scoped CORS.
+The current plain-HTTP public IP cannot be called from an HTTPS page because
+browsers block mixed content.
+
+The same checkpoint also introduced the student-facing name **MAFSU Saarthi**
+and a deterministic multi-programme identity/capabilities response. Completed
+eligibility interviews now answer the student's actual application question
+conversationally ("Yes, based on what you've shared, you can apply...") while
+separating verified marks/exam conditions from age/documents and making clear
+that final allotment still depends on merit, quota, preferences, and seats.
+Focused marks/help/identity tests pass 10/10 and both new responses were checked
+against the public endpoint after deployment.
+
+P0 ambiguous-programme correction (2026-08-21): a fresh programme-dependent
+question such as "What are the fees?" no longer silently inherits the B.V.Sc.
+API default. It returns B.V.Sc., B.F.Sc., and B.Tech Dairy choice buttons and
+resubmits the original question after selection. Deterministic guards now run
+before exact-answer cache lookup, preventing an older cached generic answer
+from bypassing a newer or more specific policy/clarification decision; the
+cache revision is `2026-08-21-v14`. The student-facing name was subsequently
+changed to **MAFSU MITRA (Beta)** with an explicit caution notice. The jQuery
+handoff also includes browser speech input, the approved MAFSU palette, and
+top-aligned scrolling for long assistant replies. Focused tests pass 12/12;
+web build/lint and widget JavaScript syntax pass.
+
+Chat-controlled language checkpoint (2026-08-21): explicit requests such as
+"can you text me in Hindi?", including the reproduced typo "test me in with
+Hindi", are treated as interface controls rather than admission/off-topic
+queries. MITRA confirms the switch natively, returns `language`, and stores
+`preferredLanguage` in `slotUpdate`; both React and jQuery clients synchronize
+their visible language buttons from the response. The stored preference forces
+subsequent English-script questions to receive Hindi/Marathi answers, while a
+merely stale UI selector still does not override ordinary English input. The
+exact Hindi command and a persisted "Who are you?" follow-up were verified on
+the public endpoint.
+
+Conversational brevity correction (2026-08-21): a bare greeting such as
+"hi" now receives one short line ("Hi! I'm MAFSU MITRA. How can I help with
+your admission today?") instead of dumping programme and capability details.
+The longer description remains available only for explicit identity/capability
+questions.
+
+Widget identity simplification (2026-08-21): the jQuery handoff now uses one
+visual identity only (M logo -> MAFSU MITRA Beta), removes the competing `सा`
+welcome avatar, changes the descriptor to "Official MAFSU Admission
+Assistant", and uses the approved restrained palette (`#155B46`, `#2F7D62`,
+`#E8F2EC`, `#FAF9F4`, `#252A27`, `#66716B`, `#D8E1DB`, `#B86232`). The toolbar
+has a functional programme selector plus clearer `EN / हिं / मर` labels;
+programme cards have subtle action arrows; quick prompts use student language;
+and the disclaimer is reduced to one verification line. The duplicate saffron
+textarea focus rectangle was removed while retaining a WCAG-visible green
+focus state on the composer container. HTML parsing, JS syntax, diff checks,
+and the design detector pass.
+
+Immediate-reference language correction (2026-08-21): the clients now retain
+the immediately preceding assistant answer and source in `conversationState`.
+Commands such as "say this same in Marathi" repeat that answer in the requested
+language instead of returning only a language-switch acknowledgement. The
+high-frequency identity/capabilities answer has deterministic Hindi and Marathi
+versions so it does not fall back to English during provider throttling; other
+answers use the bounded translation path. Neutral sources (`greeting`,
+`identity`, language controls, and programme clarification) no longer change
+the jQuery widget's visible "All programmes" selection merely because the API
+contract includes its internal B.V.Sc. fallback project ID. React build and
+lint pass; the public endpoint returned `source=language-repeat`, `language=mr`,
+and `model=language-control` for the reproduced Marathi request.
+
+P0 admin review console checkpoint (2026-08-21): `/admin/` is now a real
+database-backed review system, not a mockup. Chat requests carry a generated
+session id; the API stores redacted student/assistant exchanges and returns the
+assistant `messageId`. The console has admin-key authentication, summary
+metrics, programme filtering, full transcripts, answer-level flagging,
+correction/evidence/notes editing, an evidence test gate, exact correction
+publication, cache invalidation, audit rows, and rollback. Provider-unavailable,
+low-confidence, and validation-blocked answers auto-create review cases.
+
+Published corrections are exact programme + language + normalized-question
+overrides and run after deterministic policy guards but before Redis/RAG, so an
+admin edit cannot override injection/eligibility safety logic or contaminate
+similar questions. The test gate loads the selected pages from Qdrant and runs
+the same unsupported-number/foreign-programme validator used for generated
+answers. Local end-to-end proof: session/message logged; manual flag created;
+draft saved; evidence test passed; correction published; `/api/chat` served
+`source=curated-override`; rollback deactivated it. A deliberate `999999`
+figure failed with `unsupported_number: 999999`. Web/API images build, React
+lint, Python/JS syntax, unauthorized 401 behavior, and `/admin/` asset serving
+all pass.
+
+Production admin deployment is deliberately held: the current public demo is
+plain HTTP, and transmitting an admin key plus student transcripts without TLS
+is unacceptable. Student-facing code may continue to deploy, but `/admin/`
+must be enabled only on the real HTTPS MAFSU origin or an HTTPS access proxy.
+
+Eligibility concern-continuity checkpoint (2026-08-21): the guided interview
+now retains and answers the student's original entrance-exam concern instead
+of replacing it with a generic questionnaire. In particular, a B.F.Sc.
+candidate who says they did not pass NEET is immediately told that NEET does
+not determine regular B.F.Sc. eligibility and is then asked about MHT-CET
+2026. The resolved answer repeats that distinction, evaluates the stated
+marks/category and MHT-CET facts, and clearly leaves age and reservation
+documents outstanding. Equivalent NEET-to-MHT-CET context is implemented for
+B.Tech. (Dairy Technology). Focused regressions cover the intermediate and
+resolved B.F.Sc. responses; the exact flow passed against the rebuilt local
+API, and the API service was rebuilt on the demo server.
+
+BVSc entrance-semantics correction (2026-08-21): the guided interview now
+asks "Have you qualified NEET-UG-2026?" rather than merely asking whether the
+student appeared. Its options distinguish qualified, appeared-but-not-
+qualified, and not-yet-appeared. A non-qualifying result ends the interview
+with the correct entrance-rule explanation; a positive resolved answer says
+the student qualified NEET. B.F.Sc. and B.Tech. Dairy retain the prospectus's
+appearance-based MHT-CET wording. The three BVSc response paths passed against
+the rebuilt API and were deployed to the demo API service.
+
+English-subject/multi-programme correction (2026-08-21): mentioning English
+as a Class XII subject no longer triggers the language-preference guard; only
+an actual language-control verb such as reply, speak, say, switch, or translate
+does. The reproduced OBC/49%/PCBE/no-Mathematics/MHT-CET-PCB/failed-NEET/
+fisherman-certificate question now receives one cross-programme determination:
+B.F.Sc. meets the stated core conditions, B.V.Sc. fails the qualifying-NEET
+condition, and Dairy Technology fails Mathematics/PCM. It also states the
+12-point B.F.Sc. fisherman weightage and outstanding OBC-document conditions.
+The exact full question passed through `/api/chat` with `source=verified-policy`
+and `language=en`; both fixes were deployed to the demo API service.
 
 `docker compose ps` from `platform/infra/` to check status;
 `docker compose logs -f api` to tail the API's logs. Frontend at

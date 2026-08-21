@@ -1,5 +1,5 @@
 import { COPY } from "../copy";
-import type { Language } from "../types";
+import type { Language, Programme } from "../types";
 import { LanguageSwitch } from "./LanguageSwitch";
 import "./AppShell.css";
 
@@ -9,6 +9,9 @@ interface Props {
   onOpenCheatSheet: () => void;
   onClearChat: () => void;
   hasMessages: boolean;
+  programme: Programme;
+  onProgrammeChange: (programme: Programme) => void;
+  programmeDisabled: boolean;
 }
 
 // The signature element: the wordmark itself re-renders in the active
@@ -24,6 +27,9 @@ export function AppShell({
   onOpenCheatSheet,
   onClearChat,
   hasMessages,
+  programme,
+  onProgrammeChange,
+  programmeDisabled,
 }: Props) {
   return (
     <header className="app-shell">
@@ -36,6 +42,19 @@ export function AppShell({
         </h1>
       </div>
       <div className="app-shell__actions">
+        <label className="app-shell__programme">
+          <span className="app-shell__programme-label">Programme</span>
+          <select
+            value={programme}
+            onChange={(event) => onProgrammeChange(event.target.value as Programme)}
+            disabled={programmeDisabled}
+            aria-label="Select programme"
+          >
+            <option value="bvsc">B.V.Sc. &amp; A.H.</option>
+            <option value="bfsc">B.F.Sc.</option>
+            <option value="btech-dairy">B.Tech. Dairy</option>
+          </select>
+        </label>
         <button
           type="button"
           className="app-shell__icon-btn"

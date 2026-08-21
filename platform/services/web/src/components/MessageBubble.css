@@ -5,6 +5,42 @@
   animation-duration: calc(0.25s * var(--motion-scale, 1));
 }
 
+.bubble__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.bubble__options button {
+  border: 1px solid var(--color-border, #b9c5b8);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.45rem 0.75rem;
+}
+
+.bubble__evidence {
+  border-top: 1px solid var(--mist);
+  color: var(--ink-muted, #536259);
+  font-size: 0.78rem;
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+}
+
+.bubble__evidence summary {
+  cursor: pointer;
+  font-weight: 650;
+  list-style-position: outside;
+}
+
+.bubble__evidence div {
+  margin-top: 0.35rem;
+  overflow-wrap: anywhere;
+}
+
 .bubble-row--student {
   justify-content: flex-end;
 }

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MITRA Review Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div class="login" data-login>
+    <form class="login__card" data-login-form>
+      <div class="mark">M</div>
+      <p>MAFSU MITRA</p>
+      <h1>Review console</h1>
+      <label>Admin access key<input type="password" data-key autocomplete="current-password" required></label>
+      <button type="submit">Open review queue</button>
+      <span data-login-error></span>
+    </form>
+  </div>
+
+  <main class="console" data-console hidden>
+    <header class="topbar">
+      <div class="brand"><span class="mark">M</span><div><strong>MITRA Review</strong><small>Admissions quality console</small></div></div>
+      <div class="topbar__actions"><span class="environment">Production review</span><button data-logout>Lock</button></div>
+    </header>
+
+    <section class="summary" aria-label="Review summary">
+      <article><span>Conversations</span><strong data-stat="sessions">—</strong></article>
+      <article><span>Messages</span><strong data-stat="messages">—</strong></article>
+      <article class="summary__attention"><span>Needs review</span><strong data-stat="openReviews">—</strong></article>
+      <article><span>Published fixes</span><strong data-stat="published">—</strong></article>
+    </section>
+
+    <section class="workspace">
+      <aside class="queue">
+        <div class="section-head"><div><h2>Student conversations</h2><p>Newest activity first</p></div><button data-refresh aria-label="Refresh">↻</button></div>
+        <div class="filters">
+          <select data-project aria-label="Filter by programme"><option value="">All programmes</option><option value="bvsc">B.V.Sc.</option><option value="bfsc">B.F.Sc.</option><option value="btech-dairy">B.Tech. Dairy</option></select>
+        </div>
+        <div class="queue__list" data-conversations></div>
+      </aside>
+
+      <section class="transcript">
+        <div class="empty" data-empty><span>↙</span><h2>Select a conversation</h2><p>Review the complete student exchange and flag the exact answer that needs correction.</p></div>
+        <div data-transcript hidden>
+          <div class="section-head transcript__head"><div><h2 data-session-title>Conversation</h2><p data-session-meta></p></div></div>
+          <div class="messages" data-messages></div>
+        </div>
+      </section>
+
+      <aside class="review" data-review>
+        <div class="empty empty--compact"><h2>No answer selected</h2><p>Choose “Flag answer” beside an assistant response.</p></div>
+      </aside>
+    </section>
+    <div class="toast" data-toast hidden></div>
+  </main>
+  <script src="admin.js"></script>
+</body>
+</html>

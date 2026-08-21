@@ -173,3 +173,19 @@ def search(collection: str, query_vector: list[float], top_k: int, query_text: s
         }
         for score, payload in final
     ]
+
+
+def page_context(collection: str, pages: list[int]) -> str:
+    """Return indexed source text from explicitly reviewed prospectus pages."""
+    if not pages or not get_client().collection_exists(collection):
+        return ""
+    points, _ = get_client().scroll(
+        collection,
+        scroll_filter=qmodels.Filter(must=[qmodels.FieldCondition(
+            key="page", match=qmodels.MatchAny(any=pages),
+        )]),
+        limit=1000,
+        with_payload=True,
+        with_vectors=False,
+    )
+    return "\n".join(str((point.payload or {}).get("text", "")) for point in points)

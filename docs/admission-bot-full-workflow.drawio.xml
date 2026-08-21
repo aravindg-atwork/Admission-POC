@@ -1,0 +1,285 @@
+<mxfile host="app.diagrams.net" agent="Claude Code">
+  <diagram id="admission-bot-full-workflow" name="Admission Bot - Full Workflow (Brain and Heart)">
+    <mxGraphModel dx="1336" dy="4202" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="3500" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#222222;" value="Admission Assistant — Full Chatbot Workflow&#xa;Every decision the system makes, left and right, between a student&#39;s question and the answer they see" vertex="1">
+          <mxGeometry height="70" width="1300" x="380" y="-70" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fffce0;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=8;spacingTop=6;" value="Shape key&#xa;— Pill = where the journey starts / ends&#xa;— Rectangle = a step the system does automatically&#xa;— Diamond = a decision point (always Yes / No)&#xa;— Big dashed box = one of the two major halves&#xa;— Grey boxes on the right = reference only,&#xa;   not sequential steps" vertex="1">
+          <mxGeometry height="150" width="330" x="60" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="start" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" value="Student types (or speaks) a&#xa;question into the chat widget" vertex="1">
+          <mxGeometry height="60" width="320" x="460" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="proc_lang" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="System works out the language&#xa;(English, Hindi or Marathi) and&#xa;which programme this chat belongs&#xa;to — or &quot;general&quot; if none" vertex="1">
+          <mxGeometry height="90" width="320" x="460" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="proc_router" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="An AI helper (the &quot;router&quot;) takes a fast&#xa;first guess at intent. It&#39;s only a HINT —&#xa;every rule below re-checks with its own&#xa;solid logic and never trusts it alone" vertex="1">
+          <mxGeometry height="90" width="320" x="460" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="g1" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="1. Prompt-injection check&#xa;Is the student trying to manipulate&#xa;the AI itself? (&quot;ignore your&#xa;instructions&quot;, &quot;pretend you&#39;re...&quot;)" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="g2" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="2. Topic-menu check&#xa;Did they ask what topics we&#xa;can help with, or want a menu?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="g3" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="3. Greeting check&#xa;Is this just a hello,&#xa;thanks, or small talk?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="670" as="geometry" />
+        </mxCell>
+        <mxCell id="g4" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="4. Dispute check&#xa;Is the student disputing a&#xa;previous answer as wrong?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="g5" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="5. Correction check&#xa;Are they correcting something they&#xa;told us earlier in this same chat?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="930" as="geometry" />
+        </mxCell>
+        <mxCell id="g6" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="6. Off-topic check&#xa;Is this unrelated to admissions&#xa;entirely? (trivia, unrelated task)" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="g7" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="7. Programme-list check&#xa;Are they asking which&#xa;programmes we offer?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="1190" as="geometry" />
+        </mxCell>
+        <mxCell id="g8" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="8. Eligibility check&#xa;Is this about whether THEY&#xa;personally qualify for a programme?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="1320" as="geometry" />
+        </mxCell>
+        <mxCell id="g9" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="9. Percentage-clarify check&#xa;Did they give a percentage that&#39;s&#xa;unclear — overall, or the subject mix?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="1450" as="geometry" />
+        </mxCell>
+        <mxCell id="g10" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="10. Comparison check&#xa;Are they comparing two or&#xa;more programmes at once?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="1580" as="geometry" />
+        </mxCell>
+        <mxCell id="g11" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="11. Wrong-programme check&#xa;Did they name a DIFFERENT&#xa;programme than this chat&#39;s own?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="1710" as="geometry" />
+        </mxCell>
+        <mxCell id="g12" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="12. Unknown-programme check&#xa;Did they name a programme that&#xa;doesn&#39;t exist, or was retired?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="1840" as="geometry" />
+        </mxCell>
+        <mxCell id="g13" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="13. Which-programme check&#xa;Is it unclear which of the three&#xa;programmes they even mean?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="1970" as="geometry" />
+        </mxCell>
+        <mxCell id="g14" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="14. Multi-part check&#xa;Does the question bundle several&#xa;separate topics together?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="2100" as="geometry" />
+        </mxCell>
+        <mxCell id="g15" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" value="15. Low-confidence check&#xa;Is the system just not confident&#xa;it understood correctly?" vertex="1">
+          <mxGeometry height="110" width="300" x="480" y="2230" as="geometry" />
+        </mxCell>
+        <mxCell id="collector" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;verticalAlign=top;spacingTop=10;" value="Whichever rule matches ANSWERS DIRECTLY —&#xa;often the exact result is computed in code&#xa;first (marks pass/fail, which programme to&#xa;redirect to...), and the AI is only ever asked&#xa;to phrase it nicely, never to decide it&#xa;&#xa;↓ every &quot;Yes&quot; on the left lands here ↓" vertex="1">
+          <mxGeometry height="1930" width="320" x="1360" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="zone_heart" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FCEDEB;strokeColor=#b85450;dashed=1;verticalAlign=top;align=center;fontStyle=1;fontSize=16;spacingTop=10;fontColor=#7a3b32;" value="THE HEART — does the actual work&#xa;Only runs if NONE of the 15 rules above matched. Finds the real answer and writes it." vertex="1">
+          <mxGeometry height="650" width="1270" x="430" y="2420" as="geometry" />
+        </mxCell>
+        <mxCell id="dec_cache" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" value="Brain found no rule that fits.&#xa;Hand off to the Heart: has this&#xa;EXACT question already been&#xa;answered before, for this&#xa;programme (cached)?" vertex="1">
+          <mxGeometry height="120" width="320" x="460" y="2450" as="geometry" />
+        </mxCell>
+        <mxCell id="cachehit" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" value="Return the saved answer&#xa;instantly — no AI call needed" vertex="1">
+          <mxGeometry height="90" width="300" x="1150" y="2470" as="geometry" />
+        </mxCell>
+        <mxCell id="proc_retrieve" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="Turn the question into a search&#xa;fingerprint and search this programme&#39;s&#xa;official prospectus for matching passages" vertex="1">
+          <mxGeometry height="100" width="320" x="460" y="2610" as="geometry" />
+        </mxCell>
+        <mxCell id="proc_generate" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="AI writes an answer using ONLY&#xa;those passages — no invented facts,&#xa;plain everyday language, never claims&#xa;to be from another university" vertex="1">
+          <mxGeometry height="110" width="320" x="460" y="2730" as="geometry" />
+        </mxCell>
+        <mxCell id="proc_validate" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="Double-check the AI&#39;s answer&#xa;actually matches the source&#xa;passages before trusting it" vertex="1">
+          <mxGeometry height="90" width="320" x="460" y="2860" as="geometry" />
+        </mxCell>
+        <mxCell id="proc_savecache" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="Save this question + answer pair,&#xa;so the next student asking it&#xa;gets an instant reply" vertex="1">
+          <mxGeometry height="90" width="320" x="460" y="2970" as="geometry" />
+        </mxCell>
+        <mxCell id="deliver" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="Answer is delivered to the student,&#xa;together with the page it came from" vertex="1">
+          <mxGeometry height="90" width="320" x="460" y="3110" as="geometry" />
+        </mxCell>
+        <mxCell id="proc_trace" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="Every step just taken is recorded&#xa;in a live trace, visible to staff&#xa;in real time" vertex="1">
+          <mxGeometry height="80" width="320" x="460" y="3220" as="geometry" />
+        </mxCell>
+        <mxCell id="end" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" value="Conversation continues — a follow-up&#xa;question remembers what was&#xa;already said" vertex="1">
+          <mxGeometry height="80" width="320" x="460" y="3320" as="geometry" />
+        </mxCell>
+        <mxCell id="refnote" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontStyle=2;fontColor=#666666;" value="Reference panels below →&#xa;support the flow on the left,&#xa;not sequential steps themselves" vertex="1">
+          <mxGeometry height="50" width="360" x="1760" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="panel_engine" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;dashed=1;verticalAlign=top;align=center;fontStyle=1;fontSize=13;spacingTop=6;" value="Engine room — who actually does the thinking" vertex="1">
+          <mxGeometry height="760" width="360" x="1760" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="eng_nvfast" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="NVIDIA fast model — quick decisions:&#xa;the router&#39;s guess, plus greetings&#xa;(roughly 0.6 seconds)" vertex="1">
+          <mxGeometry height="70" width="320" x="1780" y="195" as="geometry" />
+        </mxCell>
+        <mxCell id="eng_mistral" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="Mistral AI — writes the final&#xa;answers, both for the Brain&#39;s guard&#xa;replies and the Heart&#39;s generated&#xa;ones (roughly 2-90s, occasionally slower)" vertex="1">
+          <mxGeometry height="80" width="320" x="1780" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="eng_nvreason" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="NVIDIA reasoning model — backup&#xa;when the main one fails&#xa;(20-130 seconds, high variance)" vertex="1">
+          <mxGeometry height="70" width="320" x="1780" y="365" as="geometry" />
+        </mxCell>
+        <mxCell id="eng_embed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="Self-hosted search model (BGE-M3) —&#xa;turns questions into search&#xa;fingerprints for the Heart&#39;s retrieval" vertex="1">
+          <mxGeometry height="70" width="320" x="1780" y="445" as="geometry" />
+        </mxCell>
+        <mxCell id="eng_ocr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="Mistral OCR — reads the original&#xa;prospectus PDFs into text.&#xa;Done once when documents are&#xa;loaded, not per question" vertex="1">
+          <mxGeometry height="80" width="320" x="1780" y="525" as="geometry" />
+        </mxCell>
+        <mxCell id="eng_stt" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="Voxtral (speech-to-text) — lets a&#xa;student speak their question&#xa;instead of typing it" vertex="1">
+          <mxGeometry height="70" width="320" x="1780" y="615" as="geometry" />
+        </mxCell>
+        <mxCell id="panel_prog" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;dashed=1;verticalAlign=top;align=center;fontStyle=1;fontSize=13;spacingTop=6;" value="Three programmes, one front door" vertex="1">
+          <mxGeometry height="340" width="360" x="1760" y="950" as="geometry" />
+        </mxCell>
+        <mxCell id="prog_default" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="&quot;default&quot; — general front door.&#xa;Figures out which programme to&#xa;send the student to. Holds no&#xa;documents of its own." vertex="1">
+          <mxGeometry height="75" width="320" x="1780" y="995" as="geometry" />
+        </mxCell>
+        <mxCell id="prog_bvsc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="B.V.Sc. &amp; A.H. — has its&#xa;own official prospectus" vertex="1">
+          <mxGeometry height="55" width="320" x="1780" y="1080" as="geometry" />
+        </mxCell>
+        <mxCell id="prog_bfsc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="B.F.Sc. — has its&#xa;own official prospectus" vertex="1">
+          <mxGeometry height="55" width="320" x="1780" y="1145" as="geometry" />
+        </mxCell>
+        <mxCell id="prog_btech" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="B.Tech. (Dairy Technology) —&#xa;has its own official prospectus" vertex="1">
+          <mxGeometry height="55" width="320" x="1780" y="1210" as="geometry" />
+        </mxCell>
+        <mxCell id="panel_admin" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;dashed=1;verticalAlign=top;align=center;fontStyle=1;fontSize=13;spacingTop=6;" value="Staff / operator console (/admin)" vertex="1">
+          <mxGeometry height="220" width="360" x="1760" y="1330" as="geometry" />
+        </mxCell>
+        <mxCell id="admin_body" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;align=left;spacingLeft=6;" value="Watches conversations live as they&#xa;happen, clears the saved-answer&#xa;cache per programme, manages each&#xa;programme&#39;s access key, and reviews&#xa;thumbs-up / thumbs-down feedback" vertex="1">
+          <mxGeometry height="150" width="320" x="1780" y="1375" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="proc_lang">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="proc_lang" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="proc_router">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="proc_router" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="g1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n1" edge="1" parent="1" source="g1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g2" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n2" edge="1" parent="1" source="g2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g3" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n3" edge="1" parent="1" source="g3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g4" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n4" edge="1" parent="1" source="g4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g5" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n5" edge="1" parent="1" source="g5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g6" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n6" edge="1" parent="1" source="g6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g7" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n7" edge="1" parent="1" source="g7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g8" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n8" edge="1" parent="1" source="g8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g9" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n9" edge="1" parent="1" source="g9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g10" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n10" edge="1" parent="1" source="g10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g11" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n11" edge="1" parent="1" source="g11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g12" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n12" edge="1" parent="1" source="g12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g13" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n13" edge="1" parent="1" source="g13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g14" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n14" edge="1" parent="1" source="g14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=10;fontColor=#6c8ebf;" target="g15" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n15" edge="1" parent="1" source="g15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;fontStyle=1;fontColor=#b85450;" target="dec_cache" value="No rule fit — hand off to the Heart">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y1" edge="1" parent="1" source="g1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.03;" target="collector" value="Yes → refuses, stays in&#xa;character, redirects">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y2" edge="1" parent="1" source="g2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.10;" target="collector" value="Yes → shows a topic menu">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y3" edge="1" parent="1" source="g3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.16;" target="collector" value="Yes → replies warmly,&#xa;invites a real question">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y4" edge="1" parent="1" source="g4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.23;" target="collector" value="Yes → acknowledges, offers&#xa;to double-check / escalate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y5" edge="1" parent="1" source="g5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.30;" target="collector" value="Yes → updates what we know,&#xa;re-answers with it">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y6" edge="1" parent="1" source="g6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.37;" target="collector" value="Yes → politely declines,&#xa;redirects to admissions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y7" edge="1" parent="1" source="g7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.43;" target="collector" value="Yes → lists the three&#xa;undergraduate programmes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y8" edge="1" parent="1" source="g8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.50;" target="collector" value="Yes → calculates pass/fail in&#xa;code; asks one missing detail&#xa;at a time if needed">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y9" edge="1" parent="1" source="g9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.57;" target="collector" value="Yes → asks which percentage&#xa;they mean, before judging it">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y10" edge="1" parent="1" source="g10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.63;" target="collector" value="Yes → answers programme-&#xa;by-programme, side by side">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y11" edge="1" parent="1" source="g11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.70;" target="collector" value="Yes → points them to the&#xa;right programme&#39;s own chat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y12" edge="1" parent="1" source="g12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.77;" target="collector" value="Yes → explains plainly it&#xa;isn&#39;t offered any more">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y13" edge="1" parent="1" source="g13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.84;" target="collector" value="Yes → asks which programme,&#xa;before answering">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y14" edge="1" parent="1" source="g14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.90;" target="collector" value="Yes → splits it, answers&#xa;each part in turn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y15" edge="1" parent="1" source="g15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=9;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.97;" target="collector" value="Yes → asks a clarifying&#xa;question rather than guess">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="hc_yes" edge="1" parent="1" source="dec_cache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;fontStyle=1;fontColor=#d79b00;" target="cachehit" value="Yes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="hc_no" edge="1" parent="1" source="dec_cache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;fontStyle=1;fontColor=#d6b656;" target="proc_retrieve" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h1" edge="1" parent="1" source="proc_retrieve" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="proc_generate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h2" edge="1" parent="1" source="proc_generate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="proc_validate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h3" edge="1" parent="1" source="proc_validate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="proc_savecache">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h4" edge="1" parent="1" source="proc_savecache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="deliver">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="mcollector" edge="1" parent="1" source="collector" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;entryX=1;entryY=0.3;" target="deliver">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1520" y="3155" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="mcachehit" edge="1" parent="1" source="cachehit" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0.5;exitY=1;entryX=1;entryY=0.7;" target="deliver">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1300" y="3175" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="deliver" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="proc_trace">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="proc_trace" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

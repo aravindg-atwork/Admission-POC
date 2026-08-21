@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MAFSU Admissions Widget Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600;700&family=Tiro+Devanagari+Marathi:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="mafsu-admissions-widget.css">
+</head>
+<body>
+  <main class="demo-page">
+    <p class="demo-page__eyebrow">Integration preview</p>
+    <h1>MAFSU website content remains untouched.</h1>
+    <p>The admissions assistant is isolated in the lower-right corner. This page represents how it will sit above the existing WebForms and jQuery website.</p>
+  </main>
+
+  <div id="mafsu-admissions-widget" class="mafsu-chat" data-api-base="http://159.69.210.30:8080" data-default-language="en">
+    <section class="mafsu-chat__panel" id="mafsu-chat-panel" role="dialog" aria-modal="false" aria-labelledby="mafsu-chat-title" hidden>
+      <header class="mafsu-chat__header">
+        <div class="mafsu-chat__seal" aria-hidden="true">M</div>
+        <div class="mafsu-chat__identity">
+          <p class="mafsu-chat__kicker"><span></span> Official MAFSU Admission Assistant</p>
+          <h2 id="mafsu-chat-title">MAFSU MITRA <small>Beta</small></h2>
+        </div>
+        <button class="mafsu-chat__icon-button" type="button" data-chat-action="close" aria-label="Close admissions assistant">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+
+      <div class="mafsu-chat__toolbar">
+        <label class="mafsu-chat__programme">
+          <span class="mafsu-chat__sr-only">Programme</span>
+          <select data-programme-select aria-label="Select programme">
+            <option value="">All programmes</option>
+            <option value="bvsc">B.V.Sc. &amp; A.H.</option>
+            <option value="bfsc">B.F.Sc.</option>
+            <option value="btech-dairy">B.Tech. Dairy</option>
+          </select>
+        </label>
+        <div class="mafsu-chat__languages" role="group" aria-label="Answer language">
+          <button type="button" data-language="en" aria-pressed="true">EN</button>
+          <button type="button" data-language="hi" aria-pressed="false">हिं</button>
+          <button type="button" data-language="mr" aria-pressed="false">मर</button>
+        </div>
+        <button class="mafsu-chat__reset" type="button" data-chat-action="reset">New chat</button>
+      </div>
+
+      <div class="mafsu-chat__messages" data-chat-messages role="log" aria-live="polite" aria-relevant="additions">
+        <div class="mafsu-chat__welcome">
+          <h3>Your MAFSU admission starts here.</h3>
+          <p>Select your programme or ask me anything about eligibility, documents, fees and admission.</p>
+          <div class="mafsu-chat__course-grid" aria-label="Choose a programme">
+            <button type="button" data-question="Help me with B.V.Sc. &amp; A.H."><strong>B.V.Sc.</strong><span>Veterinary Science</span><b aria-hidden="true">→</b></button>
+            <button type="button" data-question="Help me with B.F.Sc."><strong>B.F.Sc.</strong><span>Fishery Science</span><b aria-hidden="true">→</b></button>
+            <button type="button" data-question="Help me with B.Tech. Dairy Technology"><strong>B.Tech.</strong><span>Dairy Technology</span><b aria-hidden="true">→</b></button>
+          </div>
+          <div class="mafsu-chat__quick-questions">
+            <button type="button" data-question="Am I eligible?">Am I eligible?</button>
+            <button type="button" data-question="What documents do I need?">Documents required</button>
+            <button type="button" data-question="What are the fees and seats?">Fees &amp; seats</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mafsu-chat__status" data-chat-status hidden></div>
+      <form class="mafsu-chat__composer" data-chat-form>
+        <label class="mafsu-chat__sr-only" for="mafsu-chat-question">Ask an admissions question</label>
+        <textarea id="mafsu-chat-question" data-chat-input rows="1" maxlength="1200" placeholder="Ask about eligibility, fees, seats…"></textarea>
+        <button class="mafsu-chat__mic" type="button" data-chat-mic aria-label="Speak your question" title="Speak your question">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6"/></svg>
+        </button>
+        <button type="submit" data-chat-send aria-label="Send question">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"/><path d="m12 13 7-8"/></svg>
+        </button>
+      </form>
+      <p class="mafsu-chat__notice"><span aria-hidden="true">ⓘ</span> Verify final admission decisions with MAFSU.</p>
+    </section>
+
+    <button class="mafsu-chat__launcher" type="button" data-chat-action="toggle" aria-controls="mafsu-chat-panel" aria-expanded="false">
+      <span class="mafsu-chat__launcher-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M5 5.8h14v9.4H9.8L6 18.5v-3.3H5V5.8Z"/><path d="M8.5 9h7M8.5 12h4.5"/></svg>
+      </span>
+      <span class="mafsu-chat__launcher-copy" aria-hidden="true">Ask MAFSU MITRA</span>
+      <span class="mafsu-chat__online" aria-hidden="true"></span>
+    </button>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+  <script src="mafsu-admissions-widget.js"></script>
+</body>
+</html>

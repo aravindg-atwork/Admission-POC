@@ -9,7 +9,13 @@ and Indic TTS - live in Docker containers this backend calls over HTTP.
 import os
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# One extra .parent versus the original (BASE_DIR used to be this file's
+# grandparent, i.e. the repo root, back when backend/ lived there directly).
+# Moved to archived/backend/ on 2026-08-21 (platform/ is now the primary
+# system) - BASE_DIR must still resolve to the TRUE repo root, since that's
+# where the real data/ and .env live (both deliberately were NOT moved into
+# archived/ - data/ is still shared with platform/'s own ingestion scripts).
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def _load_dotenv():

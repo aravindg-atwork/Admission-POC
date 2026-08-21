@@ -35,7 +35,11 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# One extra .parent versus the original - tools/ moved to archived/tools/
+# on 2026-08-21 (platform/ is now the primary system). BASE_DIR must still
+# resolve to the TRUE repo root, since .env/data/ live there, not inside
+# archived/ (see backend/config.py's own note on the same fix).
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Everything git leaves behind that the demo genuinely needs, and why.
 FILES = [

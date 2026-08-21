@@ -24,12 +24,19 @@ class Settings(BaseSettings):
     # --- Service ---
     service_name: str = "admission-assistant-api"
     environment: str = "local"
+    admin_api_key: str = ""
+    conversation_retention_days: int = 30
 
     # --- Postgres ---
     postgres_dsn: str = "postgresql+psycopg://platform:platform@localhost:5432/platform"
 
     # --- Redis (ephemeral state only - session, rate limits; never durable data) ---
     redis_url: str = "redis://localhost:6380/0"
+    faq_cache_enabled: bool = True
+    faq_cache_ttl_seconds: int = 86400
+    # Increment when prospectus content or deterministic policy changes.
+    # Including this revision in every key makes invalidation atomic.
+    faq_cache_revision: str = "2026-08-21-v14"
 
     # --- Qdrant ---
     qdrant_url: str = "http://localhost:6333"
