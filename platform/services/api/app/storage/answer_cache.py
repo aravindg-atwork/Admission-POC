@@ -20,13 +20,17 @@ from ..settings import get_settings
 _settings = get_settings()
 _client: Redis | None = None
 _SPACE_RE = re.compile(r"\s+")
-_UNSAFE_SOURCES = {"provider-unavailable", "provider-busy", "low-confidence", "validation-blocked", "no-context"}
+_UNSAFE_SOURCES = {"provider-unavailable", "service-unavailable", "provider-busy", "low-confidence", "validation-blocked", "no-context"}
 
 
 def _redis() -> Redis:
     global _client
     if _client is None:
-        _client = Redis.from_url(_settings.redis_url, decode_responses=True)
+        _client = Redis.from_url(
+            _settings.redis_url, decode_responses=True,
+            socket_connect_timeout=_settings.redis_operation_timeout_seconds,
+            socket_timeout=_settings.redis_operation_timeout_seconds,
+        )
     return _client
 
 

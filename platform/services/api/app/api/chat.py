@@ -82,7 +82,15 @@ def chat(req: ChatRequest) -> ChatResponse:
         changed = ", ".join(f"{key}: {labels.get(str(value), value)}" for key, value in corrections.items())
         result = {"answer": f"Updated—{changed} now replaces the earlier detail. I will use the corrected fact for the rest of this eligibility check.", "source": "state-correction", "model": "state-machine", "pages": [], "slotUpdate": corrections, "language": req.uiLanguage}
     else:
-        result = answer(project_id, req.question, state, req.uiLanguage)
+        try:
+            result = answer(project_id, req.question, state, req.uiLanguage)
+        except Exception as exc:  # fail closed: never answer admission facts from model memory
+            print(f"[chat-fail-closed] {project_id}: {exc!r}")
+            result = {
+                "answer": "I'm unable to verify admission information right now. Please try again shortly.",
+                "source": "service-unavailable", "model": "none", "pages": [],
+                "language": req.uiLanguage,
+            }
     if corrections:
         result["slotUpdate"] = {**result.get("slotUpdate", {}), **corrections}
     explicit_facts = safety.turn_facts(req.question, project_id)

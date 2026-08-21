@@ -107,6 +107,24 @@ services:
         limits:
           memory: 256M
 
+  retention-worker:
+    build:
+      context: ../services/api
+    command: ["python", "-m", "app.storage.retention"]
+    env_file:
+      - ../services/api/.env
+    environment:
+      POSTGRES_DSN: postgresql+psycopg://platform:platform@postgres:5432/platform
+      CONVERSATION_RETENTION_DAYS: ${CONVERSATION_RETENTION_DAYS:-90}
+      RETENTION_POLL_HOURS: ${RETENTION_POLL_HOURS:-24}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
   web:
     build:
       context: ../services/web

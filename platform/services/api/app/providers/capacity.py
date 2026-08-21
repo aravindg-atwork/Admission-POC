@@ -21,7 +21,11 @@ class ProviderBusyError(RuntimeError):
 def _redis() -> Redis:
     global _client
     if _client is None:
-        _client = Redis.from_url(_settings.redis_url, decode_responses=True)
+        _client = Redis.from_url(
+            _settings.redis_url, decode_responses=True,
+            socket_connect_timeout=_settings.redis_operation_timeout_seconds,
+            socket_timeout=_settings.redis_operation_timeout_seconds,
+        )
     return _client
 
 

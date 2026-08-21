@@ -12,13 +12,31 @@ from .models import ConversationMessage, ConversationSession, MachineReview, Rev
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
 _PHONE = re.compile(r"(?<!\d)(?:\+?91[-\s]?)?[6-9]\d{9}(?!\d)")
 _AADHAAR = re.compile(r"(?<!\d)\d{4}[ -]?\d{4}[ -]?\d{4}(?!\d)")
+_OTP = re.compile(r"(?i)\b(?:otp|one[ -]?time password)\s*[:#-]?\s*\d{4,8}\b")
+_BANK = re.compile(r"(?i)\b(?:account|a/c)\s*(?:number|no\.?|#)?\s*[:#-]?\s*\d{9,18}\b")
+_EXAM_ID = re.compile(
+    r"(?i)\b(?:(?:neet|cet|cuet)\s+(?:application|registration|roll)|"
+    r"(?:application|registration|roll)\s+(?:id|no\.?|number))\s*[:#-]?\s*[A-Z0-9-]{7,}\b"
+)
 _SESSION = re.compile(r"^[a-f0-9]{32}$")
 
 
 def redact(text: str) -> str:
     text = _EMAIL.sub("[email redacted]", text)
     text = _PHONE.sub("[phone redacted]", text)
-    return _AADHAAR.sub("[identity number redacted]", text)
+    text = _OTP.sub("[one-time password redacted]", text)
+    # _BANK before _AADHAAR, deliberately: _BANK requires a contextual cue
+    # ("account"/"a/c") next to its digits, _AADHAAR matches a bare 12-digit
+    # run with no cue at all. In the original order, a bank account number
+    # (e.g. "account number 123456789012") was consumed by _AADHAAR first
+    # (any 12 digits match it) before _BANK's own, more specific pattern
+    # ever got a turn - the value was still redacted either way, just
+    # mislabeled as an identity number instead of a bank account. Most-
+    # specific-pattern-first fixes the label without changing what gets
+    # removed. tools/test_privacy_retention.py.
+    text = _BANK.sub("[bank account redacted]", text)
+    text = _AADHAAR.sub("[identity number redacted]", text)
+    return _EXAM_ID.sub("[exam identifier redacted]", text)
 
 
 def _needs_machine_review(result: dict) -> bool:
@@ -68,7 +86,7 @@ def log_exchange(session_id: str | None, project_id: str, language: str,
             db.add(MachineReview(
                 message_id=assistant.id, status="pending", created_at=now, updated_at=now,
             ))
-        if result.get("source") in {"validation-blocked", "provider-unavailable", "low-confidence"}:
+        if result.get("source") in {"validation-blocked", "provider-unavailable", "service-unavailable", "low-confidence"}:
             review = ReviewCase(
                 message_id=assistant.id, reason="automatic-safety-flag",
                 status="open", notes=f"Automatically flagged source: {result.get('source')}",

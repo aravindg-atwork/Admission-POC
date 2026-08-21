@@ -72,7 +72,7 @@ def decision_state(result: dict) -> str:
     source, answer = str(result.get("source", "")), str(result.get("answer", "")).lower()
     if source in {"clarification", "clarify-percentage", "eligibility-interview", "programme-clarification", "state-contradiction", "malformed-input"}:
         return "needs_clarification"
-    if source in {"low-confidence", "no-context", "provider-unavailable", "validation-blocked", "knowledge-boundary"}:
+    if source in {"low-confidence", "no-context", "provider-unavailable", "service-unavailable", "validation-blocked", "knowledge-boundary"}:
         return "cannot_confirm"
     if any(term in answer for term in ("document deficiency", "reservation claim", "expired ncl", "caste validity", "missing document")):
         return "document_issue"

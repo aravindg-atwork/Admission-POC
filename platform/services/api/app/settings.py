@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     environment: str = "local"
     admin_api_key: str = ""
     admin_require_two_person_high_risk: bool = False
-    conversation_retention_days: int = 30
+    conversation_retention_days: int = 90
+    retention_poll_hours: int = 24
     cors_origins: str = "http://159.69.210.30,http://localhost:5180,http://127.0.0.1:5180,null"
     chat_rate_limit_per_minute: int = 30
     max_request_bytes: int = 16384
@@ -36,6 +37,7 @@ class Settings(BaseSettings):
 
     # --- Redis (ephemeral state only - session, rate limits; never durable data) ---
     redis_url: str = "redis://localhost:6380/0"
+    redis_operation_timeout_seconds: float = 1.0
     faq_cache_enabled: bool = True
     faq_cache_ttl_seconds: int = 86400
     # Increment when prospectus content or deterministic policy changes.

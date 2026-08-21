@@ -130,6 +130,14 @@ def operations() -> dict:
         alerts.append("Multiple responses exceeded 10 seconds")
     if metrics["requests"] >= 20 and metrics["cacheHitRate"] < 0.15:
         alerts.append("Cache hit rate is below 15%")
+    if metrics["requests"] >= 20 and metrics["cannotConfirmRate"] >= 0.10:
+        alerts.append("Cannot-confirm responses are at least 10% of today's traffic")
+    if metrics["validationBlockRate"] >= 0.05:
+        alerts.append("Eligibility/admission answers blocked by validation are elevated")
+    if metrics["missingSourceTrace"]:
+        alerts.append("One or more factual responses were missing source-trace metadata")
+    if metrics["missingEvidence"]:
+        alerts.append("One or more factual responses lacked pages or deterministic rule evidence")
     return {**metrics, "alerts": alerts}
 
 

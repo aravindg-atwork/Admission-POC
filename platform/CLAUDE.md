@@ -1057,3 +1057,100 @@ fallback only for local `file:` preview. No ARR, IIS Manager or `web.config`
 change is required; rollback is deleting the handler and widget files. The
 handler compiled successfully against `System.Web.dll`, both JavaScript copies
 passed syntax checks, and canonical/Gmail-safe package copies are identical.
+
+### Production-operations hardening checkpoint (2026-08-21)
+
+Admin corrections now create immutable `correction_versions` snapshots with
+severity, admission year, evidence pages, proposer, approver and lifecycle
+status. Publish and rollback audit events identify the acting admin. A
+configurable two-person gate exists for critical/high changes but defaults off
+while only one human reviewer is available.
+
+Transcript minimisation now redacts email, Indian phone, Aadhaar-shaped values,
+OTP, bank-account and exam/application identifiers. A dedicated retention
+worker anonymises message bodies and evidence pages after 90 days without
+breaking review/audit foreign keys. The code-only widget explicitly warns
+students not to share Aadhaar, OTPs, passwords or bank details.
+
+Operational telemetry now includes decision-state mix, cannot-confirm rate,
+validation blocks, injection attempts, retrieval failures, and missing
+source/evidence signals. `/api/readyz` checks Postgres, Redis and Qdrant and
+returns HTTP 503 when a replica should leave load-balancer rotation.
+
+The local Qdrant outage drill passed: readiness became 503 and a grounded
+admission question returned `cannot_confirm`, zero pages and no guessed fact;
+Qdrant then restored healthy. The first Redis drill exposed unbounded client
+connection waits. All Redis call sites now use one-second connect/operation
+timeouts; the replay completed through the safe HTTP 200 degradation path and
+Redis restored. Any otherwise-unhandled answer-pipeline dependency exception
+is caught at the API boundary and converted to `service-unavailable`, never an
+eligibility decision from model memory. Staged/atomic knowledge release remains
+the next code-side operations item; do not mark it complete based on the older
+synchronous ingestion CLI.
+
+### Recovery-drill checkpoint (2026-08-21) - Postgres/embedding/LLM (local), replica failover (production)
+
+Completes the local Qdrant/Redis drills above with the remaining scenarios
+from the go-live checklist. Postgres-down, embedding-service-down (SSH
+tunnel killed), and LLM-providers-down (both `MISTRAL_URL`/`NVIDIA_URL`
+pointed at an unreachable address) were run against the local stack -
+all three degraded cleanly: `/healthz` stayed 200 (liveness correctly
+doesn't depend on dependencies), `/api/readyz` correctly reported 503
+with a per-dependency breakdown, and every chat request returned HTTP
+200 with a short, non-technical, student-facing message (`service-
+unavailable` / `provider-unavailable`), never a raw error or a 500. All
+three recovered cleanly once restored.
+
+**A real bug was found and fixed testing the two replica-specific
+scenarios on production** (these need the actual 2-replica+nginx
+topology; local only ever runs one instance). `nginx.prod.conf`'s
+`upstream mitra_api { server api:8000; }` resolves the shared Compose
+service hostname ONCE, at nginx startup - with 2 replicas behind that
+one name, this pinned 100% of live traffic to whichever replica's IP
+happened to be returned first. The OTHER replica was receiving zero
+requests. Verified live (10/10 test requests landed on one container).
+Killing that one pinned replica produced a raw nginx 502 to students -
+no failover to the healthy second replica, because nginx never knew it
+existed.
+
+A first fix attempt (nginx's dynamic-resolve pattern: `resolver` +
+a variable in `proxy_pass`) looked correct and passed `nginx -t`, but
+verified LIVE it made things worse - at any moment it still only has
+ONE resolved IP cached, so when that target died, `proxy_next_upstream`
+had nothing else to retry and the outage became total. Caught within
+the same drill via a real kill test, not shipped on config-looks-right
+confidence, and rolled back immediately.
+
+**Also found during this fix**: `docker compose up -d web` (no
+`--build`) does NOT reload nginx for a bind-mounted config file change -
+Compose only recreates a container when the SERVICE DEFINITION changes,
+not when a mounted file's content changes on the host. Every "fix" in
+this session was silently testing the OLD config until `nginx -s
+reload` was run explicitly. Any future nginx.prod.conf change must be
+followed by an explicit `docker exec admission-platform-web-1 nginx -s
+reload` (after `nginx -t`), never just `docker compose up -d web` alone -
+that command LOOKS like it redeployed and prints "Running", giving no
+signal that nothing actually changed.
+
+The real fix: an explicit `upstream` block naming both replica
+CONTAINERS directly (`admission-platform-api-1`/`-2`, stable names for a
+fixed `replicas: 2`, confirmed resolvable via `getent hosts`), with
+`max_fails`/`fail_timeout` and `proxy_next_upstream` retrying against
+the other named peer. Verified live: kill either replica, the very next
+request still returns 200 through the survivor (no visible failure to
+the student); `proxy_connect_timeout` tightened from the default/5s to
+2s afterward once the ~6s failover latency was measured (same-host
+Docker connection, no reason to wait that long) - failover latency is
+now ~3s. Total-outage (both replicas down) still correctly returns a
+raw nginx 504 to a direct/curl caller - the React widget itself already
+handles this gracefully (`chat.ts`'s `!res.ok` check -> friendly
+"not live" banner, confirmed in code), but a non-widget caller (a
+direct API integration, or the WebForms `MitraProxy.ashx` handler) would
+see the raw HTML 504, not JSON - worth a friendlier `error_page` block
+if that integration needs it.
+
+This tradeoff is deliberate and stated in the config's own comment: the
+explicit replica list must be kept in sync with `deploy.replicas` by
+hand - it does not auto-discover new replicas the way a real service
+mesh would. Fine for a fixed, deliberately-set count; revisit if
+replicas ever scale dynamically.
