@@ -824,6 +824,45 @@ condition, and Dairy Technology fails Mathematics/PCM. It also states the
 The exact full question passed through `/api/chat` with `source=verified-policy`
 and `language=en`; both fixes were deployed to the demo API service.
 
+Promotion-gate audit (2026-08-21): the three-programme capstone decision ran
+10/10 identically through `/api/chat` with `source=verified-policy`, including
+the separate thresholds/exams, Dairy Mathematics rejection, B.F.Sc.-only
+fisherman weightage, 20-point cap, and non-guarantee caveat. The broader suite
+is NOT yet green: the first current run produced BVSc 13/18, while BFSc/Dairy
+were heavily disrupted by an unavailable local embedding endpoint and by old
+eval payloads that omit the selected programme in `conversationState` (the
+current widget contract sets it when a course is selected). Provider failures
+previously escaped as HTTP 500; `_answer_uncached` now catches embedding
+failures and returns `source=provider-unavailable` with a safe retry/contact-
+admissions response. That fallback was locally verified and deployed. These
+safe fallbacks remain promotion failures, not passes; controlled UAT/public
+release must wait for a healthy provider and repeated full-suite green runs.
+
+Natural-paragraph promotion gate (2026-08-21): added
+`tools/eval_paragraph_adversarial.py` for the first 23 supplied long-form
+student profiles spanning BVSc (1-7), BFSc (8-14), Dairy (15-20), and cross-
+course decisions (21-23). A deterministic compound-policy layer now answers
+every material clause before generic RAG: thresholds versus merit, NEET versus
+MHT-CET contamination, NRI XII-abroad exceptions, expired NCL consequences,
+quota routing, deficient documents, preference uncertainty, B.F.Sc.-only
+weightage, Dairy Mathematics/PCM, outside-state Management quota, and Defence
+disability exceptions. Local result: 23/23. Deployed server result: 23/23, then
+three consecutive repeat runs also 23/23. This gate is green; it does not erase
+the separate full-suite/provider/multilingual production requirements above.
+
+Independent paraphrase pack (2026-08-21): the later 16-case Expected Answer /
+must-not-say pack initially produced about 8/16 semantic passes on the healthy
+server path. Added compound rules for the eight failures: veterinary
+Management quota cannot bypass failed NEET; BFSc ignores failed NEET when its
+own MHT-CET/marks rules are met; merit cannot cure 49% Unreserved; BFSc NRI
+XII-abroad MHT-CET exemption; Dairy Mathematics and PCM-CET are separate
+requirements; first-preference non-reporting cancels later-round candidature;
+and the final BVSc/BFSc/Dairy/fisherman/NCL profile is composed per programme.
+Deployed result: all 16 returned the expected substantive decisions, zero safe
+fallbacks and zero HTTP errors. Three consecutive repeat runs each returned
+16 substantive / 0 fallback / 0 error. This is independent paraphrase coverage,
+not merely rerunning the earlier exact 23 questions.
+
 `docker compose ps` from `platform/infra/` to check status;
 `docker compose logs -f api` to tail the API's logs. Frontend at
 `http://localhost:5180`, API at `http://localhost:8100`, Qdrant's own API

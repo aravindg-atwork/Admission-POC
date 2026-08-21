@@ -29,6 +29,7 @@
   var welcomeHtml = $messages.html();
   var $form = $root.find("[data-chat-form]");
   var $input = $root.find("[data-chat-input]");
+  var $charCount = $root.find("[data-char-count]");
   var $send = $root.find("[data-chat-send]");
   var $mic = $root.find("[data-chat-mic]");
   var $status = $root.find("[data-chat-status]");
@@ -171,6 +172,14 @@
     $root.find("[data-programme-select]").val("");
     $status.prop("hidden", true).empty();
     $input.val("").css("height", "auto");
+    updateComposerMeta();
+  }
+
+  function updateComposerMeta() {
+    var length = String($input.val() || "").length;
+    var maximum = Number($input.attr("maxlength")) || 1200;
+    $charCount.text(length + " / " + maximum);
+    $charCount.parent().attr("data-near-limit", String(length >= maximum * 0.85));
   }
 
   function setupSpeechInput() {
@@ -244,6 +253,7 @@
     event.preventDefault();
     var question = $input.val();
     $input.val("").css("height", "auto");
+    updateComposerMeta();
     ask(question);
   });
 
@@ -254,7 +264,8 @@
     }
   }).on("input", function () {
     this.style.height = "auto";
-    this.style.height = Math.min(this.scrollHeight, 105) + "px";
+    this.style.height = Math.min(this.scrollHeight, 148) + "px";
+    updateComposerMeta();
   });
 
   $(document).on("keydown.mafsuAdmissions", function (event) {
@@ -269,4 +280,5 @@
   });
 
   setupSpeechInput();
+  updateComposerMeta();
 })(window.jQuery, window, document);

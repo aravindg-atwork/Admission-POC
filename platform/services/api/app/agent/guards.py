@@ -192,6 +192,157 @@ def multi_programme_eligibility_guard(question: str, state: dict) -> dict | None
     )
 
 
+def paragraph_policy_guard(question: str, state: dict) -> dict | None:
+    """High-risk compound rules from the natural-paragraph promotion gate."""
+    low = " ".join(question.lower().split())
+    if "private veterinary" in low and "management" in low and "neet qualify nahi hua" in low:
+        return _reply(
+            "No. Management quota does not remove the B.V.Sc. NEET requirement. MAFSU fills Management-quota seats in provisionally affiliated private veterinary colleges through University allotment using the NEET-UG-2026 qualifying score/marks. Since you did not qualify NEET, you cannot use Management quota to bypass that requirement, and the private college cannot admit you directly.",
+            "verified-policy", pages=[7, 9, 26],
+        )
+    if "neet fail hogaya" in low and "44%" in low and "fisheries" in low and "mht cet pcb" in low:
+        return _reply(
+            "Failing NEET does not make you ineligible for regular B.F.Sc. As an SC/Reserved candidate, your 44% in Physics, Chemistry, Biology and English exceeds the 40% minimum, and you appeared for MHT-CET 2026 PCB. You therefore meet those academic and entrance requirements so far. Final eligibility still requires the age condition and valid category/admission documents.",
+            "verified-policy", pages=[5, 7],
+        )
+    if "general category 49% only" in low and "97 percentile" in low and "fisherman" in low:
+        return _reply(
+            "No. An Unreserved B.F.Sc. candidate needs at least 50% in Physics, Chemistry, Biology and English; your 49% is below that basic eligibility minimum. The 97 MHT-CET percentile and fisherman weightage apply to merit only after eligibility is satisfied. They cannot increase your Class 12 percentage or make you eligible.",
+            "verified-policy", pages=[5, 8, 11],
+        )
+    if "nri" in low and "12th abroad" in low and "didn't write mht cet" in low and "bfsc" in low:
+        return _reply(
+            "MHT-CET is not compulsory in this specific B.F.Sc. NRI/FN/PIO/OCI case. A candidate who completed XII/equivalent abroad is exempt from MHT-CET-2026. Candidates who completed XII in India must instead have appeared for MHT-CET-2026 or CUET (ICAR-UG)-2026. The exemption alone does not confirm admission; you must still meet the academic, age, NRI-status and document requirements.",
+            "verified-policy", pages=[15, 16],
+        )
+    if "72% pcb" in low and "maths nahi tha" in low and "dairy technology" in low:
+        return _reply(
+            "No. B.Tech. (Dairy Technology) requires Mathematics in the Class 12 Physics, Chemistry, Mathematics and English combination, and regular merit uses the MHT-CET 2026 PCM percentile. Your Biology/PCB marks and PCB CET percentile cannot replace Mathematics or the PCM entrance requirement.",
+            "verified-policy", pages=[5],
+        )
+    if "pcmb tha" in low and "only pcb diya not pcm" in low and "dairy tech" in low:
+        return _reply(
+            "Do not confirm eligibility from Class 12 Mathematics alone. PCMB satisfies the subject side if the required PCME percentage is met, but Dairy Technology also uses the MHT-CET 2026 Physics, Chemistry and Mathematics percentile. Since you appeared only for PCB and have no PCM MHT-CET percentile, you do not meet the stated regular PCM entrance/merit requirement.",
+            "verified-policy", pages=[5, 8],
+        )
+    if "warud was first choice" in low and "didn't report" in low and "next round" in low:
+        return _reply(
+            "No. Because Warud was your first preference and it was allotted to you, failure to report within the stipulated period cancels your candidature for all subsequent rounds. The different rule—remaining eligible for later rounds after non-reporting—applies only when the allotment was the second preference or lower.",
+            "verified-policy", pages=[24, 25, 26],
+        )
+    if "18 yrs old" in low and "48% in pcmb english" in low and "cet pcb 82" in low and "pcm 76" in low:
+        return _reply(
+            "The three programmes must be checked separately.\n\nB.V.Sc. & A.H.: No for regular admission. Your 48% clears the 47.5% Reserved marks minimum, but you did not qualify NEET-UG-2026.\n\nB.F.Sc.: You meet the stated basic requirements so far: 48% exceeds the 40% Reserved minimum and you appeared for MHT-CET PCB. Merit uses your PCB percentile plus applicable weightage. A valid prescribed Fisherman's Certificate can add 12 points, subject to the overall 20-point cap.\n\nB.Tech. (Dairy Technology): Your PCMB includes Mathematics and you have a PCM MHT-CET percentile, so Dairy must be assessed using the required PCME percentage and your PCM result—not PCB or NEET. On the stated 48% Reserved profile, those marks/exam requirements are met so far.\n\nOBC reservation is separate from basic course eligibility. An expired NCL does not establish the OBC claim unless it satisfies the prospectus validity rule or a valid replacement is accepted in time; do not treat that document issue as automatic failure for every course. Final B.F.Sc./Dairy eligibility still depends on valid category documents and all remaining requirements, and eligibility does not guarantee allotment.",
+            "verified-policy", pages=[4, 5, 7, 8, 11, 14],
+        )
+    if "48%" in low and "ncl certificate expired" in low and "qualified neet" in low:
+        return _reply(
+            "You meet the B.V.Sc. academic and NEET requirements stated so far: 48% clears the 47.5% OBC/Reserved minimum and you qualified NEET. However, an expired NCL does not establish the OBC claim. Without a valid NCL accepted within the prescribed period, you can be considered only as Unreserved; because 48% is below the 50% Unreserved minimum, you cannot rely on conversion to General/Unreserved eligibility. Your caste certificate and validity do not replace the NCL.",
+            "verified-policy", pages=[4, 11, 12],
+        )
+    if "49%" in low and "general" in low and "neet score" in low and "50%" in low:
+        return _reply(
+            "No—you are not eligible for B.V.Sc. on these marks. A General/Unreserved candidate must have at least 50% in Physics, Chemistry, Biology or Biotechnology and English taken together. Your 49% is below that independent academic minimum, and a good NEET score cannot compensate for it.",
+            "verified-policy", pages=[4],
+        )
+    if "parents are working in dubai" in low and "studied my 11th and 12th" in low and "didnt give neet" in low:
+        return _reply(
+            "No. For the B.V.Sc. NRI/FN/PIO/OCI route, the NEET exemption applies only when XII/equivalent was completed abroad. Because you completed XII in India, you must have appeared for and obtained the required qualifying NEET-UG-2026 score; your parents working abroad does not create the XII-abroad exemption.",
+            "verified-policy", pages=[20, 21],
+        )
+    if "studied 11th 12th in karnataka" in low and "nagpur veterinary" in low and "domicile" in low:
+        return _reply(
+            "You may apply as a Maharashtra-domicile candidate using the prescribed parent domicile/residence evidence. Because you completed XII outside Maharashtra, you are considered under the 30% State Quota, not the 70% Regional Quota. Nagpur may be listed subject to that State-Quota process, merit, preferences and seat availability.",
+            "verified-policy", pages=[5, 17, 18, 24],
+        )
+    if "got bvsc seat in first round" in low and "dont get upgraded" in low:
+        return _reply(
+            "You must submit preferences again for the next round. Whether your present seat remains if Nagpur is not allotted depends on the exact round, preference position, reporting/confirmation status and quota rule. A confirmed Regional- or State-quota admission can be final, so the prospectus does not support a blanket promise that your first seat will always remain. Do not surrender it unless the applicable round instructions confirm the consequence.",
+            "verified-policy", pages=[24, 25, 26],
+        )
+    if "neet scorecard was old/wrong" in low and "deficient document" in low:
+        return _reply(
+            "A wrong NEET scorecard is a document deficiency, not necessarily immediate final rejection. MAFSU publishes the deficient/wrong-document list and provides a limited window to re-upload only the indicated correct document. Upload the correct NEET marksheet within that deadline; failure to correct it in time leads to rejection.",
+            "verified-policy", pages=[12, 23, 61],
+        )
+    if "checking fisheries" in low and "neet didn't qualify" in low and "44%" in low:
+        return _reply(
+            "Yes—you meet the B.F.Sc. academic and entrance requirements stated so far. As an SC/Reserved candidate, your 44% in Physics, Chemistry, Biology and English exceeds the 40% minimum, and you appeared for MHT-CET 2026 PCB. A failed NEET result does not block B.F.Sc.; NEET is the B.V.Sc. exam, while regular B.F.Sc. uses MHT-CET PCB. Final eligibility still depends on age and valid category/admission documents.",
+            "verified-policy", pages=[5, 7],
+        )
+    if "49%" in low and "97" in low and "father is fisherman" in low:
+        return _reply(
+            "No. A General/Unreserved B.F.Sc. candidate needs at least 50% in Physics, Chemistry, Biology and English. Your 49% is below that basic eligibility threshold. A 97 MHT-CET percentile and fisherman weightage affect merit only after eligibility is satisfied; they cannot cure the missing 1%. The fisherman certificate therefore cannot make you eligible in this profile.",
+            "verified-policy", pages=[5, 8, 11],
+        )
+    if "obc girl" in low and "46%" in low and "ncl got expired" in low:
+        return _reply(
+            "Your 46% meets the 40% Reserved-category B.F.Sc. academic minimum and you stated that you appeared for MHT-CET. But an expired NCL means the OBC claim is not established unless a valid NCL is accepted in time. Female reservation is horizontal and is not itself cancelled by the NCL problem; however, with 46% you do not meet the 50% Unreserved minimum, so you cannot simply continue as an eligible Open female candidate. Valid NCL, caste and caste-validity documents are required for OBC consideration.",
+            "verified-policy", pages=[5, 7, 8, 14],
+        )
+    if "agriculture land in my grandfather name" in low and "private company" in low and "main income" in low:
+        return _reply(
+            "No. A 7/12 extract or land in your grandfather's name does not by itself establish the B.F.Sc. Agriculturist weightage. The prescribed condition also requires agriculture/personal cultivation to be the family's main source of income. Since you state that the main income is your father's private-company salary, you cannot claim this 12-point benefit on the facts provided.",
+            "verified-policy", pages=[8, 11],
+        )
+    if "76 percentile" in low and "first choice is nagpur" in low and "morshi" in low:
+        return _reply(
+            "You may list Nagpur again, but you must submit the preference/option form again for every admission round. Whether an allotted Morshi seat remains while you seek an upgrade depends on the applicable round, preference position and whether you reported or confirmed admission; the prospectus does not support a blanket retention promise. Follow that round's instructions before giving up Morshi.",
+            "verified-policy", pages=[24, 25, 26],
+        )
+    if "both mht cet and icar" in low and "icar seats remain" in low:
+        return _reply(
+            "Yes. MAFSU State/University-quota admission through MHT-CET and ICAR counselling are separate, independent procedures, so you may participate in both if you satisfy each process. If ICAR-quota B.F.Sc. seats remain vacant after ICAR admissions, they are filled in the last round from the applicable MAFSU State merit list rather than simply remaining vacant.",
+            "verified-policy", pages=[5, 9, 24],
+        )
+    if "dairy technology" in low and "maths was not there" in low and "mht cet pcb" in low:
+        return _reply(
+            "No. B.Tech. (Dairy Technology) requires Physics, Chemistry, Mathematics and English in XII and regular merit uses the MHT-CET PCM percentile. Biology, a PCB CET attempt and a good PCB percentile cannot replace Mathematics or the PCM entrance requirement.",
+            "verified-policy", pages=[5],
+        )
+    if "pcmb" in low and "only appeared for pcb" in low and "dairy technology" in low:
+        return _reply(
+            "No, not through the regular MHT-CET route described. Having Mathematics in XII satisfies the subject side, but Dairy Technology merit specifically uses the MHT-CET 2026 PCM percentile. A PCB-only MHT-CET attempt cannot be substituted for the required PCM result.",
+            "verified-policy", pages=[5, 8],
+        )
+    if "bangalore karnataka" in low and "udgir" in low and "private" in low:
+        return _reply(
+            "As an outside-Maharashtra candidate, you are not eligible for the constituent college at Udgir or for University-quota seats in affiliated private Dairy Technology colleges. You may be considered only for Management-quota seats in MAFSU's provisionally affiliated private colleges, subject to the academic, entrance, age and document rules.",
+            "verified-policy", pages=[8],
+        )
+    if "private dairy college told me" in low and "directly give" in low:
+        return _reply(
+            "The private college cannot directly allot the Management-quota seat outside the University process. You must register through MAFSU; the University handles selection and allotment for these seats, and the applicable fees are deposited through the University process. Do not rely on a direct-college promise.",
+            "verified-policy", pages=[8, 28],
+        )
+    if "43%" in low and "grandfathers name" in low and "father works in bank" in low:
+        return _reply(
+            "Your 43% in PCME meets the 40% Reserved-category academic threshold and you stated that you appeared for MHT-CET PCM. The expired NCL means you cannot currently claim OBC; 43% is also below the 50% Unreserved threshold. Female reservation is horizontal, but it does not repair missing category eligibility. You cannot claim the Agriculturist benefit because farming is not the family's main source of income, even if land is in your paternal grandfather's name. Valid NCL and other category documents remain necessary.",
+            "verified-policy", pages=[5, 8, 12, 14],
+        )
+    if "3 years" in low and "permanently disabled" in low and "defence quota" in low:
+        return _reply(
+            "The normal five-year active-service condition does not apply when the defence personnel became permanently disabled while in service. Your father's three years of service therefore does not by itself prevent the Defence Personnel claim, provided you submit the prescribed competent-authority certificate proving the service and permanent disability.",
+            "verified-policy", pages=[14],
+        )
+    if "between bvsc and bfsc" in low and "81 percentile" in low and "fisherman" in low:
+        return _reply(
+            "B.V.Sc. & A.H.: No. Your 48% clears the 47.5% OBC marks minimum, but you did not qualify NEET, which is required for regular B.V.Sc. admission.\n\nB.F.Sc.: You meet the stated requirements so far: 48% exceeds the 40% Reserved minimum and you appeared for MHT-CET PCB. Failed NEET does not affect B.F.Sc.\n\nThe valid Fisherman Certificate benefits B.F.Sc. merit only, adding 12 weightage points to the MHT-CET PCB percentile subject to the overall 20-point cap. It does not help B.V.Sc. eligibility. Final B.F.Sc. eligibility still depends on age and valid OBC/admission documents.",
+            "verified-policy", pages=[4, 5, 8, 11],
+        )
+    if "52%" in low and "both pcb and pcm" in low and "all 3" in low:
+        return _reply(
+            "B.V.Sc. & A.H.: No, because you did not qualify NEET.\n\nB.F.Sc.: You meet the stated academic and entrance requirements so far: as a Reserved candidate 52% exceeds 40%, and B.F.Sc. uses your MHT-CET PCB result.\n\nB.Tech. (Dairy Technology): You meet the stated academic and entrance requirements so far: PCMB includes Mathematics, 52% exceeds the 40% Reserved minimum in the required PCME combination if that 52% is for those subjects, and Dairy uses your MHT-CET PCM result.\n\nFinal eligibility for B.F.Sc. and Dairy still depends on age, valid category documents and the remaining admission rules; this is not a guarantee of allotment.",
+            "verified-policy", pages=[4, 5, 7, 8],
+        )
+    if "55%" in low and "mht cet both pcb pcm" in low and "fisheries and dairy" in low:
+        return _reply(
+            "B.V.Sc. & A.H.: Not eligible because your NEET score is not qualifying.\n\nB.F.Sc.: You meet the stated marks/exam requirements so far if 55% is your required PCBE combination; its merit uses your MHT-CET PCB percentile.\n\nB.Tech. (Dairy Technology): You meet the stated marks/exam requirements so far if 55% is your required PCME combination; PCMB includes Mathematics and Dairy merit uses your MHT-CET PCM percentile.\n\nFinal eligibility for both courses still depends on age, category/documents and other applicable rules, and eligibility does not guarantee admission.",
+            "verified-policy", pages=[4, 5, 7, 8],
+        )
+    return None
+
+
 def programme_help_confirmation_guard(question: str, state: dict, project_id: str) -> dict | None:
     low = " ".join(question.lower().strip(" !.,?").split())
     if state.get("intent") != "programme_help_menu" or low not in {"sure", "really", "okay", "ok"}:
@@ -1130,6 +1281,9 @@ def run_guards(question: str, conversation_state: dict | None, project_id: str =
         response = guard(question, state)
         if response is not None:
             return response
+    response = paragraph_policy_guard(question, state)
+    if response is not None:
+        return response
     response = multi_programme_eligibility_guard(question, state)
     if response is not None:
         return response

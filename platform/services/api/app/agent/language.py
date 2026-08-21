@@ -75,9 +75,18 @@ def _normalise_ui_language(ui_language: str | None) -> str | None:
 
 def requested_language(question: str) -> str | None:
     """Return a language explicitly requested in the student's message."""
-    if not _LANGUAGE_CONTROL.search(question):
+    controls = list(_LANGUAGE_CONTROL.finditer(question))
+    if not controls:
         return None
-    matches = [code for code, pattern in _LANGUAGE_NAMES.items() if pattern.search(question)]
+    # A language name is a command only when it occurs close to a control
+    # verb. This prevents long admission profiles such as "PCM and English ...
+    # which reservation can I use?" from being swallowed as an English switch.
+    matches = []
+    for code, pattern in _LANGUAGE_NAMES.items():
+        names = list(pattern.finditer(question))
+        if any(abs(name.start() - control.start()) <= 48
+               for name in names for control in controls):
+            matches.append(code)
     return matches[0] if len(matches) == 1 else None
 
 

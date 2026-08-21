@@ -94,6 +94,14 @@ def test_explicit_reply_in_english_still_switches_language():
     assert language.requested_language("Please reply in English") == "en"
 
 
+def test_distant_use_does_not_turn_english_subject_into_language_command():
+    question = (
+        "I scored 43% in PCM and English. My NCL expired and farming is not "
+        "our main income. Which reservation can I actually use?"
+    )
+    assert language.requested_language(question) is None
+
+
 def test_three_programme_compound_eligibility_is_synthesized():
     question = (
         "I'm OBC from Maharashtra, I'm already 17, and I got 49% in Physics, "
