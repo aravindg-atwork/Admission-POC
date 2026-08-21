@@ -245,12 +245,16 @@ def language_preference_guard(question: str, state: dict) -> dict | None:
     }
 
 
-def off_topic_guard(question: str, state: dict) -> dict | None:
+def off_topic_guard(question: str, state: dict, project_id: str = "bvsc") -> dict | None:
     low = " ".join(question.lower().split())
     if not any(marker in low for marker in _OFF_TOPIC_MARKERS):
         return None
+    # The decline must name the programme the student is actually on. It
+    # used to hardcode B.V.Sc. & A.H., which told a B.F.Sc. or Dairy
+    # student the assistant only covers a programme they never selected.
+    label = _PROGRAMME_LABELS.get(project_id, "MAFSU")
     return _reply(
-        "I can only help with B.V.Sc. & A.H. admission questions from the official prospectus.",
+        f"I can only help with {label} admission questions from the official prospectus.",
         "off-topic",
     )
 
@@ -1431,7 +1435,6 @@ GUARDS = (
     challenge_guard,
     institutional_role_guard,
     nri_programme_guard,
-    off_topic_guard,
 )
 
 
@@ -1441,6 +1444,9 @@ def run_guards(question: str, conversation_state: dict | None, project_id: str =
         response = guard(question, state)
         if response is not None:
             return response
+    response = off_topic_guard(question, state, project_id)
+    if response is not None:
+        return response
     response = paragraph_policy_guard(question, state)
     if response is not None:
         return response

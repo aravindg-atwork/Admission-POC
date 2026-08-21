@@ -30,6 +30,20 @@ _PROMPT_EXFILTRATION = re.compile(
     r"\b(?:system|developer|hidden|internal|initial)\s+(?:prompt|message|instruction|rule)s?\b",
     re.I | re.S,
 )
+# Retrieval-internals reconnaissance ("show me the retrieved chunks", "what
+# similarity score did that get", "dump your vector database"). Deliberately
+# limited to terms no student asking about admissions ever writes - notably
+# NOT bare "documents" or "context", since "which documents do I need" and
+# "in this context" are ordinary admission questions.
+_RAG_RECONNAISSANCE = re.compile(
+    r"\b(?:raw|retrieved|retrieval|rag|prompt)\s+(?:context|chunks?|excerpts?|text|window)\b|"
+    r"\bchunks?\s*(?:ids?)?\b|"
+    r"\bvector\s+(?:database|db|store|search)\b|"
+    r"\bembedding\s*(?:vector|model)?s?\b|"
+    r"\b(?:similarity|retrieval|relevance|reranking)\s+scores?\b|"
+    r"\bknowledge\s+base\b",
+    re.I,
+)
 
 
 def _normalize_for_security(text: str) -> str:
@@ -45,4 +59,5 @@ def is_prompt_injection(text: str) -> bool:
         any(phrase in lowered for phrase in _INJECTION_PHRASES)
         or bool(_SEPARATED_OVERRIDE.search(lowered))
         or bool(_PROMPT_EXFILTRATION.search(lowered))
+        or bool(_RAG_RECONNAISSANCE.search(lowered))
     )

@@ -17,7 +17,7 @@ from a simpler pipeline shape.
 
 import re
 
-from ..core import eligibility, lang, tablelookup, vocabulary
+from ..core import eligibility, lang, programs, tablelookup, vocabulary
 from ..providers import embeddings, llm
 from ..retrieval import store
 from ..settings import get_settings
@@ -280,7 +280,7 @@ def _answer_uncached(project_id: str, question: str, conversation_state: dict | 
 
     if not _retrieval_is_confident(top):
         reply, model = llm.generate(
-            prompts.SYSTEM_PROMPT_BASE.format(program=project_id) + llm.LANGUAGE_RULE,
+            prompts.SYSTEM_PROMPT_BASE.format(program=programs.PROGRAM_NAMES.get(project_id, project_id)) + llm.LANGUAGE_RULE,
             "There is not enough verified information to answer this safely. Say: "
             "'I don't have enough verified information to confirm that.' If a verified "
             "part is known, state it first. Suggest a targeted clarification or the "
@@ -364,7 +364,7 @@ def _answer_uncached(project_id: str, question: str, conversation_state: dict | 
                 "language": language_ctx.language}
 
     # General RAG.
-    system_prompt = prompts.SYSTEM_PROMPT_BASE.format(program=project_id) + llm.LANGUAGE_RULE
+    system_prompt = prompts.SYSTEM_PROMPT_BASE.format(program=programs.PROGRAM_NAMES.get(project_id, project_id)) + llm.LANGUAGE_RULE
     user_prompt = (
         f"Prospectus excerpts:\n{grounded_context}\n\nQuestion: {question}\n\n"
         "(Answer this fully yourself using the excerpts above - do not tell the "
