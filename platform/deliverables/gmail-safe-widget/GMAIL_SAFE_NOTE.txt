@@ -1,0 +1,14 @@
+GMAIL-SAFE PACKAGE
+
+Gmail blocks JavaScript files inside ZIP attachments.
+
+After downloading, rename:
+
+mafsu-admissions-widget.js.txt
+
+to:
+
+mafsu-admissions-widget.js
+
+No code or content has been changed. Only the file extension was changed for
+email delivery.

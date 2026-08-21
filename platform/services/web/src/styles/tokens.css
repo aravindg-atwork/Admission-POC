@@ -1,0 +1,92 @@
+/* Design tokens for the MAFSU Admissions Assistant.
+
+   Grounded in the actual subject: an agricultural/veterinary sciences
+   university, admissions decisions that carry real stakes for students and
+   families across Maharashtra, most comfortable in Hindi or Marathi as
+   much as English. Not a generic SaaS chat widget - the palette avoids a
+   cold corporate blue on purpose (this is an advisory moment, not a
+   dashboard) and avoids the three current AI-generated-design defaults:
+   cream+terracotta+serif, near-black+neon, and broadsheet/newspaper
+   hairlines. Deep pasture green (the institution's own field) anchors the
+   palette instead of an arbitrary brand blue; warm marigold is the single
+   accent, used sparingly - marigold marks admission season and academic
+   milestones across Maharashtra, which is a real, specific association,
+   not decoration.
+
+   Two font roles, not one: a display face used with restraint (the
+   wordmark, section headers, the empty-state greeting) and a body/UI face
+   built for reliability at small sizes across three scripts. See
+   index.html's <link> tag for why "Tiro Devanagari Hindi/Marathi" was
+   chosen for the former - each already bundles a matched Latin subset,
+   so English and Hindi/Marathi share equal typographic care instead of
+   English getting the "real" font and the other two scripts getting
+   whatever the browser falls back to. */
+
+:root {
+  /* --- Color --- */
+  --paper: #f6f5f1;
+  --paper-raised: #ffffff;
+  --ink: #1f2a24;
+  --ink-muted: #5b675f;
+  --pasture: #2f6b4f;
+  --pasture-deep: #234f3b;
+  --pasture-tint: #e6efe9;
+  --marigold: #e08e2a;
+  --marigold-tint: #fbeed9;
+  --clay: #b5502f;
+  --clay-tint: #f8e6de;
+  --mist: #e4e7e1;
+  --mist-deep: #d3d8cd;
+
+  /* --- Type --- */
+  --font-display: "Tiro Devanagari Hindi", "Tiro Devanagari Marathi", serif;
+  --font-display-mr: "Tiro Devanagari Marathi", "Tiro Devanagari Hindi", serif;
+  --font-body: "Noto Sans", "Noto Sans Devanagari", system-ui, sans-serif;
+
+  --text-2xl: clamp(1.75rem, 1.4rem + 1.5vw, 2.5rem);
+  --text-xl: 1.5rem;
+  --text-lg: 1.15rem;
+  --text-base: 1rem;
+  --text-sm: 0.875rem;
+  --text-xs: 0.75rem;
+
+  /* Devanagari needs more vertical room than Latin at the same size -
+     matras and conjuncts clip under Latin-tuned line-heights. One shared,
+     generous scale rather than a script-conditional one, so mixed-script
+     replies (a Hindi answer citing an English programme name) never jump
+     between two rhythms mid-paragraph. */
+  --leading-tight: 1.3;
+  --leading-body: 1.65;
+
+  /* --- Space & shape --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-full: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(31, 42, 36, 0.06);
+  --shadow-md: 0 4px 16px rgba(31, 42, 36, 0.08);
+
+  --focus-ring: 0 0 0 3px var(--marigold-tint), 0 0 0 5px var(--marigold);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-scale: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root {
+    --motion-scale: 1;
+  }
+}

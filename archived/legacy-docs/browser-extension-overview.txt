@@ -1,0 +1,162 @@
+====================================================================================================
+ORDERASSIST BROWSER EXTENSION — WORKFLOW & INFRA COST
+====================================================================================================
+Catalogue-matching Chrome extension only. Excludes the admission bot entirely.
+All costs verified against live pricing, 2026-07-30. USD→INR: ₹95.71 (Xe / exchangerates.org.uk, 2026-07-28 spot).
+
+----------------------------------------------------------------------------------------------------
+WORKFLOW — WHAT HAPPENS ON A SEND CLICK
+----------------------------------------------------------------------------------------------------
+┌────┬──────────────────────┬──────────────────────────────────────────────────┬────────────────────┬──────────────────┐
+│ #  │ Step                 │ What happens                                     │ Model / resource   │ Where            │
+├────┼──────────────────────┼──────────────────────────────────────────────────┼────────────────────┼──────────────────┤
+│ 1  │ Data capture (page   │ interceptor.js watches OrderAssist’s own page    │ —                  │ Client (page)    │
+│    │ load)                │ fetches for the                                  │                    │                  │
+│    │                      │ quotation JSON and captures each line item       │                    │                  │
+│    │                      │ before the user does                             │                    │                  │
+│    │                      │ anything.                                        │                    │                  │
+├────┼──────────────────────┼──────────────────────────────────────────────────┼────────────────────┼──────────────────┤
+│ 2  │ Rep clicks Send      │ content.js intercepts the click, shows a         │ —                  │ Client           │
+│    │                      │ "Checking catalogue…"                            │                    │ (extension)      │
+│    │                      │ spinner, and sends the captured quotation text   │                    │                  │
+│    │                      │ to the background                                │                    │                  │
+│    │                      │ service worker.                                  │                    │                  │
+├────┼──────────────────────┼──────────────────────────────────────────────────┼────────────────────┼──────────────────┤
+│ 3  │ List + match         │ Background worker lists the Drive catalogue      │ nomic-embed-text   │ Self-hosted      │
+│    │                      │ folder, OCRs any new                             │ (embedding-        │ (Docker),        │
+│    │                      │ files (cached), then calls POST                  │ service)           │ backend          │
+│    │                      │ /api/catalogue/match to rank                     │                    │                  │
+│    │                      │ brochures by similarity to the quotation.        │                    │                  │
+├────┼──────────────────────┼──────────────────────────────────────────────────┼────────────────────┼──────────────────┤
+│ 4  │ Match banner shown   │ A picker banner lists candidate brochures with   │ —                  │ Client           │
+│    │                      │ checkboxes; rep can                              │                    │                  │
+│    │                      │ Attach & Send, Skip (with an optional note), or  │                    │                  │
+│    │                      │ Cancel.                                          │                    │                  │
+├────┼──────────────────────┼──────────────────────────────────────────────────┼────────────────────┼──────────────────┤
+│ 5  │ Complementary        │ POST /api/catalogue/complementary suggests       │ Ollama gemma2:2b   │ Self-hosted      │
+│    │ suggestion           │ "often paired with"                              │ allow_cloud=False  │ (local), backend │
+│    │ (parallel, non-      │ items and appends them to the already-open       │                    │                  │
+│    │ blocking)            │ banner without                                   │                    │                  │
+│    │                      │ blocking it.                                     │                    │                  │
+├────┼──────────────────────┼──────────────────────────────────────────────────┼────────────────────┼──────────────────┤
+│ 6  │ On Attach & Send     │ POST /api/catalogue/note generates the email     │ Ollama gemma2:2b + │ Self-hosted /    │
+│    │                      │ note (cached by                                  │ Google Drive API   │ Google free tier │
+│    │                      │ quotation + matched items — a cache hit skips    │                    │                  │
+│    │                      │ the LLM call                                     │                    │                  │
+│    │                      │ entirely) while matched files download from      │                    │                  │
+│    │                      │ Drive in parallel.                               │                    │                  │
+├────┼──────────────────────┼──────────────────────────────────────────────────┼────────────────────┼──────────────────┤
+│ 7  │ DOM injection +      │ The generated note is injected into the compose  │ —                  │ Client           │
+│    │ resend               │ body, files are                                  │                    │                  │
+│    │                      │ attached, and the original Send click is re-     │                    │                  │
+│    │                      │ dispatched. A                                    │                    │                  │
+│    │                      │ 5-second re-check re-injects the note if         │                    │                  │
+│    │                      │ OrderAssist’s own React                          │                    │                  │
+│    │                      │ re-render wipes it.                              │                    │                  │
+└────┴──────────────────────┴──────────────────────────────────────────────────┴────────────────────┴──────────────────┘
+
+Cost of every step above: ₹0 (self-hosted or free-tier only).
+
+----------------------------------------------------------------------------------------------------
+CURRENT MODEL, END TO END
+----------------------------------------------------------------------------------------------------
+┌────────────────────────┬────────────────────────────────────┬──────────────────────────────────────────┐
+│ Function               │ Model / resource                   │ Where it runs                            │
+├────────────────────────┼────────────────────────────────────┼──────────────────────────────────────────┤
+│ Catalogue matching     │ nomic-embed-text                   │ Self-hosted (Docker)                     │
+│ (embeddings)           │                                    │                                          │
+├────────────────────────┼────────────────────────────────────┼──────────────────────────────────────────┤
+│ Complementary          │ Ollama gemma2:2b                   │ Self-hosted (local), allow_cloud=False — │
+│ suggestion + note gen  │                                    │ never calls Sarvam                       │
+├────────────────────────┼────────────────────────────────────┼──────────────────────────────────────────┤
+│ File download / attach │ Google Drive API                   │ Google-hosted, free-tier quota           │
+├────────────────────────┼────────────────────────────────────┼──────────────────────────────────────────┤
+│ External API cost per  │ ₹0                                 │ Every model in this flow is self-hosted  │
+│ Send click             │                                    │                                          │
+└────────────────────────┴────────────────────────────────────┴──────────────────────────────────────────┘
+
+----------------------------------------------------------------------------------------------------
+SERVER / INFRA COST (RECURRING)
+----------------------------------------------------------------------------------------------------
+┌────────────────────────────────┬────────────────────────────────────┬──────────┬───────────┬────────────┐
+│ Provider                       │ Spec                               │ $/mo     │ ₹/mo      │ ₹/year     │
+├────────────────────────────────┼────────────────────────────────────┼──────────┼───────────┼────────────┤
+│ Hetzner Cloud — CPX32          │ 4 vCPU / 8 GB, 160 GB NVMe bundled │ $39.23   │ ₹3,755    │ ₹45,059    │
+├────────────────────────────────┼────────────────────────────────────┼──────────┼───────────┼────────────┤
+│ DigitalOcean — Gen. Purpose    │ 2 vCPU / 8 GB, storage bundled     │ $42.00   │ ₹4,020    │ ₹48,238    │
+│ 8GB                            │                                    │          │           │            │
+├────────────────────────────────┼────────────────────────────────────┼──────────┼───────────┼────────────┤
+│ AWS EC2 t3.large + EBS gp3     │ 2 vCPU / 8 GB + 40 GB gp3          │ $63.94   │ ₹6,121    │ ₹73,436    │
+├────────────────────────────────┼────────────────────────────────────┼──────────┼───────────┼────────────┤
+│ GCP e2-standard-2 + PD         │ 2 vCPU / 8 GB + 40 GB pd-balanced  │ $53.32   │ ₹5,104    │ ₹61,240    │
+└────────────────────────────────┴────────────────────────────────────┴──────────┴───────────┴────────────┘
+
+One-time: Chrome Web Store registration ₹479 (one-time, ever) + optional domain ₹1,149/yr.
+TOTAL, FIRST YEAR (cheapest host — Hetzner): $487.76 = ₹46,684
+
+----------------------------------------------------------------------------------------------------
+LOCAL LLM (CURRENT) VS. PAID CLOUD APIS — complementary suggestion + note generation only
+----------------------------------------------------------------------------------------------------
+Scope: the two Ollama gemma2:2b calls in this flow. Matching stays on the self-hosted embedding
+service regardless — none of these providers sell a drop-in replacement for it. Token counts are
+ESTIMATED input/output splits of the documented 350/450 tokens/call totals. Low volume = 1,500
+sends/month (this extension’s actual scale). High volume = 10,000 sends/month (reference only).
+
+┌──────────────────────────┬───────────┬─────────────────┬──────────────────┬──────────────────────────────────────┬───────────────────────────────┐
+│ Model                    │ ₹/click   │ ₹/yr (low vol)  │ ₹/yr (high vol)  │ Server impact                        │ Net vs. current (low/high     │
+│                          │           │                 │                  │                                      │ vol)                          │
+├──────────────────────────┼───────────┼─────────────────┼──────────────────┼──────────────────────────────────────┼───────────────────────────────┤
+│ Ollama gemma2:2b (local) │ ₹0        │ ₹0              │ ₹0               │ No change — stays on CPX32,          │ —                             │
+│                          │           │                 │                  │ ₹45,059/yr                           │                               │
+├──────────────────────────┼───────────┼─────────────────┼──────────────────┼──────────────────────────────────────┼───────────────────────────────┤
+│ Sarvam sarvam-105b       │ ₹0.0096   │ ₹172            │ ₹1,147           │ ↓ Downsize to CPX22, ₹25,025/yr      │ +₹19,862 / +₹18,887           │
+├──────────────────────────┼───────────┼─────────────────┼──────────────────┼──────────────────────────────────────┼───────────────────────────────┤
+│ Gemini 3.5 Flash-Lite    │ ₹0.1346   │ ₹2,423          │ ₹16,151          │ ↓ Downsize to CPX22, ₹25,025/yr      │ +₹17,611 / +₹3,883            │
+├──────────────────────────┼───────────┼─────────────────┼──────────────────┼──────────────────────────────────────┼───────────────────────────────┤
+│ GPT-5.4 Mini             │ ₹0.2477   │ ₹4,458          │ ₹29,718          │ ↓ Downsize to CPX22, ₹25,025/yr      │ +₹15,576 / −₹9,684            │
+└──────────────────────────┴───────────┴─────────────────┴──────────────────┴──────────────────────────────────────┴───────────────────────────────┘
+
+┌──────────────────────────┬──────────────────────────────────────────────┬──────────────────────────────────────────────┐
+│ Model                    │ Advantages                                   │ Disadvantages                                │
+├──────────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ Ollama gemma2:2b (local) │ ₹0 marginal cost at any volume; no data      │ ~12.6s note generation vs. ~4.6s cloud       │
+│                          │ leaves the box; works with                   │ (measured); box must keep                    │
+│                          │ no internet; already proven in production    │ enough RAM to host the model, capping how    │
+│                          │ for this flow.                               │ far it can be downsized.                     │
+├──────────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ Sarvam sarvam-105b       │ Cheapest cloud option by far (13–25x under   │ Quotation text + item names leave the box to │
+│                          │ Gemini/OpenAI); ~4.6s                        │ Sarvam’s cloud; adds a                       │
+│                          │ vs. ~12.6s local (measured); frees hosting   │ (small) internet/vendor dependency.          │
+│                          │ RAM; same vendor already                     │                                              │
+│                          │ used by the admission bot — one relationship │                                              │
+│                          │ to manage.                                   │                                              │
+├──────────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ Gemini 3.5 Flash-Lite    │ Mainstream provider, broad                   │ 14x pricier than Sarvam per call; data       │
+│                          │ tooling/ecosystem; frees hosting RAM;        │ leaves the box to Google                     │
+│                          │ latency likely comparable to Sarvam (not     │ Cloud; a second cloud vendor not otherwise   │
+│                          │ measured in this project).                   │ used here; cheaper 2.5                       │
+│                          │                                              │ Flash-Lite tier retires 2026-10-16.          │
+├──────────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ GPT-5.4 Mini             │ Mainstream provider, broad                   │ Most expensive of the three cloud options    │
+│                          │ tooling/ecosystem; frees hosting RAM.        │ (26x Sarvam per call); at                    │
+│                          │                                              │ high volume the API cost can EXCEED the      │
+│                          │                                              │ hosting saving it enables                    │
+│                          │                                              │ (net goes negative — see table above); data  │
+│                          │                                              │ leaves the box to                            │
+│                          │                                              │ OpenAI; GPT-4o-mini/GPT-5-mini were already  │
+│                          │                                              │ deprecated once.                             │
+└──────────────────────────┴──────────────────────────────────────────────┴──────────────────────────────────────────────┘
+
+----------------------------------------------------------------------------------------------------
+BOTTOM LINE
+----------------------------------------------------------------------------------------------------
+Sarvam nets the largest saving at every volume level (server downsize minus its own tiny API
+cost). Gemini also stays net-positive but with a much thinner margin at high volume. OpenAI is the
+only option where high-volume API cost can exceed the hosting saving it unlocks — its Net column
+goes negative. At this extension’s actual current low-volume traffic, none of this is urgent:
+staying local costs ₹0 and the only real cost is ~12.6s vs. ~4.6s wait per note (measured). If
+reps start complaining about the wait, Sarvam is the option to test first — not Gemini or OpenAI.
+
+====================================================================================================
+Source file: docs/browser-extension-overview.xlsx (live formulas, editable assumptions)
+====================================================================================================

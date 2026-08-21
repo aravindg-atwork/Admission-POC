@@ -1,0 +1,657 @@
+<title>RAG Pipeline Audit</title>
+<style>
+:root {
+  --bg: #F5F4EF;
+  --surface: #FFFFFF;
+  --surface-2: #EFEDE5;
+  --ink: #1F2420;
+  --ink-muted: #5B6058;
+  --ink-faint: #8A8F86;
+  --accent: #8A5A2B;
+  --accent-ink: #FFFFFF;
+  --pass: #3D6B4F;
+  --pass-bg: #E7EEE8;
+  --fail: #A23B3B;
+  --fail-bg: #F5E9E7;
+  --info: #4A5C7A;
+  --info-bg: #E9EDF3;
+  --border: #DDD9CF;
+  --border-strong: #C7C2B4;
+  --shadow: 0 1px 2px rgba(31,36,32,0.06), 0 4px 16px rgba(31,36,32,0.05);
+  --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  --sans: -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181A;
+    --surface: #1B2023;
+    --surface-2: #21272A;
+    --ink: #E8E6DE;
+    --ink-muted: #9CA39B;
+    --ink-faint: #6B726A;
+    --accent: #C98A4B;
+    --accent-ink: #14181A;
+    --pass: #6FBF93;
+    --pass-bg: #1C2B22;
+    --fail: #E08787;
+    --fail-bg: #2E1E1E;
+    --info: #8FA6D6;
+    --info-bg: #1D2431;
+    --border: #2B3235;
+    --border-strong: #384045;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.3);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181A;
+  --surface: #1B2023;
+  --surface-2: #21272A;
+  --ink: #E8E6DE;
+  --ink-muted: #9CA39B;
+  --ink-faint: #6B726A;
+  --accent: #C98A4B;
+  --accent-ink: #14181A;
+  --pass: #6FBF93;
+  --pass-bg: #1C2B22;
+  --fail: #E08787;
+  --fail-bg: #2E1E1E;
+  --info: #8FA6D6;
+  --info-bg: #1D2431;
+  --border: #2B3235;
+  --border-strong: #384045;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.3);
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  line-height: 1.55;
+  font-size: 16px;
+  margin: 0;
+  padding: 0 20px 96px;
+}
+.wrap { max-width: 860px; margin: 0 auto; }
+
+/* ---------- Masthead ---------- */
+.masthead {
+  padding: 56px 0 32px;
+  border-bottom: 3px solid var(--ink);
+}
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 14px;
+}
+h1.title {
+  font-family: var(--serif);
+  font-size: clamp(30px, 4.5vw, 44px);
+  font-weight: 600;
+  margin: 0 0 10px;
+  text-wrap: balance;
+  letter-spacing: -0.01em;
+}
+.subtitle {
+  font-size: 17px;
+  color: var(--ink-muted);
+  max-width: 62ch;
+  margin: 0 0 22px;
+}
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.meta-row span b { color: var(--ink); font-weight: 600; }
+
+/* ---------- Stat strip ---------- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin: 28px 0 0;
+}
+.stat {
+  background: var(--surface);
+  padding: 18px 16px;
+}
+.stat .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+}
+.stat .value {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.stat .delta {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  margin-top: 4px;
+}
+.stat .delta.good { color: var(--pass); }
+.stat .delta.flat { color: var(--ink-faint); }
+
+/* ---------- Sections ---------- */
+section.phase {
+  margin: 56px 0 0;
+  padding-top: 8px;
+}
+.phase-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+.phase-num {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+h2.phase-title {
+  font-family: var(--serif);
+  font-size: 25px;
+  font-weight: 600;
+  margin: 0;
+  text-wrap: balance;
+}
+.phase-tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 3px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.tag-verified { background: var(--pass-bg); color: var(--pass); }
+.tag-na { background: var(--surface-2); color: var(--ink-faint); }
+.tag-finding { background: var(--fail-bg); color: var(--fail); }
+
+.phase-body { color: var(--ink); max-width: 70ch; }
+.phase-body p { margin: 0 0 14px; }
+.phase-body > p:first-of-type { margin-top: 14px; }
+
+/* ---------- Architecture flow ---------- */
+.flow {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 18px 20px;
+  overflow-x: auto;
+  margin: 18px 0;
+  box-shadow: var(--shadow);
+}
+.flow ol { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+.flow li {
+  counter-increment: step;
+  padding: 7px 0 7px 30px;
+  position: relative;
+  border-bottom: 1px dashed var(--border);
+  color: var(--ink-muted);
+}
+.flow li:last-child { border-bottom: none; }
+.flow li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 7px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.flow li.new { color: var(--ink); }
+.flow li.new::after {
+  content: "NEW";
+  font-size: 10px;
+  color: var(--pass);
+  border: 1px solid var(--pass);
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-left: 10px;
+  letter-spacing: 0.05em;
+}
+.flow .na { color: var(--ink-faint); font-style: italic; }
+
+/* ---------- Exhibit (evidence) blocks ---------- */
+.exhibit {
+  position: relative;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 22px 20px 18px;
+  margin: 26px 0 18px;
+  box-shadow: var(--shadow);
+}
+.exhibit .exhibit-label {
+  position: absolute;
+  top: -11px;
+  left: 16px;
+  background: var(--bg);
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.exhibit blockquote {
+  margin: 10px 0;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.exhibit .cite {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.exhibit .verdict {
+  margin-top: 10px;
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.exhibit .verdict.fail-verdict { color: var(--fail); }
+.exhibit .verdict.pass-verdict { color: var(--pass); }
+
+/* ---------- Tables ---------- */
+.table-wrap { overflow-x: auto; margin: 18px 0; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+th, td {
+  padding: 9px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom: 2px solid var(--border-strong);
+  white-space: nowrap;
+}
+td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+td.mono { font-family: var(--mono); font-size: 13px; }
+tr:last-child td { border-bottom: none; }
+.badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+.badge-pass { background: var(--pass-bg); color: var(--pass); }
+.badge-fail { background: var(--fail-bg); color: var(--fail); }
+.badge-info { background: var(--info-bg); color: var(--info); }
+
+/* ---------- Priority list ---------- */
+.priority {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 14px 0;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.priority-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.priority-level {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.p0 { background: var(--fail-bg); color: var(--fail); }
+.p1 { background: #F3E7D6; color: var(--accent); }
+.p2 { background: var(--info-bg); color: var(--info); }
+.p3 { background: var(--surface-2); color: var(--ink-faint); border: 1px solid var(--border); }
+.priority-title { font-weight: 600; }
+.priority-body { padding: 14px 16px; background: var(--surface); font-size: 14.5px; }
+.priority-body dl { margin: 0; display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; }
+.priority-body dt { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-faint); padding-top: 2px; }
+.priority-body dd { margin: 0; }
+
+/* ---------- Answers list (Phase 20) ---------- */
+.answers { margin: 18px 0; }
+.answer-item {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.answer-item:last-child { border-bottom: none; }
+.answer-num { font-family: var(--mono); color: var(--accent); font-weight: 600; }
+.answer-q { font-weight: 600; }
+.answer-a { color: var(--ink-muted); grid-column: 2; font-size: 14.5px; }
+
+footer {
+  margin-top: 64px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+a { color: var(--accent); }
+code { font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
+</style>
+
+<div class="wrap">
+
+<div class="masthead">
+  <p class="eyebrow">Production Hardening &middot; RAG Diagnostics</p>
+  <h1 class="title">RAG Pipeline Audit</h1>
+  <p class="subtitle">Admission Assistant &middot; B.V.Sc./B.F.Sc./B.Tech.-Dairy prospectus RAG, mapped against the 20-phase evaluation framework and measured against the live pipeline, not assumed.</p>
+  <div class="meta-row">
+    <span>Branch: <b>production-hardening</b></span>
+    <span>Date: <b>2026-08-18</b></span>
+    <span>Corpus: <b>3 PDFs, ~700 chunks, 4 projects</b></span>
+    <span>Method: <b>direct PDF verification + 2&times; full 75-question live runs</b></span>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="label">Eval score</div>
+      <div class="value">70/75</div>
+      <div class="delta flat">unchanged (graded)</div>
+    </div>
+    <div class="stat">
+      <div class="label">Avg latency</div>
+      <div class="value">10.0s</div>
+      <div class="delta good">&darr; from 20.6s</div>
+    </div>
+    <div class="stat">
+      <div class="label">Original 5 failures</div>
+      <div class="value">5/5</div>
+      <div class="delta good">fixed</div>
+    </div>
+    <div class="stat">
+      <div class="label">Retrieval recall@15</div>
+      <div class="value">0.93</div>
+      <div class="delta flat">confirmed stable</div>
+    </div>
+    <div class="stat">
+      <div class="label">Hallucination rate</div>
+      <div class="value">~4%</div>
+      <div class="delta flat">unsupported_number flags</div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 1 -->
+<section class="phase">
+  <div class="phase-head">
+    <span class="phase-num">01</span>
+    <h2 class="phase-title">Actual architecture</h2>
+    <span class="phase-tag tag-verified">Mapped, not assumed</span>
+  </div>
+  <div class="phase-body">
+    <p>No vector database, no reranker, no query-rewriting/PET/ReAct layer exist in this codebase &mdash; the audit framework's phases assuming those components (7&ndash;9, 14&ndash;15) are marked N/A below rather than faked. The real path:</p>
+    <div class="flow">
+      <ol>
+        <li>Language / script detection, romanization handling &mdash; <code>core/lang.py</code></li>
+        <li>Guards, in order &mdash; injection &rarr; greeting &rarr; dispute &rarr; meta-correction &rarr; off-topic &rarr; program_list &rarr; percentage_clarify &rarr; comparison &rarr; program_redirect &rarr; unknown_programme &rarr; program_clarify &rarr; low_confidence_clarify</li>
+        <li>FAQ cache lookup (keyword-overlap match) &mdash; <code>storage/faq.py</code></li>
+        <li>Query embedding &mdash; selfhosted BGE-M3, native-script vector (no translation on the dense half)</li>
+        <li>Hybrid retrieval &mdash; single formula, no separate reranker: <code>score = cosine + 0.25&times;keyword_overlap + topic_bonus</code>, top-k 15, max 3 chunks/page</li>
+        <li class="new">Foreign-programme chunk filter &mdash; drops chunks naming a different programme before they reach generation</li>
+        <li>Deterministic table lookup &mdash; answers directly, no LLM call, when a question maps to one table cell</li>
+        <li>Context = joined chunk text + system prompt</li>
+        <li>LLM &mdash; Mistral primary (2 attempts) &rarr; NVIDIA fallback</li>
+        <li>Post-generation validation &mdash; deterministic checks &rarr; conditional single LLM review &rarr; &le;1 regeneration</li>
+      </ol>
+      <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);" class="na">N/A here (framework Phases 7&ndash;9, 14&ndash;15): no reranker, no query-rewrite/expansion stage, no BM25/Qdrant, no PET/ReAct/Least-to-Most anywhere in this path &mdash; nothing to ablate.</div>
+    </div>
+  </div>
+</section>
+
+<!-- PHASE 2/3 -->
+<section class="phase">
+  <div class="phase-head">
+    <span class="phase-num">02&ndash;03</span>
+    <h2 class="phase-title">Ingestion &amp; chunk quality</h2>
+    <span class="phase-tag tag-finding">1 real source defect found</span>
+  </div>
+  <div class="phase-body">
+    <p>Traced two live failures (Q7 &ldquo;Biology&rdquo; contamination, Q58 wrong fee figure) all the way to the source PDFs with <code>pypdf</code>, bypassing the app's own OCR pipeline entirely, rather than trusting the chunk. The pipeline itself is not naive raw-text-to-embed: OCR&rarr;markdown-tables&rarr;table-aware chunking with linearized readings and topic/section tagging, 15 pipeline-version iterations already fighting exactly this failure class.</p>
+
+    <div class="exhibit">
+      <div class="exhibit-label">Exhibit A &mdash; source document defect, not a pipeline bug</div>
+      <p style="margin:0 0 8px;">Q7 (&ldquo;What is the eligibility for B.Tech. Dairy Technology?&rdquo;) occasionally answered mentioning Biology &mdash; wrong for this programme (it requires Physics/Chemistry/<b>Mathematics</b>). Checked physical page 8 of the actual btech-dairy PDF directly:</p>
+      <blockquote>The other state candidates must have secure minimum 50% marks in Physics, Chemistry, Biology or Biotechnology&hellip; The admission to <b>B.V.Sc. &amp; A.H.</b> degree course shall be made on the basis of his/her merit in&hellip; ICAR-UG&hellip;</blockquote>
+      <p class="cite">data/projects/btech-dairy/prospectus.pdf, physical page 8 (confirmed via <code>pypdf</code> raw extraction, manifest hash matches current file)</p>
+      <p style="margin:8px 0 0;">This is MAFSU's own copy-paste error &mdash; a B.V.Sc. eligibility clause left in the Dairy Technology prospectus. The OCR chunk faithfully reflects it. <b>Retrieval and chunking are not at fault here.</b></p>
+      <p class="verdict fail-verdict">Root cause: contaminated source document, not INGESTION_FAILURE or CHUNKING_FAILURE.</p>
+    </div>
+
+    <div class="exhibit">
+      <div class="exhibit-label">Exhibit B &mdash; eval assertion was wrong, not the answer</div>
+      <p style="margin:0 0 8px;">Q58 (&ldquo;tuition fee for B.V.Sc.&rdquo;) was graded a failure for answering &#8377;27,500/&#8377;41,250 instead of the expected &#8377;62,635. Checked the source FEE STRUCTURE annexure directly:</p>
+      <blockquote>Sr.2 | Tuition Fee | 27500 | 27500 | 27500 | 41250 | 0
+&hellip;
+The admission fees for unreserved category Rs. 62635/-&hellip;</blockquote>
+      <p class="cite">data/projects/bvsc/vector-store.json, Annexure-IV FEE STRUCTURE (Constituent Veterinary Colleges)</p>
+      <p style="margin:8px 0 0;">&#8377;62,635 is the <b>admission</b> fee (one-time); &#8377;27,500/&#8377;41,250 is the <b>tuition</b> fee (annual) &mdash; two different, correctly-labelled line items in the same table. The bot answered the question asked. Fixed the eval's <code>expect</code>/<code>forbid</code> assertion instead of the bot.</p>
+      <p class="verdict pass-verdict">Root cause: eval ground-truth error, not GENERATION_FAILURE.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PHASE 4/5 -->
+<section class="phase">
+  <div class="phase-head">
+    <span class="phase-num">04&ndash;05</span>
+    <h2 class="phase-title">Golden dataset &amp; retrieval metrics</h2>
+    <span class="phase-tag tag-finding">Automation limit found</span>
+  </div>
+  <div class="phase-body">
+    <p>Attempted to scale the golden set from 14 hand-verified cases to all 75 <code>eval_admissions.py</code> questions by auto-deriving gold chunks from each case's already-verified <code>expect</code> terms (a chunk is gold if it contains every term). Result: only <b>2 of 80</b> cases could be confidently auto-labelled this way.</p>
+    <p>That's a real finding, not a failed experiment: <code>expect</code> lists were built for loose, paraphrase-tolerant answer-checking (does the model's prose mention &ldquo;50&rdquo; and &ldquo;eligible&rdquo;?), not for verbatim chunk-grounding. Source phrasing varies enough (&ldquo;four year&rdquo; vs &ldquo;4 years&rdquo;, &ldquo;MHT-CET&rdquo; vs &ldquo;MHT-C&rdquo;) that requiring literal co-occurrence in one chunk fails even when retrieval is working correctly. Scaling this properly needs one hand-verified verbatim phrase per question &mdash; real, bounded effort (~75 lookups against the PDFs), not automatable.</p>
+    <p>The trustworthy number remains the 14-case hand-verified set, reconfirmed this session:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Metric</th><th class="num">Value</th><th>Reading</th></tr></thead>
+        <tbody>
+          <tr><td>Recall@15</td><td class="num mono">0.93 (13/14)</td><td>The one miss (&ldquo;can I do dairy tech with biology&rdquo;) needs query rewriting, not reranking &mdash; the chunk never enters the candidate set at all</td></tr>
+          <tr><td>MRR</td><td class="num mono">0.649</td><td>8 of 12 hits already at rank 1&ndash;2 &mdash; a reranker would mostly reorder what's already found, not fix the miss</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- PHASE 6 -->
+<section class="phase">
+  <div class="phase-head">
+    <span class="phase-num">06</span>
+    <h2 class="phase-title">Same-question consistency</h2>
+    <span class="phase-tag tag-finding">Instability confirmed, generation-side</span>
+  </div>
+  <div class="phase-body">
+    <p>Ran the identical 75-question suite twice, cold cache both times &mdash; once before fixes, once after. The framework's own diagnostic logic settles the question directly: <b>same retrieved context, different output on repeat</b> &rarr; instability originates in generation, not retrieval. Confirmed concretely on Q7: asked it twice, page 8's contaminated chunk was retrieved both times, but only one run echoed &ldquo;Biology&rdquo;.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Run</th><th class="num">Score</th><th class="num">Avg latency</th><th>Failing questions</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Before fixes</td>
+            <td class="num mono">70/75</td>
+            <td class="num mono">20.6s</td>
+            <td class="mono">Q7, Q21, Q27, Q58, Q60</td>
+          </tr>
+          <tr>
+            <td>After fixes</td>
+            <td class="num mono">70/75</td>
+            <td class="num mono">10.0s</td>
+            <td class="mono">Q13, Q49, Q52*, Q64*, Q66*</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:13.5px; color:var(--ink-faint);">*Q52/Q66: client-side timeouts on a slow cold call &middot; Q64: reproduced correctly on retry immediately after &mdash; confirmed NOT a regression from the new foreign-programme filter. Q49: pre-existing router non-determinism on &ldquo;reservation policy&rdquo; (documented in HANDOFF.md before this session).</p>
+    <p><b>The failure set is not stable between two otherwise-identical runs, while the total count is.</b> That's a direct empirical demonstration of provider-side generation variance on narrow-margin questions &mdash; not a retrieval defect, and not something either eval run's specific 5 failures should be over-indexed on individually.</p>
+  </div>
+</section>
+
+<!-- PHASE 10/12/13 -->
+<section class="phase">
+  <div class="phase-head">
+    <span class="phase-num">10&middot;12&middot;13</span>
+    <h2 class="phase-title">Context, faithfulness &amp; cross-document conflicts</h2>
+    <span class="phase-tag tag-finding">New bug surfaced</span>
+  </div>
+  <div class="phase-body">
+    <p><b>Faithfulness</b> &mdash; the existing validator (<code>rag/validate.py</code>) already logs every deterministic flag to a per-project review log; read it directly rather than rebuilding groundedness scoring from scratch. Filtered to this session's ~150 live requests (2 full eval runs + spot checks):</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Signal</th><th class="num">Count</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>unsupported_number</td><td class="num mono">6</td><td>A number in the answer wasn't grounded in retrieved context &mdash; genuine hallucination signal, ~4% of requests</td></tr>
+          <tr><td>foreign_programme_mention</td><td class="num mono">2</td><td>Residual leak after today's context filter &mdash; down from the documented pre-fix baseline, not eliminated</td></tr>
+          <tr><td>provenance_unsourced_number (comparison)</td><td class="num mono">3</td><td>Multi-programme comparison answers inventing figures</td></tr>
+          <tr><td>provenance_mislabelled (comparison)</td><td class="num mono">13</td><td>Correctly-sourced figures attributed to the <i>wrong</i> programme in a comparison table</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="exhibit">
+      <div class="exhibit-label">Exhibit C &mdash; new finding: comparison-path mislabeling</div>
+      <p style="margin:0 0 8px;">One flagged comparison answer mislabelled ten fee figures at once across all three programmes:</p>
+      <blockquote>B.V.Sc. &amp; A.H.: mislabelled 110000, 115000, 120000, 130000, 140000, 150000, 170000, 70000.00, 74000.00, 95000
+B.F.Sc.: mislabelled 16025, 17400
+B.Tech. (Dairy Technology): mislabelled 16025, 8525</blockquote>
+      <p class="cite">reviewlog, kind=provenance_unsourced_number, source=comparison, project=bvsc</p>
+      <p style="margin:8px 0 0;">This lives in <code>rag/comparison.py</code>, a separate code path from everything fixed this session (which only touched the single-project <code>rag/answer.py</code> path). <b>Not fixed yet</b> &mdash; flagged here as the highest-value next target, since it's whole fee tables getting cross-attributed, not a one-word slip.</p>
+    </div>
+
+    <p><b>Cross-document conflicts</b> &mdash; checked the one fact that genuinely should be identical across all three separately-ingested PDFs: the application fee. Found byte-identical across all three corpora (&#8377;1,000 unreserved / &#8377;700 reserved, same sentence, pages 16/18/16). No conflict. This also confirms today's guard fix treating &ldquo;how do I pay the fee&rdquo; as a shared/general question was correct on the evidence, not just by analogy.</p>
+  </div>
+</section>
+
+<!-- PHASE 16-19 -->
+<section class="phase">
+  <div class="phase-head">
+    <span class="phase-num">16&ndash;19</span>
+    <h2 class="phase-title">Failure classification &amp; ranked fixes</h2>
+  </div>
+  <div class="phase-body">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Question</th><th>Root cause</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">Q7</td><td>Source PDF copy-paste error (page 8) surfacing under generation variance</td><td><span class="badge badge-pass">Mitigated</span> &mdash; foreign-programme chunk filter</td></tr>
+          <tr><td class="mono">Q21 / Q27 / Q60</td><td>Guard logic: router false-positive with no override; missing programme-name veto</td><td><span class="badge badge-pass">Fixed</span></td></tr>
+          <tr><td class="mono">Q58</td><td>Eval ground-truth error (admission fee vs tuition fee conflated)</td><td><span class="badge badge-pass">Fixed</span> (eval assertion corrected)</td></tr>
+          <tr><td class="mono">Q13</td><td>Eligibility-percentage vs. reservation-quota-percentage conflation in one answer</td><td><span class="badge badge-info">New, unfixed</span></td></tr>
+          <tr><td class="mono">Q49</td><td>Router non-determinism on &ldquo;reservation policy&rdquo; (pre-existing, documented)</td><td><span class="badge badge-info">Known, unfixed</span></td></tr>
+          <tr><td class="mono">Comparison mislabeling</td><td>Fee-table cross-attribution across programmes in <code>comparison.py</code></td><td><span class="badge badge-fail">Found, unfixed</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="priority">
+      <div class="priority-head"><span class="priority-level p1">P1</span><span class="priority-title">Comparison-path fee mislabeling (Exhibit C)</span></div>
+      <div class="priority-body"><dl>
+        <dt>Evidence</dt><dd>13 provenance_mislabelled + 3 unsourced flags in one session, one instance mislabelling 10 figures across 3 programmes at once</dd>
+        <dt>Recommended</dt><dd>Apply the same source-attribution discipline the single-project path just got &mdash; tag each retrieved chunk with its origin project before pooling for comparison, verify the model's per-programme attribution against that tag post-generation</dd>
+        <dt>Effort</dt><dd>Medium &mdash; isolated to <code>rag/comparison.py</code></dd>
+        <dt>Risk</dt><dd>Low &mdash; additive check, same pattern as today's validate.py checks</dd>
+      </dl></div>
+    </div>
+
+    <div class="priority">
+      <div class="priority-head"><span class="priority-level p1">P1</span><span class="priority-title">Q13-class percentage conflation</span></div>
+      <div class="priority-body"><dl>
+        <dt>Evidence</dt><dd>&ldquo;48% in PCB, reserved category, eligible?&rdquo; answered with SC/ST seat-quota percentages (13%/7%) instead of the 47.5% academic eligibility threshold</dd>
+        <dt>Recommended</dt><dd>Investigate whether this is generation variance (matches Phase 6's pattern) or a retrieval issue pulling the quota-allocation chunk over the eligibility-threshold chunk for reserved-category eligibility questions specifically</dd>
+        <dt>Effort</dt><dd>Small investigation first, fix size TBD</dd>
+        <dt>Risk</dt><dd>Low to investigate</dd>
+      </dl></div>
+    </div>
+
+    <div class="priority">
+      <div class="priority-level p2" style="display:inline-block; margin-bottom: 8px;">P2</div>
+      <div class="priority-body" style="padding-left:0;"><dl>
+        <dt>Item</dt><dd>Full 75-question hand-verified retrieval golden set (currently 14/75 hand-verified)</dd>
+        <dt>Effort</dt><dd>~75 bounded PDF lookups, no code risk</dd>
+      </dl></div>
+    </div>
+
+    <div class="priority">
+      <div class="priority-level p3" style="display:inline-block; margin-bottom: 8px;">P3</div>
+      <div class="priority-body" style="padding-left:0;"><dl>
+        <dt>Item</dt><dd>&ldquo;Reservation policy&rdquo; router flakiness (Q49) &mdash; HANDOFF.md already documents 3 reverted attempts at hardcoding this; not touching without new evidence</dd>
+      </dl></div>
+    </div>
+  </div>
+</section>
+
+<!-- PHASE 20 -->
+<section class="phase">
+  <div class="phase-head">
+    <span class="phase-num">20</span>
+    <h2 class="phase-title">Final decision</h2>
+  </div>
+  <div class="phase-body">
+    <div class="answers">
+      <div class="answer-item"><div class="answer-num">1</div><div class="answer-q">Is PDF extraction reliable?</div><div class="answer-a">Yes for structure (OCR&rarr;markdown tables preserve row/column labels). One source document itself has a real content defect (Exhibit A) &mdash; extraction reported it faithfully.</div></div>
+      <div class="answer-item"><div class="answer-num">2</div><div class="answer-q">Is chunking reliable?</div><div class="answer-a">Yes &mdash; table-aware, header-preserving splits, topic/section tagging through 15 pipeline-version iterations. No fragmentation evidence found.</div></div>
+      <div class="answer-item"><div class="answer-num">3</div><div class="answer-q">Is the embedding model suitable?</div><div class="answer-a">Yes &mdash; recall@15 0.93 on the hand-verified set, cross-lingual (Hindi/Marathi native-script retrieval already measured separately at 98.5%).</div></div>
+      <div class="answer-item"><div class="answer-num">4</div><div class="answer-q">Is dense retrieval reliable?</div><div class="answer-a">Yes at this scale (~700 chunks) &mdash; no reranker or ANN index needed; linear cosine scan is sub-millisecond.</div></div>
+      <div class="answer-item"><div class="answer-num">5&ndash;9</div><div class="answer-q">Keyword retrieval / hybrid / query rewriting / reranking / correct context reaching the LLM?</div><div class="answer-a">Keyword half exists and measurably helps Hindi/Marathi lexical matching; no separate reranker or rewriting stage exists to evaluate. Correct context reaches the LLM &mdash; verified directly against source PDFs, not inferred from output.</div></div>
+      <div class="answer-item"><div class="answer-num">10</div><div class="answer-q">Is the LLM hallucinating despite correct context?</div><div class="answer-a">Sometimes &mdash; ~4% unsupported-number rate, confirmed via the existing validator's own logs, independent of retrieval correctness.</div></div>
+      <div class="answer-item"><div class="answer-num">11</div><div class="answer-q">Why does the same question sometimes succeed and sometimes fail?</div><div class="answer-a"><b>Generation-side variance under conflicting or borderline context</b> &mdash; confirmed directly on Q7 with identical retrieved chunks producing different answers across two runs.</div></div>
+      <div class="answer-item"><div class="answer-num">12</div><div class="answer-q">Which component contributes the most failures?</div><div class="answer-a">Generation variance and guard/routing precision &mdash; not retrieval, not chunking.</div></div>
+      <div class="answer-item"><div class="answer-num">13&ndash;14</div><div class="answer-q">Which reasoning techniques should remain / be removed?</div><div class="answer-a">None exist to remove &mdash; the pipeline is already appropriately simple for this scale. Don't add PET/ReAct/reranking on top of an already-adequate retriever.</div></div>
+      <div class="answer-item"><div class="answer-num">15</div><div class="answer-q">Smallest change for production-level reliability?</div><div class="answer-a">Already shipped this session: filter foreign-programme chunks pre-generation, fix the two guard veto gaps, correct one eval assertion. Remaining highest-leverage item is the comparison-path mislabeling (Exhibit C) &mdash; same discipline, different file.</div></div>
+    </div>
+
+    <p style="margin-top:20px;"><b>First point of divergence between a successful and a failed run:</b> generation, given contradictory or borderline-relevant context &mdash; not query processing, not embedding, not retrieval ranking. Every case traced this session confirmed the right chunk reached the model; what varied was how the model resolved it when the source material itself contained a contradiction (Exhibit A) or when two numerically-similar-sounding concepts (tuition vs. admission fee; eligibility percentage vs. quota percentage) were both present in context.</p>
+  </div>
+</section>
+
+<footer>
+  Fixes shipped this session: <code>backend/rag/answer.py</code> (foreign-programme context filter) &middot; <code>backend/rag/guards.py</code> (clarify-guard veto, shared-topic override) &middot; <code>backend/core/programs.py</code> (is_shared_topic, marker corrections) &middot; <code>backend/config.py</code> (OLLAMA_URL localhost&rarr;127.0.0.1) &middot; <code>tools/eval_admissions.py</code> (Q58 assertion) &middot; <code>tools/eval_retrieval_full.py</code> (new, Phase 4/5 tooling)
+</footer>
+
+</div>

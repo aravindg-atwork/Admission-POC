@@ -32,8 +32,33 @@ data/projects/*
 !data/projects/.gitkeep
 
 # --- Dev/demo generated artifacts ---
+# backend/ and tools/ moved to archived/ on 2026-08-21 (platform/ is now the
+# primary system) - both paths kept so this still matches wherever a clone
+# happens to have them.
 tools/demo-vector-store.json
 tools/demo-api-keys.json
+archived/tools/demo-vector-store.json
+archived/tools/demo-api-keys.json
+
+# --- Backup .env dumps (real API keys, same risk as .env itself - one was
+# found sitting untracked and unignored 2026-08-21, moved into
+# archived/legacy-docs/ but never let this pattern lapse again) ---
+.env.bak*
+
+# --- Old full-data backup dumps under archived/legacy-docs/ - these are
+# copies of data/ from prior machine-migration work (see HANDOFF.md) and
+# contain the SAME class of real secrets data/api-keys.json is already
+# ignored for above, just at a different path. Caught live 2026-08-21:
+# archived/legacy-docs/data.bak-20260817112440/api-keys.json held three
+# real, active "aas_..." widget auth keys, one commit away from being
+# pushed to GitHub before this was noticed and the commit was amended.
+# Kept on disk for reference, never in git.
+archived/legacy-docs/data.bak-*/
+archived/legacy-docs/.data-extract-tmp/
+
+# --- Build/package caches, not repo content ---
+.pnpm-store/
+/tmp/
 
 # --- Logs / scratch ---
 *.log
@@ -52,6 +77,15 @@ extension/.keys/
 
 # --- Demo transfer bundle (contains .env and live API keys - never commit) ---
 demo-bundle*.zip
+
+# --- Machine-transfer archive (HANDOFF section 1) ---
+# `zip -r admission-data.zip data .env` is the documented way to move this
+# project between machines, so the archive contains every API key AND the
+# vector stores. It was sitting untracked and unignored at 37MB, one `git add
+# -A` away from being committed - which would put the keys in git history
+# permanently, since deleting a file later does not remove it from history.
+data.zip
+admission-data*.zip
 
 # macOS / scratch
 .DS_Store

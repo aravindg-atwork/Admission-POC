@@ -1,0 +1,126 @@
+.app-shell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--mist);
+  background: var(--paper-raised);
+}
+
+.app-shell__wordmark {
+  font-size: var(--text-xl);
+  color: var(--pasture-deep);
+  animation: wordmark-in 0.4s var(--ease-out);
+  animation-duration: calc(0.4s * var(--motion-scale, 1));
+}
+
+.app-shell__wordmark--mr {
+  font-family: var(--font-display-mr);
+}
+
+@keyframes wordmark-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-shell__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-shell__programme {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+}
+
+.app-shell__programme select {
+  min-height: 38px;
+  max-width: 180px;
+  padding: 0 var(--space-7) 0 var(--space-3);
+  border: 1px solid var(--mist-deep);
+  border-radius: var(--radius-full);
+  background: var(--paper-raised);
+  color: var(--pasture-deep);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-shell__programme select:focus-visible {
+  outline: 2px solid var(--pasture);
+  outline-offset: 2px;
+}
+
+.app-shell__programme select:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.app-shell__icon-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--mist-deep);
+  background: var(--paper-raised);
+  color: var(--ink-muted);
+  border-radius: var(--radius-full);
+  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+
+.app-shell__icon-btn:hover:not(:disabled) {
+  border-color: var(--pasture);
+  color: var(--pasture-deep);
+}
+
+.app-shell__icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 560px) {
+  .app-shell {
+    flex-wrap: wrap;
+    padding: var(--space-3) var(--space-4);
+  }
+  .app-shell__wordmark {
+    font-size: var(--text-lg);
+  }
+  .app-shell__icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+  .app-shell__actions {
+    width: 100%;
+    justify-content: flex-end;
+    gap: var(--space-1);
+  }
+  .app-shell__programme-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .app-shell__programme select {
+    max-width: 130px;
+    min-height: 34px;
+    padding-left: var(--space-2);
+    font-size: var(--text-xs);
+  }
+}
