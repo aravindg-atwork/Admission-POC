@@ -50,9 +50,15 @@ CHECKS = {
 
 
 def ask(question: str) -> tuple[dict, float]:
+    # The API asks which programme a question is about when the client sends
+    # no selected programme (the P0 ambiguous-programme guard). The real widget
+    # sets conversationState.programme when a student picks a course, so a suite
+    # that omits it is not simulating a student - it was silently scoring
+    # `programme-clarify` as a miss on every question that names no programme.
     request = urllib.request.Request(
         f"{BASE}/api/chat", method="POST", headers={"Content-Type": "application/json"},
-        data=json.dumps({"projectId": "bfsc", "question": question, "uiLanguage": "en"}).encode(),
+        data=json.dumps({"projectId": "bfsc", "question": question, "uiLanguage": "en",
+                         "conversationState": {"programme": "bfsc"}}).encode(),
     )
     started = time.time()
     with urllib.request.urlopen(request, timeout=150) as response:
