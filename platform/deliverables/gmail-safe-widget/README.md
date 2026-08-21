@@ -1,5 +1,9 @@
 # MAFSU admissions floating widget
 
+For the complete production contract, endpoint schemas, speech status,
+security requirements and acceptance checklist, read
+`MAFSU_DEVELOPER_HANDOFF.md` first.
+
 A standalone HTML/CSS/jQuery integration package for the existing MAFSU WebForms website. It does not require React and all widget selectors are prefixed with `mafsu-chat` to reduce collisions with the host site's CSS.
 
 The student-facing name is **MAFSU MITRA (Beta)**. The visible beta notice is
@@ -7,6 +11,8 @@ intentional and must remain in the production embed until the University signs
 off on removing it.
 
 ## Files to hand over
+
+- `MitraProxy.ashx.txt` — rename to `MitraProxy.ashx` and copy to the physical `/test_site/` folder for code-only UAT.
 
 - `mafsu-admissions-widget.css` — copy to the site's CSS/static folder.
 - `mafsu-admissions-widget.js` — copy to the site's JavaScript/static folder.
@@ -17,16 +23,18 @@ The included `index.html` is a working standalone visual demo. It loads jQuery 3
 
 ## API configuration
 
-Set `data-api-base` on the root element:
+Use the supplied code-only handler URLs:
 
 ```html
 <div id="mafsu-admissions-widget"
      class="mafsu-chat"
-     data-api-base="https://admissions-api.mafsu.in"
+     data-api-base=""
+     data-chat-url="/test_site/MitraProxy.ashx?endpoint=chat"
+     data-health-url="/test_site/MitraProxy.ashx?endpoint=healthz"
      data-default-language="en">
 ```
 
-The preferred production arrangement is a same-origin reverse proxy and an empty `data-api-base`, so requests go to `/api/chat` on the MAFSU website domain. This avoids mixed-content and CORS failures. Do not embed the current plain-HTTP IP endpoint into an HTTPS MAFSU page; browsers will block it.
+The supplied ASP.NET handler provides isolated UAT without ARR or a `web.config` change. Delete the handler to roll back. Do not embed the plain-HTTP IP into the HTTPS MAFSU page; browsers will block it.
 
 Expected request:
 
@@ -61,4 +69,9 @@ The initially supplied `projectId` is only a safe API default. An explicitly nam
 
 ## Current product limitation
 
-Explicit programme names auto-route correctly. General 10-turn reference resolution (for phrases such as “does that also apply?”), ambiguous-programme disambiguation, and multi-programme comparison are still part of roadmap item 7 and should not be represented as complete in the production sign-off.
+The microphone is browser-native speech-to-text; there is no server-side TTS
+endpoint today. The public demo is also still plain HTTP. The official HTTPS
+MAFSU website must use the documented same-origin proxy before embedding the
+widget. Cache capacity, free-tier provider quotas, load balancing and the admin
+review console remain backend-team work and are not responsibilities of the
+website integration.

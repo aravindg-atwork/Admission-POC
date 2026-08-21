@@ -25,7 +25,11 @@ class Settings(BaseSettings):
     service_name: str = "admission-assistant-api"
     environment: str = "local"
     admin_api_key: str = ""
+    admin_require_two_person_high_risk: bool = False
     conversation_retention_days: int = 30
+    cors_origins: str = "http://159.69.210.30,http://localhost:5180,http://127.0.0.1:5180,null"
+    chat_rate_limit_per_minute: int = 30
+    max_request_bytes: int = 16384
 
     # --- Postgres ---
     postgres_dsn: str = "postgresql+psycopg://platform:platform@localhost:5432/platform"
@@ -37,6 +41,11 @@ class Settings(BaseSettings):
     # Increment when prospectus content or deterministic policy changes.
     # Including this revision in every key makes invalidation atomic.
     faq_cache_revision: str = "2026-08-21-v14"
+    cache_fill_lock_seconds: int = 120
+    cache_fill_wait_seconds: int = 55
+    semantic_faq_enabled: bool = True
+    semantic_faq_threshold: float = 0.965
+    semantic_faq_max_entries_per_project: int = 2000
 
     # --- Qdrant ---
     qdrant_url: str = "http://localhost:6333"
@@ -62,6 +71,20 @@ class Settings(BaseSettings):
     # hanging the student's request - ported value, see backend/config.py's
     # CLOUD_ATTEMPT_TIMEOUT.
     cloud_attempt_timeout: int = 45
+    provider_max_concurrency: int = 4
+    provider_queue_wait_seconds: int = 8
+    provider_rate_limit_cooldown_seconds: int = 120
+    provider_error_cooldown_seconds: int = 20
+    provider_daily_call_budget: int = 500
+
+    # Optional self-hosted shadow reviewer. It never participates in the
+    # student response path and cannot publish curated answers.
+    qwen_review_enabled: bool = False
+    qwen_review_url: str = ""
+    qwen_review_api_key: str = ""
+    qwen_review_model: str = "qwen2.5:7b-instruct"
+    qwen_review_timeout_seconds: int = 90
+    qwen_review_poll_seconds: int = 5
 
     selfhosted_url: str = "http://127.0.0.1:8000"
     selfhosted_api_key: str = ""
@@ -86,6 +109,10 @@ class Settings(BaseSettings):
     # backend/config.py's RETRIEVAL_CONFIDENCE_FLOOR comment for why this
     # number specifically is a starting point, not a tuned value.
     retrieval_confidence_floor: float = 0.30
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
 
 
 @lru_cache

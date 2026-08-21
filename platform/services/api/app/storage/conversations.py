@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from .database import SessionLocal
-from .models import ConversationMessage, ConversationSession, ReviewCase, ReviewAudit
+from .models import ConversationMessage, ConversationSession, MachineReview, ReviewCase, ReviewAudit
 
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
 _PHONE = re.compile(r"(?<!\d)(?:\+?91[-\s]?)?[6-9]\d{9}(?!\d)")
@@ -19,6 +19,20 @@ def redact(text: str) -> str:
     text = _EMAIL.sub("[email redacted]", text)
     text = _PHONE.sub("[phone redacted]", text)
     return _AADHAAR.sub("[identity number redacted]", text)
+
+
+def _needs_machine_review(result: dict) -> bool:
+    source = str(result.get("source", ""))
+    if source in {"greeting", "identity", "language-control", "language-repeat", "malformed-input", "privacy-guard", "instruction-override", "prediction-boundary"}:
+        return False
+    answer = str(result.get("answer", "")).lower()
+    high_risk = any(term in answer for term in (
+        "eligible", "eligibility", "fee", "deadline", "quota", "reservation",
+        "seat", "certificate", "document", "neet", "mht-cet", "cuet",
+    ))
+    return high_risk or result.get("decisionState") in {
+        "eligible_so_far", "not_eligible", "document_issue", "quota_specific", "cannot_confirm",
+    }
 
 
 def log_exchange(session_id: str | None, project_id: str, language: str,
@@ -50,6 +64,10 @@ def log_exchange(session_id: str | None, project_id: str, language: str,
         )
         db.add(assistant)
         db.flush()
+        if _needs_machine_review(result):
+            db.add(MachineReview(
+                message_id=assistant.id, status="pending", created_at=now, updated_at=now,
+            ))
         if result.get("source") in {"validation-blocked", "provider-unavailable", "low-confidence"}:
             review = ReviewCase(
                 message_id=assistant.id, reason="automatic-safety-flag",

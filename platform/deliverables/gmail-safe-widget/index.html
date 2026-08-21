@@ -16,14 +16,17 @@
     <p>The admissions assistant is isolated in the lower-right corner. This page represents how it will sit above the existing WebForms and jQuery website.</p>
   </main>
 
-  <div id="mafsu-admissions-widget" class="mafsu-chat" data-api-base="http://159.69.210.30:8080" data-default-language="en">
+  <div id="mafsu-admissions-widget" class="mafsu-chat" data-api-base="" data-chat-url="/test_site/MitraProxy.ashx?endpoint=chat" data-health-url="/test_site/MitraProxy.ashx?endpoint=healthz" data-default-language="en">
     <section class="mafsu-chat__panel" id="mafsu-chat-panel" role="dialog" aria-modal="false" aria-labelledby="mafsu-chat-title" hidden>
       <header class="mafsu-chat__header">
-        <div class="mafsu-chat__seal" aria-hidden="true">M</div>
+        <div class="mafsu-chat__seal">
+          <img src="MAFSU_LOGO.jpg" alt="MAFSU emblem">
+        </div>
         <div class="mafsu-chat__identity">
           <p class="mafsu-chat__kicker"><span></span> Official MAFSU Admission Assistant</p>
           <h2 id="mafsu-chat-title">MAFSU MITRA <small>Beta</small></h2>
         </div>
+        <button class="mafsu-chat__icon-button mafsu-chat__help-button" type="button" data-chat-action="faq" aria-label="Show frequently asked questions" title="Frequently asked questions">?</button>
         <button class="mafsu-chat__icon-button" type="button" data-chat-action="close" aria-label="Close admissions assistant">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
         </button>
@@ -49,12 +52,14 @@
 
       <div class="mafsu-chat__messages" data-chat-messages role="log" aria-live="polite" aria-relevant="additions">
         <div class="mafsu-chat__welcome">
-          <h3>Your MAFSU admission starts here.</h3>
-          <p>Select your programme or ask me anything about eligibility, documents, fees and admission.</p>
+          <p class="mafsu-chat__hello">Hello! <span aria-hidden="true">👋</span></p>
+          <h3>I’m <em>MAFSU MITRA</em></h3>
+          <p>Your MAFSU undergraduate admission assistant. Ask naturally about eligibility, documents, fees, seats and more.</p>
+          <p class="mafsu-chat__explore-title">Explore programmes</p>
           <div class="mafsu-chat__course-grid" aria-label="Choose a programme">
-            <button type="button" data-question="Help me with B.V.Sc. &amp; A.H."><strong>B.V.Sc.</strong><span>Veterinary Science</span><b aria-hidden="true">→</b></button>
-            <button type="button" data-question="Help me with B.F.Sc."><strong>B.F.Sc.</strong><span>Fishery Science</span><b aria-hidden="true">→</b></button>
-            <button type="button" data-question="Help me with B.Tech. Dairy Technology"><strong>B.Tech.</strong><span>Dairy Technology</span><b aria-hidden="true">→</b></button>
+            <button type="button" data-question="Help me with B.V.Sc. &amp; A.H."><i aria-hidden="true">V</i><strong>B.V.Sc.</strong><span>Veterinary Science</span><b aria-hidden="true">→</b></button>
+            <button type="button" data-question="Help me with B.F.Sc."><i aria-hidden="true">F</i><strong>B.F.Sc.</strong><span>Fishery Science</span><b aria-hidden="true">→</b></button>
+            <button type="button" data-question="Help me with B.Tech. Dairy Technology"><i aria-hidden="true">D</i><strong>B.Tech.</strong><span>Dairy Technology</span><b aria-hidden="true">→</b></button>
           </div>
           <div class="mafsu-chat__quick-questions">
             <button type="button" data-question="Am I eligible?">Am I eligible?</button>
@@ -86,10 +91,10 @@
 
     <button class="mafsu-chat__launcher" type="button" data-chat-action="toggle" aria-controls="mafsu-chat-panel" aria-expanded="false">
       <span class="mafsu-chat__launcher-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M5 5.8h14v9.4H9.8L6 18.5v-3.3H5V5.8Z"/><path d="M8.5 9h7M8.5 12h4.5"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M11.5 3.5c.65 4.35 2.65 6.35 7 7-4.35.65-6.35 2.65-7 7-.65-4.35-2.65-6.35-7-7 4.35-.65 6.35-2.65 7-7Z"/><path d="M18.5 15.5c.25 1.7 1.05 2.5 2.75 2.75-1.7.25-2.5 1.05-2.75 2.75-.25-1.7-1.05-2.5-2.75-2.75 1.7-.25 2.5-1.05 2.75-2.75Z"/></svg>
       </span>
       <span class="mafsu-chat__launcher-copy" aria-hidden="true">Ask MAFSU MITRA</span>
-      <span class="mafsu-chat__online" aria-hidden="true"></span>
+      <span class="mafsu-chat__online" data-health="checking" aria-hidden="true"></span>
     </button>
   </div>
 

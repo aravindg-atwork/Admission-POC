@@ -15,12 +15,14 @@ system prompts are all carried over from the proven system, just called
 from a simpler pipeline shape.
 """
 
+import re
+
 from ..core import eligibility, lang, tablelookup, vocabulary
 from ..providers import embeddings, llm
 from ..retrieval import store
 from ..settings import get_settings
-from ..storage import answer_cache, curated
-from . import guards, language, prompts, validate
+from ..storage import answer_cache, curated, semantic_faq
+from . import guards, knowledge_boundary, language, prompts, validate
 
 _settings = get_settings()
 
@@ -128,7 +130,27 @@ def _looks_like_eligibility_question(question: str) -> bool:
 
 def _with_language(result: dict, ctx: language.LanguageContext) -> dict:
     """Attach language metadata and localize fixed English guard replies."""
+    result = dict(result)
+    result["answer"] = knowledge_boundary.apply(result.get("answer", ""))
     fixed_english = result.get("model") in ("guard", "policy-engine", "none", "validator")
+    answer_low = result.get("answer", "").lower()
+    if ctx.language in ("hi", "mr") and result.get("source") == "structured-policy" and "nri/fn/pio/oci" in answer_low and "xii" in answer_low:
+        stated = re.search(r"stated (\d+(?:\.\d+)?)%", result["answer"], re.I)
+        mark = stated.group(1) if stated else ""
+        meets = "meets the 50%" in answer_low
+        if ctx.language == "hi":
+            result["answer"] = (
+                f"आपके NEET न देने से ही आप अपात्र नहीं होते। B.V.Sc. के NRI/FN/PIO/OCI नियम में विदेश से XII या समकक्ष परीक्षा उत्तीर्ण उम्मीदवार को NEET-UG-2026 से छूट है। "
+                + (f"आपके बताए {mark}% इस कोटे की Physics, Chemistry, Biology या Biotechnology और English में 50% की आवश्यकता पूरी करते हैं। अंतिम पात्रता के लिए 31 December 2026 तक 17 वर्ष की आयु, वैध NRI/FN/PIO/OCI स्थिति और आवश्यक दस्तावेज़ भी जरूरी हैं।" if meets else f"लेकिन आपके बताए {mark}% इस कोटे की Physics, Chemistry, Biology या Biotechnology और English में आवश्यक 50% से कम हैं। NEET की छूट अंकों, आयु, स्थिति या दस्तावेज़ों की शर्त को समाप्त नहीं करती।")
+            )
+        else:
+            result["answer"] = (
+                f"NEET न दिल्यामुळेच तुम्ही अपात्र ठरत नाही. B.V.Sc. च्या NRI/FN/PIO/OCI नियमानुसार परदेशातून XII किंवा समकक्ष परीक्षा उत्तीर्ण उमेदवाराला NEET-UG-2026 मधून सूट आहे. "
+                + (f"तुमचे नमूद केलेले {mark}% या कोट्यासाठी Physics, Chemistry, Biology किंवा Biotechnology आणि English मधील 50% अट पूर्ण करतात. अंतिम पात्रतेसाठी 31 December 2026 पर्यंत 17 वर्षे वय, वैध NRI/FN/PIO/OCI दर्जा आणि आवश्यक कागदपत्रेही आवश्यक आहेत." if meets else f"परंतु तुमचे नमूद केलेले {mark}% या कोट्यासाठी आवश्यक 50% पेक्षा कमी आहेत. NEET सूट गुण, वय, दर्जा किंवा कागदपत्रांच्या अटी रद्द करत नाही.")
+            )
+        result["model"] = "policy-localization"
+        result["language"] = ctx.language
+        return result
     if ctx.language in ("hi", "mr") and (
         fixed_english or lang.detect_script(result.get("answer", "")) != "devanagari"
     ):
@@ -141,6 +163,10 @@ def _with_language(result: dict, ctx: language.LanguageContext) -> dict:
 def answer(project_id: str, question: str, conversation_state: dict | None = None,
            ui_language: str = "en") -> dict:
     state = conversation_state or {}
+    # Programme selection and a persisted language preference do not change
+    # the factual answer. Guided-interview/reference slots do, and must never
+    # share a cache entry with another student.
+    cacheable_request = set(state).issubset({"programme", "preferredLanguage"})
     requested_language = language.requested_language(question)
     preferred_language = requested_language or state.get("preferredLanguage")
     language_ctx = language.prepare(
@@ -183,17 +209,41 @@ def answer(project_id: str, question: str, conversation_state: dict | None = Non
     if reviewed is not None:
         reviewed["language"] = language_ctx.language
         return reviewed
-    if not conversation_state:
+    if cacheable_request:
         cached = answer_cache.get(project_id, question, language_ctx.language)
         if cached is not None:
             return cached
-    result = _with_language(
-        _answer_uncached(project_id, question, conversation_state, language_ctx),
-        language_ctx,
-    )
-    if not conversation_state:
-        answer_cache.put(project_id, question, result, language_ctx.language)
-    return result
+    fill_token = None
+    if cacheable_request:
+        fill_token = answer_cache.acquire_fill_lock(project_id, question, language_ctx.language)
+        if fill_token is None:
+            filled = answer_cache.wait_for_fill(project_id, question, language_ctx.language)
+            if filled is not None:
+                return filled
+            fill_token = answer_cache.acquire_fill_lock(project_id, question, language_ctx.language)
+            if fill_token is None:
+                return _with_language({
+                    "answer": "Many students are asking the same question right now. Please retry in a moment; I won't guess or spend another provider request while the verified answer is being prepared.",
+                    "source": "provider-busy", "model": "capacity-guard", "pages": [],
+                }, language_ctx)
+    try:
+        result = _with_language(
+            _answer_uncached(project_id, question, conversation_state, language_ctx),
+            language_ctx,
+        )
+        query_vector = result.pop("_queryVector", None)
+        if cacheable_request and query_vector is not None:
+            semantic_faq.put(
+                project_id, language_ctx.language, question, result, query_vector,
+            )
+        if cacheable_request:
+            answer_cache.put(project_id, question, result, language_ctx.language)
+        return result
+    finally:
+        if fill_token is not None:
+            answer_cache.release_fill_lock(
+                project_id, question, fill_token, language_ctx.language,
+            )
 
 
 def _answer_uncached(project_id: str, question: str, conversation_state: dict | None,
@@ -213,23 +263,29 @@ def _answer_uncached(project_id: str, question: str, conversation_state: dict | 
             "pages": [],
             "language": language_ctx.language,
         }
+    if not conversation_state or set(conversation_state).issubset({"programme", "preferredLanguage"}):
+        semantic_hit = semantic_faq.lookup(
+            project_id, language_ctx.language, question, query_vector,
+        )
+        if semantic_hit is not None:
+            return semantic_hit
     retrieval_text = _retrieval_text(language_ctx.retrieval_question)
     top = store.search(project_id, query_vector, _settings.top_k, retrieval_text)
 
     if not top:
         return _with_language({
-            "answer": "There's no prospectus loaded for this programme yet, so I can't "
-                      "answer specific questions until it is.",
+            "answer": "I don't have enough verified information to answer that safely right now. Please try again shortly or confirm the question with the appropriate MAFSU admission authority.",
             "source": "no-context", "model": "none", "pages": [],
         }, language_ctx)
 
     if not _retrieval_is_confident(top):
         reply, model = llm.generate(
             prompts.SYSTEM_PROMPT_BASE.format(program=project_id) + llm.LANGUAGE_RULE,
-            "The retrieved excerpts don't clearly cover what's being asked. State "
-            "honestly and briefly that you're not confident you have the right "
-            "information for this specific question, and suggest rephrasing or "
-            "contacting admissions directly. Do not guess or invent a figure.\n\n"
+            "There is not enough verified information to answer this safely. Say: "
+            "'I don't have enough verified information to confirm that.' If a verified "
+            "part is known, state it first. Suggest a targeted clarification or the "
+            "appropriate admission authority. Never blame MAFSU or mention retrieval, "
+            "context, excerpts, a knowledge base, vectors, chunks, or RAG.\n\n"
             f"Question: {question}" + language_ctx.reply_hint,
             language_ctx.generation_question,
         )
@@ -338,11 +394,11 @@ def _answer_uncached(project_id: str, question: str, conversation_state: dict | 
         else:
             print(f"[validation] regeneration still unsafe for {project_id}")
             return _with_language({
-                "answer": f"I couldn't verify a safe answer from the {project_id} prospectus excerpts, so I won't guess. Please rephrase the question or contact admissions directly.",
+                "answer": "I don't have enough verified information to confirm that safely. Please clarify the exact programme or circumstance, or confirm the individual case with the appropriate MAFSU admission authority.",
                 "source": "validation-blocked", "model": "validator", "pages": pages,
             }, language_ctx)
     return {"answer": reply, "source": "rag", "model": model, "pages": pages,
-            "language": language_ctx.language}
+            "language": language_ctx.language, "_queryVector": query_vector}
 
 
 def _eligibility_facts_text(result: dict) -> str:

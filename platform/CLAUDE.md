@@ -868,3 +868,192 @@ not merely rerunning the earlier exact 23 questions.
 `http://localhost:5180`, API at `http://localhost:8100`, Qdrant's own API
 at `http://localhost:6333`, Postgres at `localhost:5432` (user/pass/db all
 `platform`).
+
+### P0 widget availability + security boundary (2026-08-21)
+
+The standalone jQuery widget had become unreachable because it still called
+the retired public `:8080` binding. Production now exposes the API only through
+the web proxy on port 80, so the widget points to `http://159.69.210.30` and
+calls `/api/chat`. `/api/healthz` was added for a real launcher status signal:
+the dot is amber while checking, green only after a successful health response,
+and red when unreachable; it is refreshed every 30 seconds. The header `?`
+opens six clickable admission FAQs without changing the API contract.
+
+The same deployment adds a first public security boundary: configured/scoped
+CORS instead of wildcard CORS, 16 KiB request limits, Pydantic field/enum/state
+bounds with forbidden unknown fields, per-client Redis rate limiting, nginx
+rate limiting/timeouts, API security headers, and normalization-aware prompt
+injection detection (NFKC, zero-width removal, common leetspeak, role/guard
+bypass and prompt-exfiltration patterns). The generation prompt separately
+treats user text and retrieved excerpts as untrusted data.
+
+Post-deployment proof: health and chat returned 200; a zero-width-obfuscated
+override was refused with `source=instruction-override`; hostile-origin CORS
+returned 400 with no allow-origin; 1201-character input returned 422; the 31st+
+rapid request returned 429; public admin returned 404. Only public port 80 was
+reachable—8080, Postgres, Redis, Qdrant and 8443 were externally closed, while
+server inspection confirmed 8443 binds only to loopback. Nginx config passed.
+The focused adversarial/input suite passed 15/15, npm production audit found
+zero vulnerabilities, and the independent admissions regression remained
+16 substantive / 0 fallback / 0 error after deployment. TLS is still absent;
+this remains the principal blocker before embedding on the real HTTPS MAFSU
+site, which must use a same-origin HTTPS proxy rather than this plain-HTTP IP.
+
+### Cache stampede + free-tier provider capacity checkpoint (2026-08-21)
+
+The exact validated-answer Redis cache is now protected by a distributed
+single-flight lock. On a cold identical-question burst, only the lock owner
+performs retrieval/generation; matching requests wait for and reuse that
+validated cache entry. If the fill cannot complete safely, waiters return a
+bounded busy response instead of stampeding the provider. The deployed
+eight-request cold burst produced one uncached RAG answer, seven cache hits,
+zero fallbacks and zero errors.
+
+Cache eligibility was also corrected: ordinary widget state containing only
+`programme` and/or `preferredLanguage` can use the shared cache. Guided
+eligibility slots and immediate-reference state remain uncacheable and isolated
+per student. This fixes the previous behaviour where selecting a programme made
+most normal questions bypass Redis.
+
+Cloud generation now has a Redis-backed global concurrency gate (default four
+active calls across API replicas) and shared provider circuit breakers. HTTP
+429 opens a 120-second cooldown and is never immediately retried; timeouts,
+authentication/server errors open a shorter cooldown before fallback. Focused
+Redis assertions passed 4/4, representative greeting/RAG/eligibility paths
+returned 200 after deployment, and recent API logs were clean. This protects
+the existing free-tier providers; it is not a substitute for measured traffic
+forecasting, provider quota dashboards, alerting, or adding replicas behind an
+HTTPS load balancer before full public launch.
+
+### Semantic cache, operations console, load and replica checkpoint (2026-08-21)
+
+A conservative Qdrant + Postgres semantic FAQ cache is live. It serves only
+previously validated general RAG answers and requires the same programme,
+language, inferred topic, exact numeric tokens and exact high-risk admission
+markers (category, exam, quota and subject), plus cosine similarity >= 0.965.
+The first Dairy-duration query generated in 2054 ms; its punctuation-only
+paraphrase returned `source=semantic-cache`, `cacheHit=true` in 437 ms with the
+identical answer. The independent 16-case admission pack remained 16
+substantive / 0 fallback / 0 error after activation.
+
+Redis telemetry now records daily request counts, project/source mix, exact and
+semantic hits, total/slow latency, provider calls/failures/rate limits, and
+reported prompt/completion token usage without storing student question text.
+A configurable daily provider-call budget raises an alert at 80%. The private
+admin console shows these operational metrics alongside conversations, flags
+and published corrections.
+
+The bounded mixed load test (`tools/load_test_mixed.py`) ran 100 requests at
+concurrency 8: 0 errors, 0 unsafe fallbacks, 58% cache hits, 428 ms mean, 3216
+ms P95 and 4473 ms max. Production now runs two API replicas behind nginx;
+20 lightweight verification requests were distributed exactly 10/10. Shared
+Redis/Postgres/Qdrant, cache-fill locks, provider slots and circuit breakers
+make the replicas stateless at the request boundary.
+
+`infra/nginx.https.template.conf` contains the TLS/HSTS/same-origin production
+shape but is intentionally inactive. Activating HTTPS still requires the real
+MAFSU domain, DNS and certificate; do not substitute a self-signed certificate
+or claim the current plain-HTTP IP is production-grade.
+
+### Knowledge-boundary and NRI follow-up checkpoint (2026-08-21)
+
+All final student-facing answers now pass through a deterministic knowledge-
+boundary filter. It removes wording that blames MAFSU or treats absence from a
+retrieved excerpt as proof that information does not exist, and it prevents
+internal terms such as chunks, retrieval context, vector database, knowledge
+base, RAG and retrieval confidence from reaching students. Unverified cases
+use the assistant-owned limitation: "I don't have enough verified information
+to confirm that." Known rules are answered before the safe escalation.
+
+Targeted guards now clarify ambiguous University office-holder questions,
+explain that NRI/FN/PIO/OCI routes exist for B.V.Sc. & A.H., B.F.Sc. and
+B.Tech. (Dairy Technology) without treating NRI status alone as personal
+eligibility, and resolve short challenges such as "sure?" from the immediately
+preceding answer instead of generating an unrelated prospectus fallback.
+
+Focused knowledge-boundary assertions passed 7/7. The exact reported four-turn
+conversation was replayed against the deployed service and produced the
+clarification, all-three-programme NRI explanation, and contextual verification
+described above. The independent admission regression then remained 16
+substantive / 0 fallback / 0 error.
+
+### Go-live decision-safety gate checkpoint (2026-08-21)
+
+Every `/api/chat` response now carries `admissionYear`, a normalized
+`decisionState`, and `sourceTrace` containing the effective programme,
+admission year, prospectus pages and deterministic rule ids. The API is locked
+to 2026-27: an explicit different admission cycle is never answered using the
+current corpus. Date-bearing answers identify already-passed 2026 deadlines
+when the student asks what can be done now.
+
+Deterministic pre-generation controls now reject unnecessary Aadhaar, phone,
+email and application identifiers without echoing them; block invented college
+or admission probabilities; distinguish `cannot_confirm` from `not_eligible`;
+replace explicitly corrected category/exam facts; and ask for resolution when
+the current exam statement contradicts remembered state. Programme switches
+continue to clear programme-specific state at the API/client boundary.
+
+The promotion harness `tools/eval_go_live_conversations.py` exercises 320
+conversation instances, including multi-turn correction and contradiction
+flows. The deployed result was 320/320: hard safety 208/208, course separation
+80/80 and eligibility decisions 32/32. The dependency-free API assertion set
+passed 57/57. A separate live multilingual gate passed 6/6 across Hindi and
+Marathi for all three programmes after high-risk NRI decisions received
+deterministic native-language templates that do not depend on provider
+availability. During gate development, real failures in NRI route recognition,
+expired-NCL handling, Dairy Mathematics handling, BFSc MHT-CET wording and
+exam-state persistence were fixed before the final green run.
+
+This is a code/UAT gate, not permission to describe the current plain-HTTP IP
+as production-grade. Official public launch still requires the MAFSU HTTPS
+same-origin reverse proxy, certificate/DNS ownership and native-speaker review
+of the full Hindi/Marathi corpus.
+
+Malformed-input checkpoint (2026-08-21): repeated-character runs, repeated
+short patterns, nearly single-character payloads and punctuation-only spam are
+now rejected before embedding/retrieval. They receive a short request to type
+an admission question, `source=malformed-input`,
+`decisionState=needs_clarification`, and no prospectus pages. The exact reported
+1,100-character `q` payload passed against the public API; a normal B.F.Sc. fee
+question still followed RAG and retained its evidence pages.
+
+### Qwen shadow-review and official test-site checkpoint (2026-08-21)
+
+An evidence-bound asynchronous reviewer subsystem is deployed. High-risk
+assistant messages create durable `machine_reviews` rows; a separate
+`shadow-reviewer` service polls them and can create admin review cases, but it
+cannot modify student answers, curated overrides or publication state. Qwen
+output is strict-normalized: verdict/severity/issue labels are allow-listed,
+cited pages must be a subset of the answer's supplied evidence pages, invalid
+verdicts degrade to human review, and a pass cannot carry a correction. Unit
+assertions passed 5/5. One live B.F.Sc. answer created message 4452 and one
+pending machine-review job.
+
+The worker is intentionally deployed with `QWEN_REVIEW_ENABLED=false`. Server
+inspection found no Qwen runtime or weights: no Ollama/vLLM container is
+running and the retained Ollama volume contains only
+`nomic-embed-text:v1.5`. Do not enable the worker until the actual private
+OpenAI-compatible Qwen endpoint and model name are supplied and benchmarked.
+
+The real WebForms test site is live at
+`https://admissions.mafsu.ac.in/test_site/dashboard/index.aspx` on IIS 8.5
+with a valid certificate. The HTTP IP URL serves the same page but is not the
+canonical integration origin. Production CORS now allows only the HTTPS
+admissions origin. The UAT widget uses
+`data-api-base="/test_site/mitra"`, while local `file:` preview alone falls
+back to the plain demo IP. The developer handoff contains a reversible ARR rule
+scoped to `test_site/web.config` and only the isolated
+`/test_site/mitra/api/chat|healthz` routes. At this checkpoint the isolated
+health URL still returns IIS 404, proving that MAFSU has not installed the
+proxy rule yet; treat a 200 JSON response there as the UAT acceptance gate.
+
+The handoff now also includes a lower-risk code-only UAT path requested after
+the MAFSU developer declined server-level IIS changes. `MitraProxy.ashx` is an
+inline ASP.NET 4 handler uploaded only to `/test_site/`; it has a fixed MITRA
+upstream, accepts only `GET healthz` and `POST chat`, enforces the 16 KiB body
+limit, forwards no cookies/credentials and exposes no admin route. The widget
+uses explicit same-origin handler URLs when hosted and retains the demo-IP
+fallback only for local `file:` preview. No ARR, IIS Manager or `web.config`
+change is required; rollback is deleting the handler and widget files. The
+handler compiled successfully against `System.Web.dll`, both JavaScript copies
+passed syntax checks, and canonical/Gmail-safe package copies are identical.

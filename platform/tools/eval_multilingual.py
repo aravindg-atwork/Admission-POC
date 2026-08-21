@@ -3,6 +3,7 @@
 import json
 import sys
 import urllib.request
+import argparse
 
 
 BASE = "http://127.0.0.1:8100"
@@ -19,10 +20,10 @@ CASES = (
 )
 
 
-def ask(language: str, project: str, question: str) -> dict:
-    body = json.dumps({"projectId": project, "question": question, "uiLanguage": language}).encode()
+def ask(base: str, language: str, project: str, question: str) -> dict:
+    body = json.dumps({"projectId": project, "question": question, "uiLanguage": language, "conversationState": {"programme": project}}).encode()
     request = urllib.request.Request(
-        f"{BASE}/api/chat", data=body, method="POST", headers={"Content-Type": "application/json"}
+        f"{base.rstrip('/')}/api/chat", data=body, method="POST", headers={"Content-Type": "application/json"}
     )
     with urllib.request.urlopen(request, timeout=180) as response:
         return json.loads(response.read().decode())
@@ -33,9 +34,12 @@ def has_devanagari(text: str) -> bool:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base", default=BASE)
+    args = parser.parse_args()
     passed = 0
     for index, (expected_language, project, question, required) in enumerate(CASES, 1):
-        result = ask(expected_language, project, question)
+        result = ask(args.base, expected_language, project, question)
         answer = result.get("answer", "")
         missing = [token for token in required if token not in answer]
         ok = (

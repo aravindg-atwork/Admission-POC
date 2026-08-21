@@ -15,5 +15,6 @@ _started_at = time.time()
 
 
 @router.get("/healthz")
+@router.get("/api/healthz")
 def healthz():
     return {"status": "ok", "uptimeSeconds": round(time.time() - _started_at, 1)}

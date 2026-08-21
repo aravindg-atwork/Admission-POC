@@ -9,8 +9,12 @@
   var $root = $("#mafsu-admissions-widget");
   if (!$root.length) return;
 
+  var configuredApiBase = String($root.attr("data-api-base") || "").replace(/\/$/, "");
+  var localPreview = window.location.protocol === "file:";
   var config = {
-    apiBase: String($root.data("api-base") || "").replace(/\/$/, ""),
+    apiBase: localPreview ? "http://159.69.210.30" : configuredApiBase,
+    chatUrl: localPreview ? "http://159.69.210.30/api/chat" : String($root.attr("data-chat-url") || configuredApiBase + "/api/chat"),
+    healthUrl: localPreview ? "http://159.69.210.30/api/healthz" : String($root.attr("data-health-url") || configuredApiBase + "/api/healthz"),
     language: String($root.data("default-language") || "en"),
     projectId: "bvsc",
     conversationState: {},
@@ -33,6 +37,7 @@
   var $send = $root.find("[data-chat-send]");
   var $mic = $root.find("[data-chat-mic]");
   var $status = $root.find("[data-chat-status]");
+  var $health = $root.find("[data-health]");
   var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   var recognition = null;
 
@@ -104,6 +109,47 @@
     $status.text(message || "The admissions assistant could not connect. Please try again.").prop("hidden", false);
   }
 
+  function setHealth(state) {
+    var labels = {
+      online: "MAFSU MITRA is online",
+      offline: "MAFSU MITRA is currently unreachable",
+      checking: "Checking MAFSU MITRA availability"
+    };
+    $health.attr("data-health", state);
+    $launcher.attr("aria-label", labels[state]).attr("title", labels[state]);
+  }
+
+  function checkHealth() {
+    setHealth("checking");
+    $.ajax({
+      url: config.healthUrl,
+      method: "GET",
+      dataType: "json",
+      timeout: 5000,
+      cache: false
+    }).done(function (response) {
+      setHealth(response && response.status === "ok" ? "online" : "offline");
+    }).fail(function () {
+      setHealth("offline");
+    });
+  }
+
+  function showFaq() {
+    var questions = [
+      "Am I eligible for a MAFSU undergraduate programme?",
+      "Which entrance exam is required for each programme?",
+      "What documents are required for admission?",
+      "What are the fees and available seats?",
+      "How do reservations and NCL certificates work?",
+      "Can you compare B.V.Sc., B.F.Sc. and Dairy Technology?"
+    ];
+    var $faq = $('<div class="mafsu-chat__faq"><div class="mafsu-chat__faq-head"><h3>Frequently asked questions</h3><button type="button" class="mafsu-chat__faq-close" data-chat-action="reset">Back</button></div><div class="mafsu-chat__faq-list"></div></div>');
+    $.each(questions, function (_, question) {
+      $("<button type=\"button\"></button>").text(question).attr("data-question", question).appendTo($faq.find(".mafsu-chat__faq-list"));
+    });
+    $messages.html($faq);
+  }
+
   function updateFromResponse(response) {
     if (response.language && /^(en|hi|mr)$/.test(response.language)) {
       config.language = response.language;
@@ -135,7 +181,7 @@
     setBusy(true);
 
     $.ajax({
-      url: config.apiBase + "/api/chat",
+      url: config.chatUrl,
       method: "POST",
       contentType: "application/json; charset=utf-8",
       dataType: "json",
@@ -148,11 +194,13 @@
         sessionId: config.sessionId
       })
     }).done(function (response) {
+      setHealth("online");
       setBusy(false);
       updateFromResponse(response);
       addMessage("assistant", response.answer, { pages: response.pages || [] });
       addOptions(response.interviewOptions || [], response.interviewField);
     }).fail(function (xhr) {
+      if (xhr.status === 0 || xhr.status >= 500) setHealth("offline");
       setBusy(false);
       var message = xhr.status === 0
         ? "The admissions service is unreachable. Check the API address or website proxy."
@@ -212,6 +260,7 @@
     if (action === "toggle") setOpen($panel.prop("hidden"));
     if (action === "close") setOpen(false);
     if (action === "reset" && !config.busy) resetChat();
+    if (action === "faq" && !config.busy) showFaq();
   });
 
   $root.on("click", "[data-question]", function () {
@@ -281,4 +330,6 @@
 
   setupSpeechInput();
   updateComposerMeta();
+  checkHealth();
+  window.setInterval(checkHealth, 30000);
 })(window.jQuery, window, document);

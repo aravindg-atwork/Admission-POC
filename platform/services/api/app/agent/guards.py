@@ -10,6 +10,7 @@ import re
 from ..core import eligibility, policy, routing
 from ..core.intent import is_prompt_injection
 from . import language as language_routing
+from . import safety
 
 _INTERVIEW_INTENTS = {
     "eligibility_awaiting_entrance", "eligibility_awaiting_category",
@@ -47,6 +48,65 @@ def _reply(answer: str, source: str, **extra) -> dict:
     return {"answer": answer, "source": source, "model": "guard", "pages": [], **extra}
 
 
+def malformed_input_guard(question: str, state: dict) -> dict | None:
+    compact = re.sub(r"\s+", "", question.casefold())
+    letters = [char for char in compact if char.isalpha()]
+    repeated_run = bool(re.search(r"(.)\1{11,}", compact))
+    repeated_unit = bool(re.fullmatch(r"(.{1,5})\1{3,}", compact))
+    nearly_one_character = len(letters) >= 20 and len(set(letters)) <= 2
+    punctuation_spam = len(compact) >= 20 and not letters and not any(char.isdigit() for char in compact)
+    if not (repeated_run or repeated_unit or nearly_one_character or punctuation_spam):
+        return None
+    return _reply(
+        "I couldn't understand that message. Please type an admission question—for example, ask about eligibility, fees, documents, seats, quotas, or one of the three undergraduate programmes.",
+        "malformed-input",
+    )
+
+
+def pii_guard(question: str, state: dict) -> dict | None:
+    kinds = safety.pii_types(question)
+    if not kinds:
+        return None
+    return _reply(
+        f"For your privacy, please remove the {', '.join(kinds)} and ask again. I only need admission-relevant details such as your programme, category, subject marks or percentage, age, domicile, and exam status—never full identity or application numbers.",
+        "privacy-guard",
+    )
+
+
+def admission_year_guard(question: str, state: dict) -> dict | None:
+    requested = safety.year_mismatch(question)
+    if not requested:
+        return None
+    return _reply(
+        f"I am currently locked to the verified 2026-27 admission rules. I don't have enough verified information to confirm rules for {requested}, and I will not mix that year's requirements with 2026-27. Please use the official material for that admission year before relying on an answer.",
+        "knowledge-boundary",
+    )
+
+
+def prediction_guard(question: str, state: dict) -> dict | None:
+    low = question.lower()
+    if not any(term in low for term in ("what are my chances", "chance of admission", "will i get nagpur", "will i get mumbai", "guaranteed seat", "predict my college", "probability")):
+        return None
+    return _reply(
+        "I can check published eligibility rules and explain how merit, quota, preferences and seat availability affect allotment, but I cannot predict a college, percentage chance, cutoff or guaranteed seat. Tell me the programme and the rule you want checked, and I will verify that part without guessing an allotment outcome.",
+        "prediction-boundary",
+    )
+
+
+def contradiction_guard(question: str, state: dict) -> dict | None:
+    low, previous = question.lower(), state.get("entranceExamStatus")
+    now_positive = bool(re.search(r"\b(?:cet|neet|cuet)\b.*\b(?:percentile|score)\b\D{0,8}\d", low))
+    now_negative = bool(re.search(r"\b(?:did(?:n'?t| not)|never|have not|haven't)\b.{0,18}\b(?:appear|take|sit)\b.{0,12}\b(?:cet|neet|cuet)\b", low))
+    if not ((previous in {"no", "pending", "not_qualified"} and now_positive) or (previous == "yes" and now_negative)):
+        return None
+    return _reply(
+        "I have conflicting entrance-exam details from this chat. Please confirm the current fact before I assess eligibility; I will replace the earlier answer with your correction.",
+        "state-contradiction", interviewField="entranceExamStatus",
+        interviewOptions=[{"label": "I completed/appeared for it", "value": "yes"}, {"label": "I did not appear", "value": "no"}, {"label": "I appeared but did not qualify", "value": "not_qualified"}],
+        carryQuestion=state.get("carryQuestion") or question,
+    )
+
+
 def injection_guard(question: str, state: dict) -> dict | None:
     if not is_prompt_injection(question):
         return None
@@ -73,6 +133,98 @@ def identity_guard(question: str, state: dict) -> dict | None:
         "I'm MAFSU MITRA (Beta), an admissions assistant for MAFSU's undergraduate programmes: B.V.Sc. & A.H., B.F.Sc., and B.Tech. (Dairy Technology). I can help you check eligibility step by step and explain entrance exams, fees, seats and colleges, quotas and reservations, required documents, and the application process. I'm a beta assistant and may make mistakes, so please verify final admission decisions with the University. Ask naturally—for example, “I have 48% and appeared for NEET; can I apply for B.V.Sc.?”",
         "identity",
     )
+
+
+def institutional_role_guard(question: str, state: dict) -> dict | None:
+    low = " ".join(question.lower().strip(" !.,?").split())
+    asks_holder = any(term in low for term in ("head of university", "head of the university", "head university", "vice chancellor", "vice-chancellor", "registrar name", "who runs mafsu"))
+    if not asks_holder:
+        return None
+    selected_office = state.get("universityOffice")
+    if selected_office:
+        label = {"vice-chancellor": "Vice-Chancellor", "registrar": "Registrar", "dean": "college Dean"}.get(str(selected_office), "office-holder")
+        return _reply(
+            f"I don't have enough verified current information to confirm the {label}'s name. Please check the official MAFSU contact or administration page for the current appointment.",
+            "knowledge-boundary",
+        )
+    if "head" in low and not any(term in low for term in ("vice chancellor", "vice-chancellor", "registrar", "dean")):
+        return _reply(
+            "Which office-holder do you mean—the Vice-Chancellor, Registrar, or the Dean of a particular college?",
+            "clarification",
+            interviewField="universityOffice",
+            interviewOptions=[
+                {"label": "Vice-Chancellor", "value": "vice-chancellor"},
+                {"label": "Registrar", "value": "registrar"},
+                {"label": "College Dean", "value": "dean"},
+            ],
+            carryQuestion=question,
+        )
+    return _reply(
+        "I don't have enough verified current information to confirm that office-holder's name. Please check the official MAFSU contact or administration page for the current appointment.",
+        "knowledge-boundary",
+    )
+
+
+def nri_programme_guard(question: str, state: dict) -> dict | None:
+    low = " ".join(question.lower().split())
+    if "nri" not in low and not any(term in low for term in ("foreign national", "pio", "oci")):
+        return None
+    asks_courses = any(term in low for term in (
+        "what course", "which course", "which programme", "which program", "what programme", "what program",
+        "courses am i eligible", "programmes have", "programs have", "admission route", "not eligible for btech",
+        "not eligible for b.f.sc", "not eligible for bfsc",
+    ))
+    if not asks_courses:
+        return None
+    return _reply(
+        "NRI/FN/PIO/OCI admission routes exist for all three MAFSU undergraduate programmes: B.V.Sc. & A.H., B.F.Sc., and B.Tech. (Dairy Technology). Being NRI does not by itself confirm eligibility for any course. Each programme has separate required Class 12 subjects and marks, age rules, entrance-exam or XII-abroad exceptions, and category documents. Tell me where you completed Class 12, your subjects and combined percentage, your age, and any NEET/MHT-CET/CUET status, and I can check each programme separately.",
+        "verified-policy",
+        pages=[4, 7, 8],
+    )
+
+
+def subject_requirement_guard(question: str, state: dict, project_id: str) -> dict | None:
+    low = question.lower()
+    if project_id == "btech-dairy" and re.search(r"\b(?:did not|didn't|without|no)\b.{0,20}\b(?:mathematics|maths|math)\b", low):
+        return _reply(
+            "No. B.Tech. (Dairy Technology) requires Physics, Chemistry, Mathematics and English in Class 12 and uses the PCM entrance route. Because you stated that you did not study Mathematics, you do not meet that programme's subject requirement. Other stated subjects or entrance scores cannot replace Mathematics.",
+            "eligibility", pages=[5],
+        )
+    return None
+
+
+def document_status_guard(question: str, state: dict, project_id: str) -> dict | None:
+    low = question.lower()
+    if ("ncl" in low or "non-creamy" in low) and any(term in low for term in ("expired", "not valid", "invalid")):
+        pages = {"bvsc": [11, 12], "bfsc": [10, 67], "btech-dairy": [10, 67]}[project_id]
+        return _reply(
+            "No—an expired or otherwise invalid Non-Creamy Layer certificate does not confirm OBC reservation. It is acceptable only if it remained valid through the application-submission deadline or satisfies the applicable issue-date rule. If a valid NCL is not accepted in time, the OBC reservation claim is lost; the candidate may be considered Unreserved only if the Unreserved eligibility requirements are independently met.",
+            "verified-policy", pages=pages,
+        )
+    return None
+
+
+def challenge_guard(question: str, state: dict) -> dict | None:
+    low = " ".join(question.lower().strip(" !.,?").split())
+    if low not in {"sure", "are you sure", "really", "is that correct"}:
+        return None
+    previous = str(state.get("lastAssistantAnswer") or "")
+    if "nri" in previous.lower() and ("not for b.tech" in previous.lower() or "not for b.f.sc" in previous.lower()):
+        return _reply(
+            "No—that earlier statement was incorrect. NRI/FN/PIO/OCI admission routes exist for B.V.Sc. & A.H., B.F.Sc., and B.Tech. (Dairy Technology). Eligibility must be checked separately using your Class 12 location, subjects, marks, age, entrance-exam status and NRI documents.",
+            "correction",
+        )
+    if "nri" in previous.lower() and "all three" in previous.lower():
+        return _reply(
+            "Yes—NRI/FN/PIO/OCI admission routes exist for all three programmes. That confirms the availability of the routes, not your personal eligibility; your subjects, marks, Class 12 location, age, entrance-exam status and documents must still be checked separately.",
+            "verified-policy",
+        )
+    if previous:
+        return _reply(
+            "I should not confirm that with a bare yes or no without rechecking the exact rule. Please tell me which part you want verified, and I’ll confirm only what I can establish safely.",
+            "clarification",
+        )
+    return _reply("Which earlier answer would you like me to verify?", "clarification")
 
 
 def language_preference_guard(question: str, state: dict) -> dict | None:
@@ -1268,9 +1420,17 @@ def eligibility_guard(question: str, state: dict, project_id: str = "bvsc") -> d
 
 GUARDS = (
     injection_guard,
+    malformed_input_guard,
+    pii_guard,
+    admission_year_guard,
+    contradiction_guard,
+    prediction_guard,
     greeting_guard,
     language_preference_guard,
     identity_guard,
+    challenge_guard,
+    institutional_role_guard,
+    nri_programme_guard,
     off_topic_guard,
 )
 
@@ -1294,6 +1454,12 @@ def run_guards(question: str, conversation_state: dict | None, project_id: str =
     if response is not None:
         return response
     response = programme_help_guard(question, state, project_id)
+    if response is not None:
+        return response
+    response = subject_requirement_guard(question, state, project_id)
+    if response is not None:
+        return response
+    response = document_status_guard(question, state, project_id)
     if response is not None:
         return response
     structured = policy.admission_reply(policy.evaluate(project_id, question))

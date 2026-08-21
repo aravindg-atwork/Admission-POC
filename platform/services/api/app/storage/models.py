@@ -177,6 +177,26 @@ class ReviewCase(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class MachineReview(Base):
+    """Evidence-bound shadow review; never an authority to publish."""
+
+    __tablename__ = "machine_reviews"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("conversation_messages.id"), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
+    verdict: Mapped[str] = mapped_column(String(16), default="")
+    severity: Mapped[str] = mapped_column(String(16), default="")
+    issues: Mapped[list] = mapped_column(JSON, default=list)
+    explanation: Mapped[str] = mapped_column(Text, default="")
+    suggested_correction: Mapped[str] = mapped_column(Text, default="")
+    evidence_pages: Mapped[list] = mapped_column(JSON, default=list)
+    model_name: Mapped[str] = mapped_column(String(128), default="")
+    attempts: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class CuratedOverride(Base):
     __tablename__ = "curated_overrides"
 
@@ -201,3 +221,28 @@ class ReviewAudit(Base):
     action: Mapped[str] = mapped_column(String(32))
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class CorrectionVersion(Base):
+    """Immutable snapshot of every proposed/published correction.
+
+    ReviewCase remains the convenient mutable work queue. This table is the
+    audit-grade history: editing a draft creates another row instead of
+    destroying the prior wording or evidence.
+    """
+
+    __tablename__ = "correction_versions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    review_id: Mapped[int] = mapped_column(ForeignKey("review_cases.id"), index=True)
+    version: Mapped[int] = mapped_column(index=True)
+    severity: Mapped[str] = mapped_column(String(16), default="medium", index=True)
+    admission_year: Mapped[str] = mapped_column(String(16), default="2026-27")
+    answer: Mapped[str] = mapped_column(Text)
+    evidence_pages: Mapped[list] = mapped_column(JSON, default=list)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    proposed_by: Mapped[str] = mapped_column(String(255))
+    approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -56,6 +56,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      CORS_ORIGINS: https://admissions.mafsu.ac.in
       # The embedding service (docker-api-1) is a SIBLING container on
       # this same host's pre-existing ai_platform stack, reached directly
       # by its own container name over the shared network joined below -
@@ -73,6 +74,38 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 768M
+
+  shadow-reviewer:
+    build:
+      context: ../services/api
+    command: ["python", "-m", "app.review.worker"]
+    env_file:
+      - ../services/api/.env
+    environment:
+      POSTGRES_DSN: postgresql+psycopg://platform:platform@postgres:5432/platform
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      QWEN_REVIEW_ENABLED: ${QWEN_REVIEW_ENABLED:-false}
+      QWEN_REVIEW_URL: ${QWEN_REVIEW_URL:-}
+      QWEN_REVIEW_API_KEY: ${QWEN_REVIEW_API_KEY:-}
+      QWEN_REVIEW_MODEL: ${QWEN_REVIEW_MODEL:-qwen2.5:7b-instruct}
+    networks:
+      - default
+      - docker_ai_platform
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   web:
     build:

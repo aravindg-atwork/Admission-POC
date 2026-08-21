@@ -22,6 +22,7 @@ import re
 
 from ..core.lang import detect_script
 from ..settings import get_settings
+from . import capacity
 
 _settings = get_settings()
 
@@ -79,7 +80,10 @@ def _call_mistral(system_prompt: str, user_prompt: str, question: str,
         timeout=timeout,
     )
     resp.raise_for_status()
-    answer = _clean(resp.json()["choices"][0]["message"].get("content"))
+    payload = resp.json()
+    usage = payload.get("usage") or {}
+    capacity.record_usage("mistral", usage)
+    answer = _clean(payload["choices"][0]["message"].get("content"))
     if not answer:
         raise ValueError("mistral returned no answer content")
     return answer, f"mistral:{model}"
@@ -101,7 +105,10 @@ def _call_nvidia(system_prompt: str, user_prompt: str, question: str,
         timeout=timeout,
     )
     resp.raise_for_status()
-    answer = _clean(resp.json()["choices"][0]["message"].get("content"))
+    payload = resp.json()
+    usage = payload.get("usage") or {}
+    capacity.record_usage("nvidia", usage)
+    answer = _clean(payload["choices"][0]["message"].get("content"))
     if not answer:
         raise ValueError("nvidia returned no answer content (reasoning hit the token cap)")
     return answer, f"nvidia:{model}"
@@ -115,22 +122,33 @@ def generate(system_prompt: str, user_prompt: str, question: str = "",
     genuine timeout does not, and falls back immediately.
     """
     call_timeout = min(timeout, _settings.cloud_attempt_timeout)
-    if _settings.mistral_api_key:
-        last_exc: Exception | None = None
-        for attempt in (1, 2):
-            try:
-                return _call_mistral(system_prompt, user_prompt, question, call_timeout, temperature)
-            except Exception as exc:  # noqa: BLE001
-                last_exc = exc
-                if attempt == 2 or _is_timeout(exc):
-                    break
-                print(f"[llm] mistral attempt 1 failed ({exc!r}); retrying once")
-        print(f"[llm] mistral failed, falling back to nvidia: {last_exc!r}")
+    with capacity.provider_slot():
+        if _settings.mistral_api_key and capacity.available("mistral"):
+            last_exc: Exception | None = None
+            for attempt in (1, 2):
+                try:
+                    result = _call_mistral(system_prompt, user_prompt, question, call_timeout, temperature)
+                    capacity.record_success("mistral")
+                    return result
+                except Exception as exc:  # noqa: BLE001
+                    last_exc = exc
+                    status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+                    if attempt == 2 or _is_timeout(exc) or status == 429:
+                        break
+                    print(f"[llm] mistral attempt 1 failed ({exc!r}); retrying once")
+            capacity.record_failure("mistral", last_exc or RuntimeError("unknown provider failure"))
+            print(f"[llm] mistral failed, falling back to nvidia: {last_exc!r}")
 
-    if not _settings.nvidia_api_key:
-        raise RuntimeError("No usable chat provider: mistral and nvidia both unconfigured")
-    return _call_nvidia(system_prompt, user_prompt, question,
-                        min(timeout, _settings.cloud_attempt_timeout), temperature)
+        if not _settings.nvidia_api_key or not capacity.available("nvidia"):
+            raise RuntimeError("No usable chat provider is currently available")
+        try:
+            result = _call_nvidia(system_prompt, user_prompt, question,
+                                  min(timeout, _settings.cloud_attempt_timeout), temperature)
+            capacity.record_success("nvidia")
+            return result
+        except Exception as exc:
+            capacity.record_failure("nvidia", exc)
+            raise
 
 
 _TRANSLATE_NAMES = {"hi": "Hindi", "mr": "Marathi"}
