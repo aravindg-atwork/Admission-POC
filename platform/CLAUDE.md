@@ -1154,3 +1154,116 @@ explicit replica list must be kept in sync with `deploy.replicas` by
 hand - it does not auto-discover new replicas the way a real service
 mesh would. Fine for a fixed, deliberately-set count; revisit if
 replicas ever scale dynamically.
+
+## Go-live 7-item roadmap - CHECKPOINT (2026-08-21, end of week)
+
+Written because it's Friday and the next session may not pick this back
+up until after the weekend - self-contained, no conversation transcript
+needed to resume. The full 7-item roadmap (as given): (1) recovery
+drills, (2) knowledge-release management, (3) admin security hardening
+(per-user accounts/roles), (4) full release verification, (5) Qwen
+shadow reviewer (real endpoint + benchmarking), (6) official-site
+integration acceptance (MAFSU test-site proxy), (7) human launch
+requirements (native-speaker review, escalation contacts, privacy
+policy sign-off, on-call ownership). Item 2 was called out as the
+largest unfinished CODE task; item 6 as the largest EXTERNAL blocker.
+
+**Git/production state right now**: clean and in sync. Local repo,
+`origin/production-hardening`, and the live server are all at commit
+`b250758` - nothing pending, nothing uncommitted. Safe to `git pull` and
+pick up cleanly from any machine.
+
+### Item 1 (recovery drills) - DONE, see its own dedicated checkpoint
+section above ("Recovery-drill checkpoint (2026-08-21)"). Postgres/
+embedding/LLM-provider outages all verified clean. A real production bug
+(replica pinning + no failover) was found and fixed along the way - full
+writeup, including a wrong-first-attempt that was caught and rolled back
+before shipping, is in that section. Not revisited below.
+
+### Item 2 (knowledge-release management) - IN PROGRESS, mid-brainstorm
+
+Following the project's `brainstorming` skill process (classified
+**architectural** - this is a genuinely new subsystem, not a small
+change to existing code). Nothing has been implemented yet - correctly
+so, per that skill's hard gate: no code until the human partner approves
+a written design. **Do not skip ahead and start implementing from this
+summary alone** - the design isn't finished or approved yet.
+
+**Decided so far** (each confirmed explicitly by the user, one question
+at a time):
+- **Upload mechanism**: CLI, same as today's `python -m app.ingestion.run`
+  - NOT a new admin-console upload UI. Keeps this vertical-slice-sized;
+    an upload UI can be layered on later without changing the pipeline
+    underneath it.
+- **Automated regression gate**: a NEW, fast smoke suite (retrieval
+  needle checks + a handful of known ground-truth Q&A per programme) -
+  not the full existing suites (320-conversation gate, all adversarial
+  suites, multilingual). Those stay available as a manual, heavier
+  check an approver can run before approving, not an automatic gate on
+  every staged upload - real LLM calls cost time/money and most staged
+  uploads shouldn't pay for the full suite.
+- **Approval/publish actor**: the existing single shared admin key, same
+  as the rest of the admin console today. Real per-user reviewer/
+  publisher roles are item 3, not built yet - explicitly deferred rather
+  than blocking item 2 on item 3 finishing first. The audit trail should
+  record the action even though it can't yet say WHICH person did it.
+
+**Proposed and awaiting final confirmation** (the core mechanism,
+presented, not yet approved in full):
+- **Qdrant native collection aliases** for the atomic "which version is
+  live" switch, recommended over a Postgres-column pointer. Today,
+  `answer.py` calls `store.search(project_id, ...)` treating `project_id`
+  (e.g. `"bvsc"`) as a literal Qdrant collection name - confirmed live in
+  the code (`app/agent/answer.py` line ~273, `app/ingestion/run.py`'s
+  `ensure_collection(project_id)` + `client.upsert(project_id, ...)`).
+  Under the proposed design, `bvsc` becomes an ALIAS, not a real
+  collection; staged ingestion writes into a real, separately-named
+  collection (`bvsc-2026-27-v2`, lowercase to match existing naming -
+  the user's own example was `BVSC-2026-27-v1`, worth confirming the
+  case convention when this comes back up), invisible to students the
+  whole time it's staged. Publishing re-points the `bvsc` alias
+  atomically (Qdrant's own guarantee, purpose-built for exactly this).
+  **The key benefit**: zero changes to the retrieval hot path -
+  `answer.py` keeps calling `store.search("bvsc", ...)` exactly as
+  today, since the alias name never changes, only what it points at.
+  Rollback = the same swap in reverse, no re-ingestion, seconds not
+  minutes. Old versions' collections are left alone (not deleted) so
+  rollback stays cheap - no auto-cleanup/retention limit proposed, disk
+  cost for a ~200-point collection is trivial.
+- Postgres gets a new `CorpusVersion`-style table (staged / regression-
+  passed / regression-failed / approved / published / superseded) plus
+  an audit trail - proposed to REUSE the existing `ReviewAudit`
+  pattern already in the codebase (`app/storage/models.py`) rather than
+  invent a new one, for consistency with how curated-answer corrections
+  are already audited.
+- On publish, bump the existing `faq_cache_revision` mechanism (already
+  live - see the "Redis exact-answer caching" note above) so previously-
+  cached answers from the OLD corpus don't keep being served - a small
+  integration point with existing infra, not new plumbing.
+
+**NOT yet covered / next steps when this resumes**:
+- The rest of the sectioned design: exact pipeline stage transitions,
+  full data model (`CorpusVersion` columns), error handling (what
+  happens if the Qdrant alias-swap succeeds but the Postgres status
+  update fails right after - the plan going in is "make the swap the
+  source of truth for what's actually live; a failed follow-up
+  Postgres write is a stale audit log, not a broken system," but this
+  hasn't been presented/confirmed yet), and testing approach.
+- Rollback scope (per-programme, almost certainly, given every part of
+  this system is already per-programme - not explicitly asked/confirmed
+  as its own question, low-risk assumption but flag it if resuming).
+- Once all sections are presented and approved: write the spec to
+  `docs/superpowers/specs/2026-08-21-knowledge-release-management-design.md`
+  (no file exists there yet), self-review it, get the user to review the
+  written spec, THEN invoke the `writing-plans` skill - per the
+  brainstorming skill's own rule, no other implementation skill.
+
+### Items 3, 5, 6, 7 - untouched, exactly as the user's own roadmap
+message described them. Item 4 (full release verification) also
+untouched as its own item, though item 1's drills and item 2's design
+work haven't regressed anything - the existing suites (18/18 bvsc,
+17/17 bfsc, 24/24 btech-dairy, 50/50 cross-programme, 320/320 go-live,
+6/6 multilingual) were last confirmed passing before this session's
+nginx/retention/redaction fixes, not re-run after them. Re-running the
+full suites is itself item 4's own job, not something to assume still
+holds.
