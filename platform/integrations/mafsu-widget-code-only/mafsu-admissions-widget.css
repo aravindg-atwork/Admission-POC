@@ -1,3 +1,9 @@
+/* MAFSU MITRA admissions widget.
+   Namespaced under .mafsu-chat so it cannot touch the host website's styles.
+   Palette is MAFSU's approved set; type is Noto Sans for UI with Tiro
+   Devanagari Marathi reserved for the one display line, matching the main
+   MITRA product's identity in both Latin and Devanagari. */
+
 :root {
   --mafsu-green-900: #155b46;
   --mafsu-green-800: #2f7d62;
@@ -12,204 +18,278 @@
   --mafsu-danger: #9c432c;
 }
 
+/* ---------- demo host page (not part of the widget) ---------- */
 .demo-page { max-width: 720px; margin: 12vh auto; padding: 32px; color: #253029; font: 16px/1.65 "Noto Sans", sans-serif; }
 .demo-page__eyebrow { color: #1f6247; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 .demo-page h1 { max-width: 650px; margin: 8px 0 16px; font: 400 clamp(34px, 6vw, 64px)/1.05 "Tiro Devanagari Marathi", serif; }
 
+/* ---------- root ---------- */
 .mafsu-chat, .mafsu-chat * { box-sizing: border-box; }
-.mafsu-chat { position: fixed; z-index: 2147483000; right: 20px; bottom: 20px; color: var(--mafsu-ink); font-family: "Noto Sans", "Noto Sans Devanagari", Arial, sans-serif; font-size: 14px; line-height: 1.5; }
-.mafsu-chat button, .mafsu-chat textarea { font: inherit; }
+.mafsu-chat {
+  position: fixed; z-index: 2147483000;
+  right: calc(22px + env(safe-area-inset-right, 0px));
+  bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
+  color: var(--mafsu-ink);
+  font-family: "Noto Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  font-size: 14px; line-height: 1.5;
+}
+.mafsu-chat button, .mafsu-chat textarea, .mafsu-chat select { font: inherit; }
 .mafsu-chat button { -webkit-tap-highlight-color: transparent; }
-.mafsu-chat__panel { position: absolute; right: 0; bottom: 72px; display: flex; width: min(410px, calc(100vw - 32px)); height: min(640px, calc(100vh - 112px)); overflow: hidden; flex-direction: column; border: 1px solid rgba(22,75,53,.13); border-radius: 26px; background: var(--mafsu-white); box-shadow: 0 24px 72px rgba(18,50,36,.2), 0 3px 12px rgba(18,50,36,.08); transform-origin: right bottom; animation: mafsu-panel-in .24s cubic-bezier(.22,1,.36,1); }
+.mafsu-chat__sr-only { position: absolute!important; width: 1px!important; height: 1px!important; overflow: hidden!important; clip: rect(0,0,0,0)!important; white-space: nowrap!important; }
+.mafsu-chat button:focus-visible, .mafsu-chat select:focus-visible, .mafsu-chat textarea:focus-visible { outline: 3px solid rgba(47,125,98,.32); outline-offset: 2px; }
+
+/* ---------- launcher ---------- */
+.mafsu-chat__launcher {
+  position: relative; display: grid; width: 60px; height: 60px; place-items: center;
+  padding: 0; border: 3px solid #fff; border-radius: 50%;
+  color: #fff; background: linear-gradient(150deg, #1d8b64, #10553e);
+  box-shadow: 0 14px 34px rgba(12,82,57,.34), 0 0 0 1px rgba(13,93,67,.10);
+  cursor: pointer;
+  transition: transform .18s cubic-bezier(.22,1,.36,1), box-shadow .18s ease-out;
+}
+.mafsu-chat__launcher:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 18px 42px rgba(12,82,57,.40), 0 0 0 1px rgba(13,93,67,.10); }
+.mafsu-chat__launcher-icon { display: grid; width: 40px; height: 40px; place-items: center; }
+.mafsu-chat__launcher-icon svg { width: 27px; fill: none; stroke: #fff; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.mafsu-chat__launcher-icon .mafsu-chat__spark { fill: #fff; stroke-width: .6; }
+.mafsu-chat__online { position: absolute; top: -2px; right: -2px; width: 14px; height: 14px; border: 3px solid #fff; border-radius: 50%; background: #25c55f; }
+.mafsu-chat__online[data-health="checking"] { background: var(--mafsu-saffron); }
+.mafsu-chat__online[data-health="offline"] { background: #c64b3c; }
+
+/* One attention pulse when the greeting card appears, then never again. */
+.mafsu-chat__launcher[data-nudging="true"]::after {
+  position: absolute; inset: -3px; border: 2px solid rgba(37,197,95,.55); border-radius: 50%;
+  content: ""; animation: mafsu-pulse 2.2s ease-out 3;
+}
+
+/* ---------- greeting card: the reason a student notices the widget ---------- */
+.mafsu-chat__nudge {
+  position: relative; display: none; width: min(310px, calc(100vw - 44px));
+  padding: 14px 15px 13px; border: 1px solid #cfe0d6; border-radius: 18px 18px 6px 18px;
+  background: #fff; box-shadow: 0 18px 44px rgba(17,83,58,.18), 0 3px 10px rgba(17,83,58,.07);
+  text-align: left; cursor: pointer;
+  animation: mafsu-nudge-in .42s cubic-bezier(.22,1,.36,1);
+}
+.mafsu-chat__nudge[data-visible="true"] { display: block; }
+.mafsu-chat__nudge:hover { border-color: #9dc3ae; }
+.mafsu-chat__nudge-title { display: flex; align-items: center; gap: 7px; margin: 0 0 4px; color: var(--mafsu-ink); font-size: 14px; font-weight: 700; }
+.mafsu-chat__nudge-title span { font-size: 15px; }
+.mafsu-chat__nudge p { margin: 0; padding-right: 14px; color: #56655c; font-size: 12px; line-height: 1.5; }
+.mafsu-chat__nudge-cta { display: inline-flex; align-items: center; gap: 5px; margin-top: 9px; padding: 0; border: 0; color: var(--mafsu-green-800); background: none; font-size: 12px; font-weight: 700; cursor: pointer; }
+.mafsu-chat__nudge-cta b { font-weight: 700; transition: transform .16s ease-out; }
+.mafsu-chat__nudge:hover .mafsu-chat__nudge-cta b { transform: translateX(3px); }
+.mafsu-chat__nudge-close {
+  position: absolute; top: 7px; right: 7px; display: grid; width: 24px; height: 24px; place-items: center;
+  border: 0; border-radius: 50%; color: #8c968f; background: transparent; font-size: 15px; line-height: 1; cursor: pointer;
+}
+.mafsu-chat__nudge-close:hover { color: var(--mafsu-ink); background: #eff3f0; }
+
+/* ---------- panel ---------- */
+.mafsu-chat__panel {
+  display: flex; width: min(400px, calc(100vw - 32px)); height: min(660px, calc(100vh - 120px));
+  height: min(660px, calc(100dvh - 120px));
+  overflow: hidden; flex-direction: column;
+  border: 1px solid #cfe0d6; border-radius: 22px; background: var(--mafsu-white);
+  box-shadow: 0 28px 80px rgba(17,83,58,.20), 0 8px 24px rgba(17,83,58,.09);
+  transform-origin: right bottom;
+  animation: mafsu-panel-in .24s cubic-bezier(.22,1,.36,1);
+  transition: width .22s cubic-bezier(.22,1,.36,1), height .22s cubic-bezier(.22,1,.36,1);
+}
 .mafsu-chat__panel[hidden] { display: none; }
-.mafsu-chat__header { display: flex; min-height: 74px; align-items: center; gap: 12px; padding: 14px 16px 12px; color: var(--mafsu-ink); background: #fff; }
-.mafsu-chat__seal { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 13px; color: #fff; background: var(--mafsu-green-900); font-size: 18px; font-weight: 700; }
+
+/* ---------- header: one row, everything on it ---------- */
+.mafsu-chat__header {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px 9px 13px;
+  border-bottom: 1px solid #e4ebe7; background: #fff;
+}
+.mafsu-chat__seal { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; overflow: hidden; border: 2px solid var(--mafsu-green-900); border-radius: 50%; background: #fff; }
+.mafsu-chat__seal img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.06); }
 .mafsu-chat__identity { min-width: 0; flex: 1; }
-.mafsu-chat__kicker { display: flex; align-items: center; gap: 5px; margin: 0 0 1px; color: var(--mafsu-muted); font-size: 10px; font-weight: 600; }
-.mafsu-chat__kicker span { width: 6px; height: 6px; border-radius: 50%; background: #39a768; box-shadow: 0 0 0 3px rgba(57,167,104,.12); }
-.mafsu-chat__identity h2 { margin: 0; color: var(--mafsu-ink); font-size: 17px; font-weight: 700; line-height: 1.25; }
-.mafsu-chat__identity h2 small { display: inline-block; margin-left: 5px; padding: 2px 6px; border-radius: 999px; color: #7a3a22; background: #f8e6dc; font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: 2px; }
-.mafsu-chat__icon-button { display: grid; width: 40px; height: 40px; place-items: center; border: 0; border-radius: 12px; color: var(--mafsu-muted); background: transparent; cursor: pointer; }
-.mafsu-chat__icon-button:hover { color: var(--mafsu-ink); background: #f0f3f1; }
-.mafsu-chat__icon-button svg { width: 21px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.8; }
-.mafsu-chat__help-button { font-size: 16px; font-weight: 700; }
-.mafsu-chat__toolbar { display: flex; min-height: 44px; align-items: center; gap: 9px; padding: 7px 14px; border-block: 1px solid var(--mafsu-line); background: #fafbf9; }
-.mafsu-chat__programme { position: relative; min-width: 0; flex: 1; }
-.mafsu-chat__programme::after { position: absolute; top: 50%; right: 2px; color: var(--mafsu-muted); content: "⌄"; font-size: 12px; pointer-events: none; transform: translateY(-58%); }
-.mafsu-chat__programme select { width: 100%; max-width: 148px; padding: 6px 17px 6px 0; overflow: hidden; border: 0; outline: 0; color: var(--mafsu-ink); background: transparent; font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; appearance: none; cursor: pointer; }
+.mafsu-chat__identity h2 { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--mafsu-ink); font-size: 15px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; }
+.mafsu-chat__identity h2 small { padding: 2px 5px; border-radius: 4px; color: #18724f; background: var(--mafsu-green-100); font-size: 8.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.mafsu-chat__kicker { display: flex; align-items: center; gap: 5px; margin: 1px 0 0; color: var(--mafsu-muted); font-size: 10px; font-weight: 500; }
+.mafsu-chat__kicker span { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #1eb35b; box-shadow: 0 0 0 2.5px #dff4e6; }
+.mafsu-chat__kicker span[data-health="checking"] { background: var(--mafsu-saffron); box-shadow: 0 0 0 2.5px #fbf0dc; }
+.mafsu-chat__kicker span[data-health="offline"] { background: #c64b3c; box-shadow: 0 0 0 2.5px #f8e3df; }
+.mafsu-chat__icon-button { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 9px; color: #56625d; background: transparent; cursor: pointer; transition: color .14s, background-color .14s; }
+.mafsu-chat__icon-button:hover { color: var(--mafsu-ink); background: #f1f5f2; }
+.mafsu-chat__icon-button svg { width: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.mafsu-chat__help-button { font-size: 15px; font-weight: 700; }
+.mafsu-chat__expand { display: grid; }
+.mafsu-chat__expand .mafsu-chat__collapse-icon { display: none; }
+
+/* ---------- toolbar ---------- */
+.mafsu-chat__toolbar { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-bottom: 1px solid #e4ebe7; background: #fcfdfc; }
+/* Read-only: the student picks a programme from the welcome cards, or just
+   names one in a question. This only reports which corpus is answering. */
+.mafsu-chat__context { min-width: 0; margin: 0; overflow: hidden; padding: 5px 10px; border-radius: 999px; color: #27332e; background: var(--mafsu-green-100); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.mafsu-chat__context[hidden] { display: none; }
 .mafsu-chat__languages { display: flex; margin-left: auto; padding: 2px; border: 1px solid var(--mafsu-line); border-radius: 8px; background: #fff; }
-.mafsu-chat__languages button { min-width: 30px; padding: 3px 5px; border: 0; border-radius: 5px; color: var(--mafsu-muted); background: transparent; font-size: 11px; font-weight: 700; cursor: pointer; }
+.mafsu-chat__languages button { min-width: 30px; padding: 4px 6px; border: 0; border-radius: 6px; color: var(--mafsu-muted); background: transparent; font-size: 11px; font-weight: 700; cursor: pointer; }
+.mafsu-chat__languages button:hover { color: var(--mafsu-ink); }
 .mafsu-chat__languages button[aria-pressed="true"] { color: #fff; background: var(--mafsu-green-800); }
-.mafsu-chat__reset { padding: 4px 0; border: 0; color: var(--mafsu-muted); background: none; font-size: 11px; cursor: pointer; }
-.mafsu-chat__reset:hover { color: var(--mafsu-green-800); }
-.mafsu-chat__messages { flex: 1; overflow-x: hidden; overflow-y: auto; padding: 20px 16px; background: var(--mafsu-paper); scroll-behavior: smooth; }
-.mafsu-chat__welcome h3 { max-width: 310px; margin: 2px 0 7px; font-size: 20px; font-weight: 700; line-height: 1.3; text-wrap: balance; }
-.mafsu-chat__welcome > p { max-width: 330px; margin: 0 0 18px; color: #56655c; font-size: 13px; line-height: 1.55; text-wrap: pretty; }
-.mafsu-chat__course-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-.mafsu-chat__course-grid button { position: relative; min-width: 0; padding: 11px 25px 11px 9px; border: 1px solid var(--mafsu-line); border-radius: 12px; color: var(--mafsu-ink); background: #fff; text-align: left; cursor: pointer; transition: border-color .16s ease-out, transform .16s ease-out, box-shadow .16s ease-out; }
-.mafsu-chat__course-grid button:hover { border-color: #87ad99; box-shadow: 0 4px 10px rgba(22,75,53,.07); transform: translateY(-1px); }
-.mafsu-chat__course-grid strong, .mafsu-chat__course-grid span { display: block; overflow: hidden; text-overflow: ellipsis; }
-.mafsu-chat__course-grid strong { color: var(--mafsu-ink); font-size: 12px; white-space: nowrap; }
-.mafsu-chat__course-grid span { margin-top: 2px; color: var(--mafsu-muted); font-size: 9px; white-space: nowrap; }
-.mafsu-chat__course-grid b { position: absolute; top: 50%; right: 9px; color: var(--mafsu-green-800); font-size: 14px; font-weight: 500; transform: translateY(-50%); transition: transform .16s ease-out; }
-.mafsu-chat__course-grid button:hover b { transform: translate(2px, -50%); }
-.mafsu-chat__quick-questions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 15px; }
-.mafsu-chat__quick-questions button, .mafsu-chat__options button { padding: 7px 10px; border: 1px solid #bdd1c4; border-radius: 999px; color: var(--mafsu-green-800); background: #fff; font-size: 11px; font-weight: 600; cursor: pointer; }
+.mafsu-chat__reset { flex: 0 0 auto; padding: 4px 2px; border: 0; color: #59665f; background: none; font-size: 11px; cursor: pointer; }
+.mafsu-chat__reset:hover { color: var(--mafsu-green-800); text-decoration: underline; }
+
+/* ---------- messages ---------- */
+.mafsu-chat__messages { flex: 1; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 18px 16px 20px; background: #fbfcfa; scroll-behavior: smooth; }
+
+.mafsu-chat__hello { margin: 0; color: #202a25; font-size: 15px; font-weight: 600; }
+.mafsu-chat__welcome h3 { margin: 1px 0 7px; color: #202a25; font-family: "Tiro Devanagari Marathi", "Noto Sans", serif; font-size: 27px; font-weight: 400; line-height: 1.18; letter-spacing: -.01em; }
+.mafsu-chat__welcome h3 em { color: #168259; font-style: normal; }
+.mafsu-chat__welcome > p:not(.mafsu-chat__hello):not(.mafsu-chat__explore-title) { max-width: 380px; margin: 0 0 16px; color: #59665f; font-size: 12.5px; line-height: 1.55; text-wrap: pretty; }
+.mafsu-chat__explore-title { margin: 0 0 8px; color: #26322d; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+
+.mafsu-chat__course-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mafsu-chat__course-grid button { position: relative; display: block; min-width: 0; min-height: 104px; padding: 12px 8px 22px; border: 1px solid var(--mafsu-line); border-radius: 14px; color: var(--mafsu-ink); background: #fff; text-align: center; cursor: pointer; transition: border-color .16s ease-out, transform .16s ease-out, box-shadow .16s ease-out, background-color .16s ease-out; }
+.mafsu-chat__course-grid button:nth-child(1) { border-color: #cce4d5; background: #f2f8f4; }
+.mafsu-chat__course-grid button:nth-child(2) { border-color: #cbdff5; background: #f2f7fd; }
+.mafsu-chat__course-grid button:nth-child(3) { border-color: #dfd1f0; background: #f8f4fc; }
+.mafsu-chat__course-grid button:hover { background: #fff; box-shadow: 0 6px 16px rgba(22,75,53,.09); transform: translateY(-2px); }
+.mafsu-chat__course-grid i { display: grid; width: 32px; height: 32px; place-items: center; margin: 0 auto 8px; border-radius: 50%; color: #fff; background: #15945f; font-size: 12px; font-style: normal; font-weight: 800; }
+.mafsu-chat__course-grid button:nth-child(2) i { background: #348ce6; }
+.mafsu-chat__course-grid button:nth-child(3) i { background: #9160ca; }
+.mafsu-chat__course-grid strong, .mafsu-chat__course-grid span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mafsu-chat__course-grid strong { font-size: 12px; }
+.mafsu-chat__course-grid span { margin-top: 2px; color: var(--mafsu-muted); font-size: 9.5px; }
+.mafsu-chat__course-grid b { position: absolute; right: 9px; bottom: 6px; color: #15945f; font-size: 13px; font-weight: 500; transition: transform .16s ease-out; }
+.mafsu-chat__course-grid button:nth-child(2) b { color: #348ce6; }
+.mafsu-chat__course-grid button:nth-child(3) b { color: #9160ca; }
+.mafsu-chat__course-grid button:hover b { transform: translateX(3px); }
+
+.mafsu-chat__quick-questions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.mafsu-chat__quick-questions button, .mafsu-chat__options button { padding: 8px 13px; border: 1px solid var(--mafsu-line); border-radius: 999px; color: #287255; background: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: border-color .14s, background-color .14s; }
 .mafsu-chat__quick-questions button:hover, .mafsu-chat__options button:hover { border-color: var(--mafsu-green-800); background: var(--mafsu-green-100); }
-.mafsu-chat__message { display: flex; margin: 0 0 13px; }
+.mafsu-chat__options button:disabled { opacity: .55; cursor: default; }
+
+.mafsu-chat__message { display: flex; margin: 0 0 12px; }
 .mafsu-chat__message--user { justify-content: flex-end; }
-.mafsu-chat__bubble { max-width: 90%; padding: 11px 13px; border: 1px solid var(--mafsu-line); border-radius: 16px 16px 16px 5px; color: var(--mafsu-ink); background: var(--mafsu-green-100); white-space: pre-wrap; overflow-wrap: anywhere; }
-.mafsu-chat__message--user .mafsu-chat__bubble { border-color: var(--mafsu-green-800); border-radius: 16px 16px 5px 16px; color: #fff; background: var(--mafsu-green-800); }
+.mafsu-chat__bubble { max-width: 88%; padding: 11px 13px; border-radius: 16px 16px 16px 5px; color: var(--mafsu-ink); background: #eef5ef; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mafsu-chat__message--user .mafsu-chat__bubble { border-radius: 16px 16px 5px 16px; color: #fff; background: #28775a; }
 .mafsu-chat__bubble p { margin: 0; }
-.mafsu-chat__options { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 14px; }
-.mafsu-chat__typing { display: inline-flex; gap: 4px; padding: 13px 15px; border-radius: 14px 14px 14px 4px; background: #fff; }
+.mafsu-chat__options { display: flex; flex-wrap: wrap; gap: 6px; margin: -3px 0 14px; }
+.mafsu-chat__options button { padding: 7px 12px; }
+.mafsu-chat__typing { display: inline-flex; gap: 4px; padding: 13px 15px; border-radius: 14px 14px 14px 4px; background: #fff; box-shadow: 0 1px 3px rgba(18,50,36,.06); }
 .mafsu-chat__typing i { width: 5px; height: 5px; border-radius: 50%; background: #7d8a82; animation: mafsu-dot 1s infinite ease-in-out; }
-.mafsu-chat__typing i:nth-child(2) { animation-delay: .14s; }.mafsu-chat__typing i:nth-child(3) { animation-delay: .28s; }
+.mafsu-chat__typing i:nth-child(2) { animation-delay: .14s; }
+.mafsu-chat__typing i:nth-child(3) { animation-delay: .28s; }
+
+/* ---------- FAQ ---------- */
+.mafsu-chat__faq { padding: 0 0 8px; }
+.mafsu-chat__faq-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.mafsu-chat__faq h3 { margin: 0; font-size: 16px; font-weight: 700; }
+.mafsu-chat__faq-close { border: 0; color: var(--mafsu-green-800); background: transparent; font-size: 11px; font-weight: 700; cursor: pointer; }
+.mafsu-chat__faq-close:hover { text-decoration: underline; }
+.mafsu-chat__faq-list { display: grid; gap: 7px; }
+.mafsu-chat__faq-list button { padding: 11px 13px; border: 1px solid var(--mafsu-line); border-radius: 12px; color: var(--mafsu-ink); background: #fff; font-size: 12px; text-align: left; cursor: pointer; }
+.mafsu-chat__faq-list button:hover { border-color: #87ad99; background: var(--mafsu-green-100); }
+
+/* ---------- composer ---------- */
 .mafsu-chat__status { padding: 8px 14px; color: var(--mafsu-danger); border-top: 1px solid #efd1ca; background: #fff2ef; font-size: 11px; }
-.mafsu-chat__composer { display: flex; align-items: flex-end; gap: 8px; margin: 10px 11px 7px; padding: 5px 5px 5px 11px; border: 1px solid #cfd9d2; border-radius: 17px; background: #fff; box-shadow: 0 3px 12px rgba(18,50,36,.07); }
-.mafsu-chat__composer:focus-within { border-color: var(--mafsu-green-800); box-shadow: 0 0 0 3px rgba(31,98,71,.11), 0 3px 12px rgba(18,50,36,.07); }
+.mafsu-chat__composer { display: flex; align-items: flex-end; gap: 7px; margin: 10px 12px 6px; padding: 5px 5px 5px 12px; border: 1px solid #cfd9d2; border-radius: 18px; background: #fff; box-shadow: 0 3px 12px rgba(18,50,36,.06); transition: border-color .14s, box-shadow .14s; }
+.mafsu-chat__composer:focus-within { border-color: #168259; box-shadow: 0 0 0 3px rgba(22,130,89,.10), 0 3px 12px rgba(18,50,36,.06); }
 .mafsu-chat__compose-field { min-width: 0; flex: 1; }
-.mafsu-chat__composer textarea { display: block; width: 100%; min-height: 38px; max-height: 148px; resize: none; padding: 8px 2px 4px; border: 0; outline: none; color: var(--mafsu-ink); background: #fff; line-height: 1.45; }
-.mafsu-chat__composer textarea::placeholder { color: #657169; opacity: 1; }
-.mafsu-chat__compose-meta { display: flex; min-height: 16px; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px 2px; color: #657169; font-size: 9px; line-height: 1.3; }
+.mafsu-chat__composer textarea { display: block; width: 100%; min-height: 34px; max-height: 148px; resize: none; padding: 8px 2px 3px; border: 0; outline: none; color: var(--mafsu-ink); background: #fff; font-size: 13.5px; line-height: 1.45; }
+.mafsu-chat__composer textarea::placeholder { color: #7a857e; opacity: 1; }
+.mafsu-chat__compose-meta { display: flex; min-height: 12px; align-items: center; justify-content: flex-end; padding: 0 2px 2px; color: #5c6862; font-size: 10px; line-height: 1.3; }
 .mafsu-chat__compose-meta span:last-child { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 .mafsu-chat__compose-meta[data-near-limit="true"] span:last-child { color: var(--mafsu-danger); font-weight: 700; }
-.mafsu-chat__composer button { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 13px; color: #fff; background: var(--mafsu-green-800); cursor: pointer; }
+.mafsu-chat__composer button { display: grid; width: 40px; height: 40px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 50%; color: #fff; background: #238d64; cursor: pointer; transition: background-color .14s; }
 .mafsu-chat__composer button:hover { background: var(--mafsu-green-900); }
-.mafsu-chat__composer .mafsu-chat__mic { width: 38px; color: var(--mafsu-muted); background: transparent; }
+.mafsu-chat__composer .mafsu-chat__mic { width: 36px; height: 36px; color: var(--mafsu-muted); background: transparent; }
 .mafsu-chat__composer .mafsu-chat__mic:hover { color: var(--mafsu-green-800); background: var(--mafsu-green-100); }
 .mafsu-chat__composer .mafsu-chat__mic[aria-pressed="true"] { color: #fff; background: var(--mafsu-terracotta); }
 .mafsu-chat__composer .mafsu-chat__mic:disabled { color: #9ba59e; background: transparent; cursor: not-allowed; }
 .mafsu-chat__composer button:disabled { opacity: .5; cursor: wait; }
-.mafsu-chat__composer svg { width: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
-.mafsu-chat__notice { margin: 0; padding: 0 15px 10px; color: var(--mafsu-muted); background: var(--mafsu-white); font-size: 10px; text-align: center; }
-.mafsu-chat__notice span { margin-right: 3px; color: var(--mafsu-muted); }
-.mafsu-chat__launcher { position: relative; display: grid; width: 58px; height: 58px; place-items: center; margin-left: auto; padding: 0; border: 0; border-radius: 50%; color: #fff; background: var(--mafsu-green-900); box-shadow: 0 12px 32px rgba(18,50,36,.28); cursor: pointer; transition: transform .16s ease-out, background-color .16s ease-out, box-shadow .16s ease-out; }
-.mafsu-chat__launcher:hover { background: var(--mafsu-green-800); transform: translateY(-1px); }
-.mafsu-chat__launcher-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; color: #fff; background: transparent; }
-.mafsu-chat__launcher-icon svg { width: 23px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
-.mafsu-chat__launcher-copy { position: absolute; right: 68px; width: max-content; padding: 7px 10px; border-radius: 8px; color: #fff; background: #24342b; font-size: 11px; font-weight: 600; opacity: 0; pointer-events: none; transform: translateX(5px); transition: opacity .16s ease-out, transform .16s ease-out; }
-.mafsu-chat__launcher:hover .mafsu-chat__launcher-copy, .mafsu-chat__launcher:focus-visible .mafsu-chat__launcher-copy { opacity: 1; transform: translateX(0); }
-.mafsu-chat__online { position: absolute; top: 2px; right: 2px; width: 11px; height: 11px; border: 2px solid #fff; border-radius: 50%; background: #4fc27b; }
-.mafsu-chat__online[data-health="checking"] { background: #e59a2f; }
-.mafsu-chat__online[data-health="offline"] { background: #c64b3c; }
-.mafsu-chat__faq { padding: 2px 0 12px; }
-.mafsu-chat__faq-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.mafsu-chat__faq h3 { margin: 0; font-size: 19px; }
-.mafsu-chat__faq-close { border: 0; color: var(--mafsu-green-800); background: transparent; font-size: 11px; font-weight: 700; cursor: pointer; }
-.mafsu-chat__faq-list { display: grid; gap: 8px; }
-.mafsu-chat__faq-list button { padding: 11px 13px; border: 1px solid var(--mafsu-line); border-radius: 12px; color: var(--mafsu-ink); background: #fff; text-align: left; cursor: pointer; }
-.mafsu-chat__faq-list button:hover { border-color: #87ad99; background: var(--mafsu-green-100); }
-.mafsu-chat__sr-only { position: absolute!important; width: 1px!important; height: 1px!important; overflow: hidden!important; clip: rect(0,0,0,0)!important; white-space: nowrap!important; }
-.mafsu-chat button:focus-visible, .mafsu-chat select:focus-visible { outline: 3px solid rgba(47,125,98,.25); outline-offset: 2px; }
+.mafsu-chat__composer svg { width: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.mafsu-chat__notice { margin: 0; padding: 0 15px 10px; color: var(--mafsu-muted); background: #fff; font-size: 10px; text-align: center; }
+.mafsu-chat__notice span { margin-right: 3px; }
 
+/* ---------- expanded: more room to read a long admission answer ---------- */
+.mafsu-chat--wide .mafsu-chat__panel { width: min(680px, calc(100vw - 32px)); height: min(700px, calc(100vh - 120px)); }
+.mafsu-chat--wide .mafsu-chat__expand .mafsu-chat__expand-icon { display: none; }
+.mafsu-chat--wide .mafsu-chat__expand .mafsu-chat__collapse-icon { display: block; }
+.mafsu-chat--wide .mafsu-chat__messages { padding: 22px 26px 24px; }
+.mafsu-chat--wide .mafsu-chat__bubble { max-width: 76%; }
+.mafsu-chat--wide .mafsu-chat__course-grid button { min-height: 112px; }
+.mafsu-chat--wide .mafsu-chat__welcome h3 { font-size: 30px; }
+.mafsu-chat--wide .mafsu-chat__composer { margin-inline: 22px; }
+.mafsu-chat--wide .mafsu-chat__quick-questions button { font-size: 11.5px; }
+
+/* ---------- motion ---------- */
 @keyframes mafsu-panel-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+@keyframes mafsu-nudge-in { from { opacity: 0; transform: translateY(8px) scale(.96); } }
 @keyframes mafsu-dot { 0%,60%,100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
-@media (max-width: 520px) {
-  .mafsu-chat { right: 12px; bottom: 12px; left: 12px; }
-  .mafsu-chat__panel { position: fixed; inset: 8px 8px 82px; width: auto; height: auto; border-radius: 18px; }
-  .mafsu-chat__launcher-copy { display: none; }
-  .mafsu-chat__course-grid { grid-template-columns: 1fr; }
-  .mafsu-chat__course-grid button { display: flex; align-items: baseline; gap: 8px; }
+@keyframes mafsu-pulse { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.5); } }
+
+/* ---------- screens ----------
+   Four sizes, each a real device situation rather than an arbitrary
+   breakpoint: a desktop that can afford the wide mode, a tablet/small laptop
+   that cannot, a phone where the panel becomes a full sheet, and a phone in
+   landscape where height is the scarce dimension. */
+
+/* Below ~720px the wide mode has nowhere to go, so stop offering it. */
+@media (max-width: 719px) {
+  .mafsu-chat__expand { display: none; }
+  .mafsu-chat--wide .mafsu-chat__panel { width: min(400px, calc(100vw - 32px)); }
 }
 
-/* Reference-led light MITRA interface. Kept as overrides to preserve the integration contract. */
-.mafsu-chat { right: 22px; bottom: 22px; }
-.mafsu-chat__panel {
-  bottom: 82px;
-  width: min(440px, calc(100vw - 32px));
-  height: min(690px, calc(100vh - 112px));
-  border: 1px solid #cfe0d6;
-  border-radius: 30px;
-  background: #fff;
-  box-shadow: 0 28px 80px rgba(17, 83, 58, .20), 0 8px 24px rgba(17, 83, 58, .09);
+/* Phones: a full sheet, not a floating card. The launcher hides while it is
+   open (the header's × closes it), so nothing sits on top of the composer. */
+@media (max-width: 560px) {
+  .mafsu-chat {
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    align-items: stretch;
+  }
+  .mafsu-chat__panel, .mafsu-chat--wide .mafsu-chat__panel {
+    position: fixed;
+    inset: max(8px, env(safe-area-inset-top, 0px)) 8px calc(8px + env(safe-area-inset-bottom, 0px)) 8px;
+    width: auto; height: auto; border-radius: 18px;
+  }
+  .mafsu-chat--open .mafsu-chat__launcher, .mafsu-chat--open .mafsu-chat__nudge { display: none; }
+  .mafsu-chat__nudge { width: auto; margin-left: auto; }
+  .mafsu-chat__launcher { margin-left: auto; }
+  /* "New chat" stays on phones: with the programme dropdown gone it is the
+     only way back to the three programme cards. */
+  .mafsu-chat__header { padding: 8px 8px 8px 12px; }
+  .mafsu-chat__messages { padding: 16px 13px 18px; }
+  .mafsu-chat__welcome h3 { font-size: 24px; }
+  .mafsu-chat__bubble { max-width: 92%; }
+  .mafsu-chat__composer { margin: 8px 10px 6px; }
+  /* 16px is the threshold below which iOS Safari zooms the page on focus. */
+  .mafsu-chat__composer textarea { font-size: 16px; }
+  .mafsu-chat__icon-button { width: 36px; height: 36px; }
+  .mafsu-chat__composer button { width: 42px; height: 42px; }
+  .mafsu-chat__composer .mafsu-chat__mic { width: 40px; height: 40px; }
 }
-.mafsu-chat__header {
-  min-height: 88px;
-  padding: 16px 20px;
-  color: var(--mafsu-ink);
-  border-bottom: 1px solid #e0e8e3;
-  background: #fff;
+
+/* Narrow phones: the course cards keep their three columns - a student should
+   still see all three programmes at once - but drop to name + arrow. */
+@media (max-width: 379px) {
+  .mafsu-chat__course-grid { gap: 6px; }
+  .mafsu-chat__course-grid button { min-height: 88px; padding: 10px 4px 20px; }
+  .mafsu-chat__course-grid span { display: none; }
+  .mafsu-chat__course-grid i { width: 28px; height: 28px; margin-bottom: 6px; }
+  .mafsu-chat__welcome h3 { font-size: 22px; }
+  .mafsu-chat__quick-questions button { font-size: 10.5px; padding: 7px 11px; }
+  .mafsu-chat__notice { font-size: 9px; }
 }
-.mafsu-chat__seal {
-  width: 54px;
-  height: 54px;
-  overflow: hidden;
-  border: 3px solid #0e6548;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 5px 12px rgba(16, 82, 58, .18);
+
+/* Landscape phones and short windows: height is what is scarce. Trim the
+   welcome, not the conversation. */
+@media (max-height: 620px) {
+  .mafsu-chat__panel { height: min(660px, calc(100vh - 96px)); height: min(660px, calc(100dvh - 96px)); }
+  .mafsu-chat__hello { display: none; }
+  .mafsu-chat__welcome h3 { margin-bottom: 5px; font-size: 21px; }
+  .mafsu-chat__welcome > p:not(.mafsu-chat__hello):not(.mafsu-chat__explore-title) { margin-bottom: 11px; }
+  .mafsu-chat__course-grid button { min-height: 84px; padding-bottom: 18px; }
+  .mafsu-chat__notice { padding-bottom: 7px; }
 }
-.mafsu-chat__seal img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.08); }
-.mafsu-chat__kicker { margin-bottom: 3px; color: #16724f; font-size: 10px; }
-.mafsu-chat__kicker span { width: 7px; height: 7px; background: #1eb35b; box-shadow: 0 0 0 3px #dff4e6; }
-.mafsu-chat__identity h2 { color: #1f2824; font-size: 20px; letter-spacing: -.02em; }
-.mafsu-chat__identity h2 small { color: #18724f; background: #e5f3ea; }
-.mafsu-chat__icon-button { color: #56625d; }
-.mafsu-chat__icon-button:hover { color: #1f2824; background: #f1f5f2; }
-.mafsu-chat__toolbar { min-height: 58px; padding: 8px 18px; border: 0; border-bottom: 1px solid #e0e8e3; background: #fff; box-shadow: none; }
-.mafsu-chat__programme { flex: 1 1 auto; }
-.mafsu-chat__programme select { max-width: 174px; padding: 8px 26px 8px 11px; border: 1px solid #d8e1db; border-radius: 11px; color: #27332e; background: #fff; font-size: 11px; font-weight: 600; }
-.mafsu-chat__programme::after { right: auto; left: 151px; }
-.mafsu-chat__languages { padding: 3px; border-color: #d8e1db; border-radius: 10px; background: #fff; }
-.mafsu-chat__languages button { min-width: 34px; padding: 5px 7px; border-radius: 7px; }
-.mafsu-chat__languages button[aria-pressed="true"] { background: #15945f; box-shadow: 0 3px 8px rgba(21, 148, 95, .20); }
-.mafsu-chat__reset { color: #59665f; }
-.mafsu-chat__messages { padding: 22px 18px 24px; background: #fbfcfa; }
-.mafsu-chat__welcome { padding: 0; }
-.mafsu-chat__welcome::after, .mafsu-chat__welcome-mark { display: none; }
-.mafsu-chat__hello { margin: 0 0 1px !important; color: #202a25 !important; font-size: 22px !important; font-weight: 700; }
-.mafsu-chat__welcome h3 { max-width: none; margin: 0 0 8px; color: #202a25; font-family: "Noto Sans", sans-serif; font-size: 25px; font-weight: 700; line-height: 1.16; }
-.mafsu-chat__welcome h3 em { color: #168259; font-style: normal; }
-.mafsu-chat__welcome > p:not(.mafsu-chat__hello):not(.mafsu-chat__explore-title) { max-width: 370px; margin-bottom: 17px; color: #59665f; font-size: 12.5px; }
-.mafsu-chat__explore-title { margin: 0 0 9px !important; color: #26322d !important; font-size: 12px !important; font-weight: 700; }
-.mafsu-chat__course-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.mafsu-chat__course-grid button { display: block; min-height: 120px; padding: 13px 8px 24px; border-radius: 15px; text-align: center; box-shadow: none; }
-.mafsu-chat__course-grid button:nth-child(1) { border-color: #cce4d5; background: #f2f8f4; }
-.mafsu-chat__course-grid button:nth-child(2) { border-color: #cbdff5; background: #f2f7fd; }
-.mafsu-chat__course-grid button:nth-child(3) { border-color: #dfd1f0; background: #f8f4fc; }
-.mafsu-chat__course-grid button:hover { background: #fff; transform: translateY(-2px); }
-.mafsu-chat__course-grid i { display: grid; width: 34px; height: 34px; place-items: center; margin: 0 auto 9px; border-radius: 50%; color: #fff; background: #15945f; font-size: 12px; font-style: normal; font-weight: 800; }
-.mafsu-chat__course-grid button:nth-child(2) i { background: #348ce6; }
-.mafsu-chat__course-grid button:nth-child(3) i { background: #9160ca; }
-.mafsu-chat__course-grid strong { font-size: 12px; }
-.mafsu-chat__course-grid span { margin-top: 3px; font-size: 9px; }
-.mafsu-chat__course-grid b { top: auto; right: 9px; bottom: 7px; color: #15945f; background: transparent; transform: none; }
-.mafsu-chat__course-grid button:nth-child(2) b { color: #348ce6; }
-.mafsu-chat__course-grid button:nth-child(3) b { color: #9160ca; }
-.mafsu-chat__course-grid button:hover b { transform: translateX(2px); }
-.mafsu-chat__quick-questions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 13px; }
-.mafsu-chat__quick-questions button { min-width: 0; padding: 8px 6px; overflow: hidden; border-color: #d7e1da; border-radius: 999px; color: #287255; background: #fff; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.mafsu-chat__message:not(.mafsu-chat__message--user) { padding-left: 0; }
-.mafsu-chat__message:not(.mafsu-chat__message--user)::before { display: none; }
-.mafsu-chat__bubble { border-radius: 16px 16px 16px 5px; background: #eef5ef; box-shadow: none; }
-.mafsu-chat__message--user .mafsu-chat__bubble { background: #28775a; }
-.mafsu-chat__options { margin-left: 0; }
-.mafsu-chat__composer { margin: 10px 12px 7px; padding: 6px 6px 6px 12px; border: 1px solid #68a78d; border-radius: 18px; background: #fff; box-shadow: 0 4px 15px rgba(20, 80, 57, .08); }
-.mafsu-chat__composer:focus-within { border-color: #168259; box-shadow: 0 0 0 3px rgba(22, 130, 89, .10), 0 4px 15px rgba(20, 80, 57, .08); }
-.mafsu-chat__composer button { border-radius: 50%; background: #238d64; }
-.mafsu-chat__notice { padding: 2px 15px 11px; background: #fff; }
-.mafsu-chat__launcher {
-  width: 68px;
-  height: 68px;
-  border: 4px solid #fff;
-  background: linear-gradient(145deg, #188e63, #0d5d43);
-  box-shadow: 0 15px 38px rgba(12, 82, 57, .34), 0 0 0 1px rgba(13, 93, 67, .12);
+
+@media (prefers-reduced-motion: reduce) {
+  .mafsu-chat__panel, .mafsu-chat__nudge, .mafsu-chat__typing i, .mafsu-chat__launcher[data-nudging="true"]::after { animation: none; }
+  .mafsu-chat__panel, .mafsu-chat__launcher, .mafsu-chat__course-grid button { transition: none; }
+  .mafsu-chat__messages { scroll-behavior: auto; }
 }
-.mafsu-chat__launcher:hover { background: linear-gradient(145deg, #1b9b6c, #0d6849); box-shadow: 0 18px 44px rgba(12, 82, 57, .40), 0 0 0 1px rgba(13, 93, 67, .12); transform: translateY(-2px) scale(1.02); }
-.mafsu-chat__launcher-icon svg { width: 31px; fill: #fff; stroke: #fff; stroke-width: .6; filter: drop-shadow(0 2px 3px rgba(0,0,0,.12)); }
-.mafsu-chat__online { top: -1px; right: -1px; width: 14px; height: 14px; border-width: 3px; background: #25c55f; }
-@media (max-width: 520px) {
-  .mafsu-chat { right: 8px; bottom: 8px; left: 8px; }
-  .mafsu-chat__panel { inset: 6px 6px 82px; border-radius: 22px; }
-  .mafsu-chat__header { min-height: 76px; padding: 11px 14px; }
-  .mafsu-chat__seal { width: 46px; height: 46px; }
-  .mafsu-chat__toolbar { padding-inline: 10px; }
-  .mafsu-chat__reset { display: none; }
-  .mafsu-chat__messages { padding: 18px 13px 20px; }
-  .mafsu-chat__course-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .mafsu-chat__course-grid button { min-height: 112px; padding-inline: 5px; }
-  .mafsu-chat__quick-questions { grid-template-columns: 1fr; }
-  .mafsu-chat__quick-questions button { text-align: left; padding-inline: 12px; }
-}
-@media (prefers-reduced-motion: reduce) { .mafsu-chat__panel, .mafsu-chat__typing i { animation: none; }.mafsu-chat__messages { scroll-behavior: auto; } }

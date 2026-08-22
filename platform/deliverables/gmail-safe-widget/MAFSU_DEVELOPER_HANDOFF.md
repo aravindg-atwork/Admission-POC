@@ -220,6 +220,11 @@ Response-handling rules:
    not part of a student-facing reply - do not display or reintroduce them.
 7. Disable composer and programme controls while a request is in progress to
    prevent duplicate submissions.
+8. The `EN / हिं / मर` buttons switch the whole interface, not only the answer
+   language: labels, placeholder, safety notice, FAQ list and the question each
+   shortcut sends. The greeting card beside the launcher is the one exception -
+   it stays in English by design, because it appears before a visitor has
+   chosen a language, and its own text names हिंदी and मराठी.
 
 The supplied jQuery file already implements these rules.
 

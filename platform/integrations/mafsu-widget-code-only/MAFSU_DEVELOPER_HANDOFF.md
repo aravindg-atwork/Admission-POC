@@ -220,8 +220,37 @@ Response-handling rules:
    not part of a student-facing reply - do not display or reintroduce them.
 7. Disable composer and programme controls while a request is in progress to
    prevent duplicate submissions.
+8. The `EN / हिं / मर` buttons switch the whole interface, not only the answer
+   language: labels, placeholder, safety notice, FAQ list and the question each
+   shortcut sends. The greeting card beside the launcher is the one exception -
+   it stays in English by design, because it appears before a visitor has
+   chosen a language, and its own text names हिंदी and मराठी.
 
 The supplied jQuery file already implements these rules.
+
+### Direct HTTPS mode (once MITRA has its own domain)
+
+When MITRA is reachable at its own HTTPS hostname, `MitraProxy.ashx` is no
+longer required. Point the widget at the domain and drop in the site key:
+
+```html
+<div id="mafsu-admissions-widget" class="mafsu-chat"
+     data-chat-url="https://mitra.mafsu.ac.in/api/chat"
+     data-health-url="https://mitra.mafsu.ac.in/api/healthz"
+     data-site-key="THE-KEY-WE-ISSUE">
+```
+
+No server-side change is needed - no ARR, no `web.config`, no handler. Two
+things we need from you first: the exact origin(s) to allowlist, and whether
+the site sends a `Content-Security-Policy` (if it does, add the MITRA host to
+`connect-src` or the browser blocks the call regardless of the key).
+
+The site key is **publishable**. It is visible in the page source by design: it
+identifies the site, it does not authenticate it. The origin allowlist and the
+per-client rate limit are what protect the endpoint, so there is no need to
+hide the key or route it through a server. Keep `MitraProxy.ashx` in the
+package as a fallback for the case where a proxy or CSP policy blocks direct
+calls.
 
 ## 5. Programme and follow-up behaviour
 

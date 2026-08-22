@@ -16,8 +16,13 @@
     chatUrl: localPreview ? "http://159.69.210.30/api/chat" : String($root.attr("data-chat-url") || configuredApiBase + "/api/chat"),
     healthUrl: localPreview ? "http://159.69.210.30/api/healthz" : String($root.attr("data-health-url") || configuredApiBase + "/api/healthz"),
     language: String($root.data("default-language") || "en"),
+    // Publishable site key, read from data-site-key. It is visible in the page
+    // source by design - it identifies the site, it does not authenticate it.
+    // The origin allowlist and per-client rate limit do the protecting.
+    siteKey: String($root.attr("data-site-key") || ""),
     projectId: "bvsc",
     conversationState: {},
+    selectedProgramme: "",
     carryQuestion: null,
     sessionId: null,
     busy: false
@@ -29,6 +34,8 @@
   };
   var $panel = $root.find(".mafsu-chat__panel");
   var $launcher = $root.find(".mafsu-chat__launcher");
+  var $nudge = $root.find("[data-chat-nudge]");
+  var $expand = $root.find("[data-chat-action=\"expand\"]");
   var $messages = $root.find("[data-chat-messages]");
   var welcomeHtml = $messages.html();
   var $form = $root.find("[data-chat-form]");
@@ -37,19 +44,234 @@
   var $send = $root.find("[data-chat-send]");
   var $mic = $root.find("[data-chat-mic]");
   var $status = $root.find("[data-chat-status]");
+  var $programmeLabel = $root.find("[data-programme-label]");
   var $health = $root.find("[data-health]");
   var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   var recognition = null;
 
+  // A launcher alone goes unnoticed: most students never learn the assistant
+  // is there. The greeting card says what MITRA is for, once per visit, and
+  // never comes back after it is dismissed or the chat has been opened.
+  var NUDGE_KEY = "mafsuMitraNudgeSeen";
+  var NUDGE_DELAY = 2400;
+
+  function nudgeAlreadySeen() {
+    try { return window.sessionStorage.getItem(NUDGE_KEY) === "1"; }
+    catch (error) { return false; }  // private mode / blocked storage: just show it
+  }
+
+  function hideNudge(remember) {
+    $nudge.attr("data-visible", "false");
+    $launcher.attr("data-nudging", "false");
+    if (!remember) return;
+    try { window.sessionStorage.setItem(NUDGE_KEY, "1"); } catch (error) { /* nothing to remember it with */ }
+  }
+
+  function showNudge() {
+    if (nudgeAlreadySeen() || !$panel.prop("hidden")) return;
+    $nudge.attr("data-visible", "true");
+    $launcher.attr("data-nudging", "true");
+  }
+
+  function setExpanded(expanded) {
+    $root.toggleClass("mafsu-chat--wide", expanded);
+    $expand
+      .attr("aria-pressed", String(expanded))
+      .attr("aria-label", expanded ? words().collapse : words().expand)
+      .attr("title", expanded ? words().collapse : words().expand);
+    try { window.sessionStorage.setItem("mafsuMitraWide", expanded ? "1" : "0"); } catch (error) { /* width is per-visit only */ }
+  }
+
+  // Interface copy per language. The panel is rewritten in full when the
+  // student switches language - labels, prompts, placeholder, safety notice,
+  // the greeting card and the questions the buttons send - so the interface
+  // and the answers speak the same language. The Hindi and Marathi strings
+  // mirror services/web/src/copy.ts and carry its same caveat: standard
+  // admissions phrasing, machine-drafted, still awaiting a native-speaker
+  // review before public launch.
+  var COPY = {
+    en: {
+      beta: "Beta",
+      kicker: "Official MAFSU admission assistant",
+      expand: "Widen the assistant", collapse: "Narrow the assistant",
+      close: "Close admissions assistant", faqTitle: "Frequently asked questions",
+      faqBack: "Back", languageGroup: "Answer language", newChat: "New chat",
+      answeringFor: "Answering for {name}",
+      hello: "Hello!", wordmark: "I’m <em>MAFSU MITRA</em>",
+      intro: "Your MAFSU undergraduate admission assistant. Ask naturally about eligibility, documents, fees, seats and more.",
+      explore: "Explore programmes", courseGroup: "Choose a programme",
+      bvscSubject: "Veterinary Science", bfscSubject: "Fishery Science", dairySubject: "Dairy Technology",
+      askBvsc: "Help me with B.V.Sc. & A.H.", askBfsc: "Help me with B.F.Sc.", askDairy: "Help me with B.Tech. Dairy Technology",
+      quickEligible: "Am I eligible?", quickEligibleQ: "Am I eligible?",
+      quickDocuments: "Documents required", quickDocumentsQ: "What documents do I need?",
+      quickFees: "Fees & seats", quickFeesQ: "What are the fees and seats?",
+      composerLabel: "Ask an admissions question", placeholder: "Ask an admission question…",
+      speak: "Speak your question", stopListening: "Stop listening", send: "Send question",
+      notice: "Verify final admission decisions with MAFSU. Do not share Aadhaar, OTPs, passwords or bank details.",
+      nudgeLabel: "Message from MAFSU MITRA", nudgeTitle: "Admission questions?",
+      nudgeBody: "I’m MITRA, MAFSU’s admission assistant. Ask me about eligibility, fees, documents or seats — in English, हिंदी or मराठी.",
+      nudgeCta: "Ask a question", dismiss: "Dismiss this message",
+      thinking: "Finding your answer",
+      errorUnreachable: "The admissions service is unreachable. Please try again in a moment.",
+      errorServer: "The admissions service returned an error ({status}). Please try again.",
+      errorVoice: "Voice input could not start. You can still type your question.",
+      voiceUnsupported: "Voice input is not supported in this browser",
+      healthOnline: "MAFSU MITRA is online", healthOffline: "MAFSU MITRA is currently unreachable",
+      healthChecking: "Checking MAFSU MITRA availability",
+      faqQuestions: [
+        "Am I eligible for a MAFSU undergraduate programme?",
+        "Which entrance exam is required for each programme?",
+        "What documents are required for admission?",
+        "What are the fees and available seats?",
+        "How do reservations and NCL certificates work?",
+        "Can you compare B.V.Sc., B.F.Sc. and Dairy Technology?"
+      ]
+    },
+    hi: {
+      beta: "बीटा",
+      kicker: "MAFSU का आधिकारिक प्रवेश सहायक",
+      expand: "पैनल चौड़ा करें", collapse: "पैनल छोटा करें",
+      close: "प्रवेश सहायक बंद करें", faqTitle: "अक्सर पूछे जाने वाले प्रश्न",
+      faqBack: "वापस", languageGroup: "उत्तर की भाषा", newChat: "नई चैट",
+      answeringFor: "{name} के लिए उत्तर",
+      hello: "नमस्ते!", wordmark: "मैं हूँ <em>MAFSU MITRA</em>",
+      intro: "MAFSU के स्नातक प्रवेश के लिए आपका सहायक। पात्रता, दस्तावेज़, शुल्क, सीटों और अन्य विषयों पर सहज भाषा में पूछें।",
+      explore: "पाठ्यक्रम चुनें", courseGroup: "पाठ्यक्रम चुनें",
+      bvscSubject: "पशुचिकित्सा विज्ञान", bfscSubject: "मत्स्य विज्ञान", dairySubject: "डेयरी प्रौद्योगिकी",
+      askBvsc: "B.V.Sc. & A.H. के बारे में बताइए", askBfsc: "B.F.Sc. के बारे में बताइए", askDairy: "B.Tech. डेयरी टेक्नोलॉजी के बारे में बताइए",
+      quickEligible: "क्या मैं पात्र हूँ?", quickEligibleQ: "क्या मैं पात्र हूँ?",
+      quickDocuments: "आवश्यक दस्तावेज़", quickDocumentsQ: "मुझे कौन-कौन से दस्तावेज़ चाहिए?",
+      quickFees: "शुल्क और सीटें", quickFeesQ: "शुल्क और सीटें कितनी हैं?",
+      composerLabel: "प्रवेश से जुड़ा प्रश्न पूछें", placeholder: "प्रवेश से जुड़ा प्रश्न पूछें…",
+      speak: "बोलकर पूछें", stopListening: "सुनना बंद करें", send: "प्रश्न भेजें",
+      notice: "अंतिम प्रवेश निर्णय MAFSU से सत्यापित करें। आधार, OTP, पासवर्ड या बैंक विवरण साझा न करें।",
+      nudgeLabel: "MAFSU MITRA का संदेश", nudgeTitle: "प्रवेश से जुड़े सवाल?",
+      nudgeBody: "मैं MITRA हूँ, MAFSU का प्रवेश सहायक। पात्रता, शुल्क, दस्तावेज़ या सीटों के बारे में पूछें।",
+      nudgeCta: "प्रश्न पूछें", dismiss: "यह संदेश बंद करें",
+      thinking: "आपका उत्तर खोजा जा रहा है",
+      errorUnreachable: "प्रवेश सेवा अभी उपलब्ध नहीं है। कृपया थोड़ी देर बाद पुनः प्रयास करें।",
+      errorServer: "प्रवेश सेवा से त्रुटि मिली ({status})। कृपया पुनः प्रयास करें।",
+      errorVoice: "आवाज़ इनपुट शुरू नहीं हो सका। आप प्रश्न टाइप भी कर सकते हैं।",
+      voiceUnsupported: "इस ब्राउज़र में आवाज़ इनपुट उपलब्ध नहीं है",
+      healthOnline: "MAFSU MITRA उपलब्ध है", healthOffline: "MAFSU MITRA अभी उपलब्ध नहीं है",
+      healthChecking: "MAFSU MITRA की उपलब्धता जाँची जा रही है",
+      faqQuestions: [
+        "क्या मैं MAFSU के स्नातक पाठ्यक्रम के लिए पात्र हूँ?",
+        "हर पाठ्यक्रम के लिए कौन सी प्रवेश परीक्षा आवश्यक है?",
+        "प्रवेश के लिए कौन से दस्तावेज़ चाहिए?",
+        "शुल्क और उपलब्ध सीटें कितनी हैं?",
+        "आरक्षण और NCL प्रमाणपत्र कैसे काम करते हैं?",
+        "B.V.Sc., B.F.Sc. और डेयरी टेक्नोलॉजी की तुलना करें।"
+      ]
+    },
+    mr: {
+      beta: "बीटा",
+      kicker: "MAFSU चा अधिकृत प्रवेश सहाय्यक",
+      expand: "पॅनेल रुंद करा", collapse: "पॅनेल लहान करा",
+      close: "प्रवेश सहाय्यक बंद करा", faqTitle: "वारंवार विचारले जाणारे प्रश्न",
+      faqBack: "मागे", languageGroup: "उत्तराची भाषा", newChat: "नवीन चॅट",
+      answeringFor: "{name} साठी उत्तरे",
+      hello: "नमस्कार!", wordmark: "मी आहे <em>MAFSU MITRA</em>",
+      intro: "MAFSU च्या पदवीपूर्व प्रवेशासाठी तुमचा सहाय्यक. पात्रता, कागदपत्रे, शुल्क, जागा आणि इतर गोष्टींबद्दल सहज विचारा.",
+      explore: "अभ्यासक्रम निवडा", courseGroup: "अभ्यासक्रम निवडा",
+      bvscSubject: "पशुवैद्यक शास्त्र", bfscSubject: "मत्स्य विज्ञान", dairySubject: "डेअरी तंत्रज्ञान",
+      askBvsc: "B.V.Sc. & A.H. बद्दल सांगा", askBfsc: "B.F.Sc. बद्दल सांगा", askDairy: "B.Tech. डेअरी टेक्नॉलॉजी बद्दल सांगा",
+      quickEligible: "मी पात्र आहे का?", quickEligibleQ: "मी पात्र आहे का?",
+      quickDocuments: "आवश्यक कागदपत्रे", quickDocumentsQ: "मला कोणती कागदपत्रे लागतील?",
+      quickFees: "शुल्क आणि जागा", quickFeesQ: "शुल्क आणि जागा किती आहेत?",
+      composerLabel: "प्रवेशाबाबत प्रश्न विचारा", placeholder: "प्रवेशाबाबत प्रश्न विचारा…",
+      speak: "बोलून विचारा", stopListening: "ऐकणे थांबवा", send: "प्रश्न पाठवा",
+      notice: "अंतिम प्रवेश निर्णय MAFSU कडून पडताळून घ्या. आधार, OTP, पासवर्ड किंवा बँक तपशील शेअर करू नका.",
+      nudgeLabel: "MAFSU MITRA चा संदेश", nudgeTitle: "प्रवेशाबाबत प्रश्न?",
+      nudgeBody: "मी MITRA, MAFSU चा प्रवेश सहाय्यक. पात्रता, शुल्क, कागदपत्रे किंवा जागांबद्दल विचारा.",
+      nudgeCta: "प्रश्न विचारा", dismiss: "हा संदेश बंद करा",
+      thinking: "तुमचे उत्तर शोधत आहे",
+      errorUnreachable: "प्रवेश सेवा सध्या उपलब्ध नाही. कृपया थोड्या वेळाने पुन्हा प्रयत्न करा.",
+      errorServer: "प्रवेश सेवेकडून त्रुटी मिळाली ({status}). कृपया पुन्हा प्रयत्न करा.",
+      errorVoice: "आवाज इनपुट सुरू होऊ शकले नाही. तुम्ही प्रश्न टाइप करू शकता.",
+      voiceUnsupported: "या ब्राउझरमध्ये आवाज इनपुट उपलब्ध नाही",
+      healthOnline: "MAFSU MITRA उपलब्ध आहे", healthOffline: "MAFSU MITRA सध्या उपलब्ध नाही",
+      healthChecking: "MAFSU MITRA ची उपलब्धता तपासत आहे",
+      faqQuestions: [
+        "मी MAFSU च्या पदवीपूर्व अभ्यासक्रमासाठी पात्र आहे का?",
+        "प्रत्येक अभ्यासक्रमासाठी कोणती प्रवेश परीक्षा आवश्यक आहे?",
+        "प्रवेशासाठी कोणती कागदपत्रे आवश्यक आहेत?",
+        "शुल्क आणि उपलब्ध जागा किती आहेत?",
+        "आरक्षण आणि NCL प्रमाणपत्र कसे काम करतात?",
+        "B.V.Sc., B.F.Sc. आणि डेअरी टेक्नॉलॉजी यांची तुलना करा."
+      ]
+    }
+  };
+
+  function words() { return COPY[config.language] || COPY.en; }
+
+  // Rewrites the panel into the active language: text, aria-labels, the
+  // placeholder, and the question each shortcut sends (so the API answers in
+  // the same language the student is reading).
+  function applyLanguage(language) {
+    if (!COPY[language]) return;
+    config.language = language;
+    var copy = COPY[language];
+    $root.attr("lang", language);
+    $root.find("[data-language]").attr("aria-pressed", "false");
+    $root.find('[data-language="' + language + '"]').attr("aria-pressed", "true");
+    // The greeting card is deliberately excluded and stays in English: it is
+    // the first thing a visitor sees, before anyone has chosen a language, and
+    // it names हिंदी and मराठी in its own text so a student can see the
+    // options are there. Translating it would guess a language for someone who
+    // has not picked one yet.
+    var translatable = function (selector) {
+      return $root.find(selector).filter(function () {
+        return $(this).closest("[data-chat-nudge]").length === 0;
+      });
+    };
+    translatable("[data-i18n]").each(function () {
+      var value = copy[$(this).attr("data-i18n")];
+      if (value != null) $(this).text(value);
+    });
+    translatable("[data-i18n-html]").each(function () {
+      var value = copy[$(this).attr("data-i18n-html")];
+      if (value != null) $(this).html(value);
+    });
+    translatable("[data-i18n-label]").each(function () {
+      var value = copy[$(this).attr("data-i18n-label")];
+      if (value != null) $(this).attr("aria-label", value).attr("title", value);
+    });
+    translatable("[data-i18n-placeholder]").each(function () {
+      var value = copy[$(this).attr("data-i18n-placeholder")];
+      if (value != null) $(this).attr("placeholder", value);
+    });
+    translatable("[data-i18n-question]").each(function () {
+      var value = copy[$(this).attr("data-i18n-question")];
+      if (value != null) $(this).attr("data-question", value);
+    });
+    setProgrammeLabel(config.selectedProgramme);
+    setExpanded($root.hasClass("mafsu-chat--wide"));
+    if (!SpeechRecognition) $mic.attr("title", copy.voiceUnsupported);
+  }
+
   function setOpen(open) {
     $panel.prop("hidden", !open);
+    $root.toggleClass("mafsu-chat--open", open);
     $launcher.attr("aria-expanded", String(open));
     if (open) {
+      hideNudge(true);
       window.requestAnimationFrame(function () {
         $input[0].focus({ preventScroll: true });
       });
     }
     else $launcher.trigger("focus");
+  }
+
+  // The toolbar used to carry a programme dropdown. It is gone: students pick
+  // from the welcome cards (shown again on every new chat) or simply name a
+  // programme in the question, and the API routes on that. What remains is a
+  // read-only note of which programme is answering, so the corpus in use is
+  // never a mystery.
+  function setProgrammeLabel(projectId) {
+    var name = programmeNames[projectId];
+    config.selectedProgramme = name ? projectId : "";
+    $programmeLabel.text(name ? words().answeringFor.replace("{name}", name) : "").prop("hidden", !name);
   }
 
   function escapeHtml(value) {
@@ -98,23 +320,29 @@
     $messages.find("[data-typing]").remove();
     if (busy) {
       $messages.find(".mafsu-chat__welcome").remove();
-      $messages.append('<div class="mafsu-chat__message" data-typing><div class="mafsu-chat__typing" aria-label="Finding your answer"><i></i><i></i><i></i></div></div>');
+      $messages.append('<div class="mafsu-chat__message" data-typing><div class="mafsu-chat__typing" aria-label="' + escapeHtml(words().thinking) + '"><i></i><i></i><i></i></div></div>');
       scrollToLatest();
     }
   }
 
   function setError(message) {
-    $status.text(message || "The admissions assistant could not connect. Please try again.").prop("hidden", false);
+    $status.text(message || words().errorUnreachable).prop("hidden", false);
   }
 
   function setHealth(state) {
     var labels = {
-      online: "MAFSU MITRA is online",
-      offline: "MAFSU MITRA is currently unreachable",
-      checking: "Checking MAFSU MITRA availability"
+      online: words().healthOnline,
+      offline: words().healthOffline,
+      checking: words().healthChecking
     };
     $health.attr("data-health", state);
     $launcher.attr("aria-label", labels[state]).attr("title", labels[state]);
+  }
+
+  function siteKeyHeaders(extra) {
+    var headers = extra || {};
+    if (config.siteKey) headers["X-Mitra-Site-Key"] = config.siteKey;
+    return headers;
   }
 
   function checkHealth() {
@@ -124,7 +352,8 @@
       method: "GET",
       dataType: "json",
       timeout: 5000,
-      cache: false
+      cache: false,
+      headers: siteKeyHeaders()
     }).done(function (response) {
       setHealth(response && response.status === "ok" ? "online" : "offline");
     }).fail(function () {
@@ -133,15 +362,11 @@
   }
 
   function showFaq() {
-    var questions = [
-      "Am I eligible for a MAFSU undergraduate programme?",
-      "Which entrance exam is required for each programme?",
-      "What documents are required for admission?",
-      "What are the fees and available seats?",
-      "How do reservations and NCL certificates work?",
-      "Can you compare B.V.Sc., B.F.Sc. and Dairy Technology?"
-    ];
-    var $faq = $('<div class="mafsu-chat__faq"><div class="mafsu-chat__faq-head"><h3>Frequently asked questions</h3><button type="button" class="mafsu-chat__faq-close" data-chat-action="reset">Back</button></div><div class="mafsu-chat__faq-list"></div></div>');
+    var copy = words();
+    var $faq = $('<div class="mafsu-chat__faq"><div class="mafsu-chat__faq-head"><h3></h3><button type="button" class="mafsu-chat__faq-close" data-chat-action="reset"></button></div><div class="mafsu-chat__faq-list"></div></div>');
+    $faq.find("h3").text(copy.faqTitle);
+    $faq.find(".mafsu-chat__faq-close").text(copy.faqBack);
+    var questions = copy.faqQuestions;
     $.each(questions, function (_, question) {
       $("<button type=\"button\"></button>").text(question).attr("data-question", question).appendTo($faq.find(".mafsu-chat__faq-list"));
     });
@@ -149,18 +374,16 @@
   }
 
   function updateFromResponse(response) {
-    if (response.language && /^(en|hi|mr)$/.test(response.language)) {
-      config.language = response.language;
-      $root.find("[data-language]").attr("aria-pressed", "false");
-      $root.find('[data-language="' + response.language + '"]').attr("aria-pressed", "true");
+    if (response.language && /^(en|hi|mr)$/.test(response.language) && response.language !== config.language) {
+      applyLanguage(response.language);
     }
     if (response.sessionId) config.sessionId = response.sessionId;
     var neutralSource = /^(greeting|identity|language-preference|language-repeat|programme-clarify)$/.test(response.source || "");
-    var programmeIsNeutral = !$root.find("[data-programme-select]").val();
+    var programmeIsNeutral = !config.selectedProgramme;
     if (response.projectId && programmeNames[response.projectId] && !(neutralSource && programmeIsNeutral)) {
       if (response.projectId !== config.projectId) config.conversationState = {};
       config.projectId = response.projectId;
-      $root.find("[data-programme-select]").val(response.projectId);
+      setProgrammeLabel(response.projectId);
     }
     config.conversationState = $.extend({}, config.conversationState, response.slotUpdate || {});
     if (response.answer) {
@@ -184,6 +407,7 @@
       contentType: "application/json; charset=utf-8",
       dataType: "json",
       timeout: 90000,
+      headers: siteKeyHeaders(),
       data: JSON.stringify({
         question: question,
         uiLanguage: config.language,
@@ -201,8 +425,8 @@
       if (xhr.status === 0 || xhr.status >= 500) setHealth("offline");
       setBusy(false);
       var message = xhr.status === 0
-        ? "The admissions service is unreachable. Check the API address or website proxy."
-        : "The admissions service returned an error (" + xhr.status + "). Please try again.";
+        ? words().errorUnreachable
+        : words().errorServer.replace("{status}", String(xhr.status));
       setError(message);
     }).always(function () {
       $input.prop("disabled", false).trigger("focus");
@@ -215,7 +439,8 @@
     config.carryQuestion = null;
     config.sessionId = null;
     $messages.html(welcomeHtml);
-    $root.find("[data-programme-select]").val("");
+    setProgrammeLabel("");
+    applyLanguage(config.language);
     $status.prop("hidden", true).empty();
     $input.val("").css("height", "auto");
     updateComposerMeta();
@@ -230,7 +455,7 @@
 
   function setupSpeechInput() {
     if (!SpeechRecognition) {
-      $mic.prop("disabled", true).attr("title", "Voice input is not supported in this browser");
+      $mic.prop("disabled", true).attr("title", words().voiceUnsupported);
       return;
     }
     recognition = new SpeechRecognition();
@@ -238,7 +463,7 @@
     recognition.continuous = false;
     recognition.maxAlternatives = 1;
     recognition.onstart = function () {
-      $mic.attr("aria-pressed", "true").attr("aria-label", "Stop listening");
+      $mic.attr("aria-pressed", "true").attr("aria-label", words().stopListening);
       $status.prop("hidden", true).empty();
     };
     recognition.onresult = function (event) {
@@ -246,10 +471,10 @@
       $input.val(transcript).trigger("input").trigger("focus");
     };
     recognition.onerror = function (event) {
-      if (event.error !== "aborted") setError("Voice input could not start. You can still type your question.");
+      if (event.error !== "aborted") setError(words().errorVoice);
     };
     recognition.onend = function () {
-      $mic.attr("aria-pressed", "false").attr("aria-label", "Speak your question");
+      $mic.attr("aria-pressed", "false").attr("aria-label", words().speak);
     };
   }
 
@@ -257,8 +482,15 @@
     var action = $(this).data("chat-action");
     if (action === "toggle") setOpen($panel.prop("hidden"));
     if (action === "close") setOpen(false);
+    if (action === "expand") setExpanded(!$root.hasClass("mafsu-chat--wide"));
+    if (action === "dismiss-nudge") hideNudge(true);
     if (action === "reset" && !config.busy) resetChat();
     if (action === "faq" && !config.busy) showFaq();
+  });
+
+  $nudge.on("click", function (event) {
+    if ($(event.target).closest("[data-chat-action]").length) return;
+    setOpen(true);
   });
 
   $root.on("click", "[data-question]", function () {
@@ -266,16 +498,8 @@
   });
 
   $root.on("click", "[data-language]", function () {
-    config.language = $(this).data("language");
-    $root.find("[data-language]").attr("aria-pressed", "false");
-    $(this).attr("aria-pressed", "true");
-  });
-
-  $root.on("change", "[data-programme-select]", function () {
-    var selected = String($(this).val() || "");
-    config.projectId = programmeNames[selected] ? selected : "bvsc";
-    config.conversationState = selected ? { programme: selected } : {};
-    config.carryQuestion = null;
+    applyLanguage(String($(this).data("language")));
+    $input.trigger("focus");
   });
 
   $root.on("click", "[data-option-value]", function () {
@@ -286,7 +510,7 @@
     if (field === "projectId" && programmeNames[value]) {
       config.projectId = value;
       config.conversationState = { programme: value };
-      $root.find("[data-programme-select]").val(value);
+      setProgrammeLabel(value);
       $messages.find(".mafsu-chat__options button").prop("disabled", true);
       ask(config.carryQuestion || "How can you help me?", {}, label);
       return;
@@ -327,7 +551,10 @@
   });
 
   setupSpeechInput();
+  applyLanguage(config.language);
   updateComposerMeta();
   checkHealth();
   window.setInterval(checkHealth, 30000);
+  try { if (window.sessionStorage.getItem("mafsuMitraWide") === "1") setExpanded(true); } catch (error) { /* default width */ }
+  window.setTimeout(showNudge, NUDGE_DELAY);
 })(window.jQuery, window, document);
