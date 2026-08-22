@@ -31,7 +31,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Admin-Key"],
+    allow_headers=["Content-Type", "X-Admin-Key", "X-Mitra-Site-Key"],
     allow_credentials=False,
 )
 app.include_router(health_router)
@@ -52,6 +52,25 @@ async def security_boundary(request: Request, call_next):
         return JSONResponse({"detail": "Request body too large"}, status_code=413)
 
     if request.url.path == "/api/chat" and request.method == "POST":
+        # Server-side origin enforcement. CORS alone is a browser courtesy: it
+        # stops another WEBSITE embedding the widget, and stops nothing else -
+        # curl never sends an Origin and never reads the response headers. Only
+        # requests that actually declare an origin are judged here, so a
+        # same-origin call or a server-to-server call (the IIS handler) is
+        # unaffected; those are governed by the site key and the rate limit.
+        if settings.origin_enforcement:
+            origin = request.headers.get("origin")
+            if origin and origin not in settings.allowed_origins:
+                return JSONResponse({"detail": "This origin is not allowed to use the assistant."}, status_code=403)
+
+        # Publishable site key. Identifies the calling site; it is NOT a secret
+        # once the widget ships it to a browser. Off until a key is issued.
+        if settings.site_key_required:
+            presented = request.headers.get("x-mitra-site-key", "")
+            digest = hashlib.sha256(presented.encode("utf-8")).hexdigest() if presented else ""
+            if digest not in settings.accepted_site_keys:
+                return JSONResponse({"detail": "A valid site key is required."}, status_code=401)
+
         client_address = request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
         client_key = hashlib.sha256(client_address.encode("utf-8")).hexdigest()[:24]
         minute = int(__import__("time").time() // 60)

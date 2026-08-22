@@ -32,6 +32,21 @@ class Settings(BaseSettings):
     chat_rate_limit_per_minute: int = 30
     max_request_bytes: int = 16384
 
+    # --- Site key + origin enforcement (both OFF until the domain exists) ---
+    # Once the widget calls us directly from the MAFSU page over HTTPS, there is
+    # no server-side proxy left to hold a secret, so the key the browser carries
+    # is PUBLISHABLE by definition - anyone can read it in View Source. It
+    # identifies which site is calling; the origin allowlist and the per-client
+    # rate limit are what actually protect the endpoint. Treating it as a secret
+    # would be the mistake: never gate anything on the key alone.
+    #
+    # Keys are stored as sha256 hex digests so the plaintext is not sitting in
+    # the environment of every replica. Generate one with:
+    #   python3 -c "import secrets,hashlib;k=secrets.token_urlsafe(24);print(k, hashlib.sha256(k.encode()).hexdigest())"
+    site_key_required: bool = False
+    site_key_sha256: str = ""          # comma-separated digests of accepted keys
+    origin_enforcement: bool = False   # reject a disallowed Origin server-side, not only in the browser
+
     # --- Postgres ---
     postgres_dsn: str = "postgresql+psycopg://platform:platform@localhost:5432/platform"
 
@@ -115,6 +130,10 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @property
+    def accepted_site_keys(self) -> set[str]:
+        return {item.strip().lower() for item in self.site_key_sha256.split(",") if item.strip()}
 
 
 @lru_cache
