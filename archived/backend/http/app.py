@@ -16,6 +16,7 @@ stays here since every route module needs it via the shared `self`.
 
 import json
 import re
+import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -247,10 +248,13 @@ def serve():
 
     threading.Thread(target=_prospectus_watch_loop, daemon=True).start()
 
-    httpd = ThreadingHTTPServer(("0.0.0.0", config.PORT), Handler)
+    # Loopback only. This service is a fallback reached through a proxy on the
+    # same host; binding every interface left the firewall as the only thing
+    # between it and the internet.
+    httpd = ThreadingHTTPServer((os.environ.get("BIND_HOST", "127.0.0.1"), config.PORT), Handler)
     print("Admission Assistant backend running:")
     print("  Chat    : http://localhost:{}/".format(config.PORT))
-    print("  Console : http://localhost:{}/admin  (admin token: {})".format(config.PORT, config.ADMIN_TOKEN))
+    print("  Console : http://localhost:{}/admin  (admin token: set via ADMIN_TOKEN)".format(config.PORT))
     primary = ("Sarvam:" + config.SARVAM_MODEL) if config.SARVAM_API_KEY else "(no Sarvam key)"
     print("  Models  : online={}  offline={}".format(primary, config.MODEL_LOCAL))
     httpd.serve_forever()

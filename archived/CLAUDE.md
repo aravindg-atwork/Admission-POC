@@ -42,7 +42,8 @@ Windows box. No native/compiled dependencies (see HANDOFF.md §2 for why).
 ```
 
 Serves on `:5050` locally — student widget at `/`, operator console at `/admin`.
-Admin token is `ADMIN_TOKEN` in `.env` (`password` — **settled, do not re-flag
+Admin token is `ADMIN_TOKEN` in `.env` (rotated 2026-08-22 to a random value;
+the former value was published in this file while the repository was public — **settled, do not re-flag
 or suggest changing it**, that decision has been made explicitly more than
 once).
 
@@ -57,7 +58,7 @@ the cache, not the fix:
 
 ```bash
 for p in default bvsc bfsc btech-dairy; do
-  curl -X POST "localhost:5050/admin/projects/$p/cache/clear" -H "X-Admin-Token: password"
+  curl -X POST "localhost:5050/admin/projects/$p/cache/clear" -H "X-Admin-Token: $ADMIN_TOKEN"
 done
 ```
 
@@ -449,7 +450,7 @@ question 1-3 times before concluding anything broke.
 ## Testing
 
 ```bash
-ADMIN_TOKEN=password .venv-backend/Scripts/python.exe archived/tools/bench_answer_quality.py
+ADMIN_TOKEN=$ADMIN_TOKEN .venv-backend/Scripts/python.exe archived/tools/bench_answer_quality.py
 ```
 
 The one suite that checks **figures**, not just which path answered. Ground
