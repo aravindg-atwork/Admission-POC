@@ -18,6 +18,7 @@ name: admission-platform
 
 services:
   postgres:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: platform
@@ -34,6 +35,7 @@ services:
       retries: 10
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -42,11 +44,13 @@ services:
       retries: 10
 
   qdrant:
-    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    image: qdrant/qdrant:v1.19.0
     volumes:
       - qdrantdata:/qdrant/storage
 
   api:
+    restart: unless-stopped
     build:
       context: ../services/api
     env_file:
@@ -81,6 +85,7 @@ services:
           memory: 768M
 
   shadow-reviewer:
+    restart: unless-stopped
     build:
       context: ../services/api
     command: ["python", "-m", "app.review.worker"]
@@ -108,6 +113,7 @@ services:
           memory: 256M
 
   retention-worker:
+    restart: unless-stopped
     build:
       context: ../services/api
     command: ["python", "-m", "app.storage.retention"]
@@ -126,6 +132,7 @@ services:
           memory: 128M
 
   web:
+    restart: unless-stopped
     build:
       context: ../services/web
     ports:
