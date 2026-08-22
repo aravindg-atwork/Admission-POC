@@ -41,7 +41,7 @@ def redact(text: str) -> str:
 
 def _needs_machine_review(result: dict) -> bool:
     source = str(result.get("source", ""))
-    if source in {"greeting", "identity", "language-control", "language-repeat", "malformed-input", "privacy-guard", "instruction-override", "prediction-boundary"}:
+    if source in {"greeting", "identity", "language-control", "language-repeat", "malformed-input", "privacy-guard", "instruction-override", "prediction-boundary", "legal-boundary"}:
         return False
     answer = str(result.get("answer", "")).lower()
     high_risk = any(term in answer for term in (

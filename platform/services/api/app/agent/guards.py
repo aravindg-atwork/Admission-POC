@@ -245,6 +245,49 @@ def language_preference_guard(question: str, state: dict) -> dict | None:
     }
 
 
+# Legal remedies and liability are outside what a prospectus can settle, and
+# outside what this assistant may assert. Three real failures on the live
+# service motivated this guard: "can I sue them?" was answered "You cannot sue
+# MAFSU..." (a categorical legal conclusion in the University's voice); "who is
+# responsible if the information YOU give me is wrong?" was answered with the
+# student's own form-accuracy obligations plus a claim that the University
+# would not be held accountable; and with no programme selected the same
+# question was routed to "which programme are you asking about?", because
+# "application" is in the programme-clarify topic list.
+#
+# Deliberately narrow: it must NOT capture "how do I file a grievance", which
+# is a real prospectus procedure with its own fee and its own eval case.
+_LEGAL_REMEDY = re.compile(
+    r"\bsue\b|\bsuing\b|\blawsuit\b|\blegal action\b|\blegal notice\b|"
+    r"\bfile a case\b|\bcase against\b|\btake (?:them|mafsu|the university) to court\b|"
+    r"\bconsumer court\b|\bhigh court\b|\bcompensation\b|\bdamages\b",
+    re.I,
+)
+_LIABILITY = re.compile(
+    r"who (?:is|are|will be|would be) (?:responsible|liable|accountable)|"
+    r"hold (?:you|mafsu|the university|anyone) (?:responsible|liable|accountable)|"
+    r"(?:your|this bot(?:'s)?|the bot(?:'s)?) (?:answer|answers|information|advice|reply) (?:is|are|was|were) wrong|"
+    r"if (?:you|the bot) (?:give|gives|gave|is|are|was|were) (?:me )?(?:wrong|incorrect|false)",
+    re.I,
+)
+
+LEGAL_BOUNDARY_REPLY = (
+    "I can't advise on legal action or say who would be held responsible - I'm a beta "
+    "assistant, not an official record, and nothing I say creates or settles an admission "
+    "right. What governs admission is the official prospectus and MAFSU's own admission "
+    "notifications, so please confirm anything important with the MAFSU admission authority "
+    "before you act on it. If you believe a decision on your application is wrong, raise it "
+    "through MAFSU's own grievance process rather than relying on this chat."
+)
+
+
+def legal_boundary_guard(question: str, state: dict) -> dict | None:
+    low = " ".join(question.lower().split())
+    if not (_LEGAL_REMEDY.search(low) or _LIABILITY.search(low)):
+        return None
+    return _reply(LEGAL_BOUNDARY_REPLY, "legal-boundary")
+
+
 def off_topic_guard(question: str, state: dict, project_id: str = "bvsc") -> dict | None:
     low = " ".join(question.lower().split())
     if not any(marker in low for marker in _OFF_TOPIC_MARKERS):
@@ -1216,10 +1259,21 @@ def eligibility_guard(question: str, state: dict, project_id: str = "bvsc") -> d
         entrance = entrance or "unknown"
         category = category or "unreserved"
 
+    # A decisive entrance outcome the student already gave - via the interview
+    # buttons, remembered in conversationState - outranks a verdict re-derived
+    # from this question's text alone. answer.py cannot see conversationState,
+    # so handing off below would answer "you meet the marks requirement" one
+    # turn after this same session told the student their NEET result rules
+    # them out. Quota exceptions stay out of it: XII-abroad NRI/FN/PIO/OCI
+    # cases have their own verified rule above this guard.
+    state_settles_entrance = (
+        entrance in {"no", "pending", "not_qualified"} and not special_foreign_quota
+    )
+
     # A free-form opening may already contain a decisive negative exam claim
     # or a complete percentage/category statement. Preserve evaluate() as the
     # authority before asking for missing slots.
-    if not active:
+    if not active and not state_settles_entrance:
         result = eligibility.evaluate(programme, question)
         if result["verdict"] != "insufficient":
             return None  # answer.py phrases the deterministic result
@@ -1430,6 +1484,7 @@ GUARDS = (
     contradiction_guard,
     prediction_guard,
     greeting_guard,
+    legal_boundary_guard,
     language_preference_guard,
     identity_guard,
     challenge_guard,
