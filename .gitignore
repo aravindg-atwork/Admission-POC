@@ -96,3 +96,8 @@ admin-token.txt
 
 # Local backup of superseded prospectuses - large binaries, not repo content
 data/_prospectus_backup_*/
+
+# Reference copy of the widget package as it was emailed to the MAFSU
+# developer. Kept locally to compare against; the maintained source lives in
+# platform/integrations/mafsu-widget-code-only/.
+/mafsu-widget-code-only/

@@ -1417,3 +1417,231 @@ before claiming any of the recorded 18/18 / 17/17 / 50/50 numbers still hold.
 - Pre-deploy backup: `/opt/admission-platform/backups/2026-08-21-response-
   boundary/` holds the previous `api-app`, `web-src` and `tools`. Rollback =
   copy those back, rebuild, roll the replicas, reload nginx.
+
+### Remembered exam status now outranks a text-only verdict (2026-08-21, deployed)
+
+Reported from the widget: a student completes the guided interview, is
+correctly told "You do not currently meet the B.V.Sc. & A.H. entrance-exam
+requirement", then asks a marks follow-up and gets "You meet the marks
+requirement… you must still clear NEET-UG-2026", `decisionState:
+eligible_so_far`. Same session, opposite verdicts, one turn apart.
+
+Cause, `agent/guards.py`: the hand-off to `answer.py` was gated on `intent`,
+not on what the state held.
+
+```python
+if not active:                      # active = intent in _INTERVIEW_INTENTS
+    result = eligibility.evaluate(programme, question)
+    if result["verdict"] != "insufficient":
+        return None                 # answer.py phrases the deterministic result
+```
+
+`eligibility_resolved` is not in `_INTERVIEW_INTENTS`, so once the interview
+finished the guard bowed out, and `answer.py` re-derived eligibility **from the
+question text alone** - it cannot see `conversationState`, so
+`entranceExamStatus="not_qualified"` was simply discarded. The same facts
+stated in words hit the guard's own `failed_neet` branch and returned the
+correct refusal, so the two channels disagreed and whichever answered first
+won.
+
+Fixed by gating the hand-off on the state as well (`state_settles_entrance`),
+which lets flow reach the existing `entrance_failure` branch that already had
+the right wording. Verified: a remembered *qualified* NEET still gets the
+positive verdict, the NRI XII-abroad exemption still outranks a remembered
+"no" (it is handled above this guard), and non-eligibility questions are not
+captured. Canary-vs-control on identical infrastructure: B.V.Sc. 17/18,
+B.F.Sc. 15/17, Dairy 24/24, cross-programme 47/50, behavior 14/15,
+multilingual 6/6 - identical verdict sequences. Backup:
+`backups/2026-08-21-eligibility-state/`.
+
+**No suite could have caught this**: every eval sends a single-turn payload,
+so nothing exercises "state contradicts the current question." That is a real
+coverage gap, not a passing grade.
+
+### Widget redesign (2026-08-21) - noticeable launcher, one-row header, full-panel language
+
+`integrations/mafsu-widget-code-only/`, driven by the observation that a bare
+launcher goes unnoticed - a student never learns the assistant exists.
+
+- **Greeting card** next to the launcher after 2.4s, once per visit
+  (`sessionStorage`, try/catch so private mode still shows it), dismissible,
+  gone for good once the chat is opened. The launcher pulses three times with
+  it. **It is deliberately always in English and must stay that way** - it is
+  the first thing a visitor sees, before anyone has chosen a language, and its
+  own text names हिंदी and मराठी so the options are visible. `applyLanguage`
+  explicitly skips everything inside `[data-chat-nudge]`.
+- **Header compacted** from 88px + a 58px toolbar to one 52px row plus a 38px
+  toolbar. The header status dot shares `[data-health]` with the launcher dot,
+  so one health check drives both.
+- **Expand control** widens the panel 400px → 680px for long answers,
+  remembered per visit, hidden below 720px where there is nowhere to widen to.
+- **Programme dropdown removed** at the user's request: the three welcome
+  cards (shown again on every "New chat") and plain naming in a question are
+  the ways in, since the API auto-routes on an explicitly named programme.
+  What replaced it is a read-only "Answering for X" chip so the corpus in use
+  is never a mystery. "New chat" therefore stays visible on phones - it is now
+  the only way back to the cards.
+- **Whole-panel language switch**: every student-visible string carries a
+  `data-i18n` key resolved against `COPY`; the buttons rewrite labels, the
+  placeholder, the safety notice, the FAQ list, aria-labels, and **the question
+  each shortcut sends**, so the reply comes back in the language being read.
+  Hindi/Marathi mirror `services/web/src/copy.ts` and carry its caveat: still
+  awaiting native-speaker review. "मैं MAFSU MITRA हूँ" rendered badly with the
+  copula after the Latin wordmark, so both languages lead with the verb.
+- **Responsive** by real situation, not arbitrary widths: ≤719px drops expand;
+  ≤560px becomes a full sheet with safe-area insets and hides the launcher
+  while open; ≤379px trims the cards to name + arrow but keeps all three
+  visible; ≤620px tall trims the welcome rather than the conversation. `100dvh`
+  so mobile browser chrome cannot clip the panel, and **16px composer text on
+  phones** because iOS Safari zooms the page on anything smaller.
+- The stylesheet was consolidated: it had been a base sheet plus a full
+  override block appended after it, with rules fighting each other.
+
+**Two bugs the redesign fixed that were visible in production screenshots**:
+the composer placeholder wrapped to two lines and collided with the helper
+text beneath it, and the quick chips truncated to "Documents requi…".
+
+**On previews**: the offline preview stubs the network. Its first version
+replayed a fixed three-answer script regardless of input, which answered
+keyboard mash with a real-looking eligibility verdict and cost two rounds of
+"is the product broken?". A stub must refuse rather than invent - it now
+matches on the question and otherwise says it is a preview. Build it with
+`build_preview.py` in the session scratchpad.
+
+### Direct-HTTPS mode: publishable site key + origin enforcement (2026-08-22, deployed OFF)
+
+Built for the model after MITRA gets its own domain: the widget calls
+`https://mitra.mafsu.ac.in/api/chat` straight from the MAFSU page, and the
+`MitraProxy.ashx` relay is no longer in the path.
+
+**The key is publishable, not secret, and the code says so in three places.**
+A widget that runs in the student's browser cannot hold a secret - View Source
+reads it. `X-Mitra-Site-Key` identifies which site is calling; the origin
+allowlist and the per-client rate limit are what protect the endpoint. Never
+gate anything on the key alone.
+
+- `settings.py`: `site_key_required` (bool), `site_key_sha256` (comma-separated
+  sha256 digests, so plaintext is not in every replica's environment),
+  `origin_enforcement` (bool). All three default OFF - deployed code is inert
+  until a key is issued.
+- `main.py`: on `POST /api/chat` only. Origin enforcement judges a request
+  *only when it declares an Origin*, so same-origin and server-to-server calls
+  (the IIS handler) are unaffected - CORS is a browser courtesy and curl never
+  sends one. The key check returns 401, a disallowed origin 403.
+- Widget: `data-site-key` on the root element; sent on chat and health calls.
+  Empty attribute = feature off.
+
+Verified on three parallel canaries before promotion: flags off → 200 exactly
+as today; flags on → no key 401, wrong key 401, correct key 200, correct key +
+allowed origin 200, correct key + hostile origin 403, `/api/healthz`
+unaffected. The A/B gate against the live build was identical on all six
+suites.
+
+**Switching it on** (once the domain and a key exist): generate with
+`python3 -c "import secrets,hashlib;k=secrets.token_urlsafe(24);print(k, hashlib.sha256(k.encode()).hexdigest())"`,
+put the DIGEST in the api service environment as `SITE_KEY_SHA256`, set
+`SITE_KEY_REQUIRED=true`, `ORIGIN_ENFORCEMENT=true` and `CORS_ORIGINS` to the
+real MAFSU origin, give the PLAINTEXT to the MAFSU developer for
+`data-site-key`. Roll the replicas one at a time as always.
+
+**The rate-limit collapse this also fixes.** Today `MitraProxy.ashx` forwards
+the student's address as `X-Real-IP`, and our own nginx immediately overwrites
+it with `proxy_set_header X-Real-IP $remote_addr` - the IIS server. The API
+keys its limiter on that header and nginx's `limit_req_zone` uses
+`$binary_remote_addr`, so **every student behind the proxy shares one bucket**:
+the 30/min per-client limit becomes 30/min for the whole university, and real
+applicant traffic would 429 students against each other. Direct-from-browser
+removes the problem at the root, because `$remote_addr` is then the student. If
+a proxy is ever reinstated, trust its header with `set_real_ip_from <that
+address>` and ONLY its - a blanket `real_ip_header` lets any client forge the
+rate-limit key. Noted in `nginx.https.template.conf` at the point it matters.
+
+`nginx.https.template.conf` was also corrected and hardened: the hostname said
+`admissions.mafsu.in` (wrong TLD - the institution is `.ac.in`), so nginx would
+have served the default vhost and never matched the certificate. It now names
+`mitra.mafsu.ac.in`, keeps an ACME challenge location so renewal survives the
+HTTPS redirect, and adds a `default_server` returning 444 for any request that
+does not use a known hostname - raw-IP scans and stray CNAMEs get dropped
+rather than served.
+
+### SSH hardened to key-only (2026-08-22)
+
+`sshd -T` reported `passwordauthentication yes` - the OpenSSH default when
+unset. In practice nothing could use it: root is `prohibit-password` and there
+is no other account. Made explicit anyway in
+`/etc/ssh/sshd_config.d/10-mitra-hardening.conf` (`PasswordAuthentication no`,
+`KbdInteractiveAuthentication no`, `PermitRootLogin prohibit-password`) so that
+adding a user later cannot silently create a password-reachable account.
+Validated with `sshd -t`, reloaded (not restarted), and a fresh connection was
+confirmed before finishing. Backup: `/root/sshd_config.backup-2026-08-22`.
+Still open: no fail2ban, and both authorised keys share the root account, so
+the audit trail cannot name a person.
+
+## Risk-register remediation (2026-08-22) — everything except the repo items
+
+Worked through the risk register in dependency order. The two GitHub items
+(make the repository private, move it to an organisation) are the owner's to
+do and are deliberately not attempted here.
+
+**Boot persistence.** Every container ran `restart=no`, so a reboot took the
+student service down until someone started it by hand. Applied to the running
+containers with `docker update --restart unless-stopped` (immediate, no
+recreate) and persisted in `docker-compose.prod.yml`. Note the trap: a naive
+script that inserts `restart:` under every two-space key also hits the
+`volumes:` block and the compose file stops validating — add it only inside
+`services:`.
+
+**Backups now exist and are proven.** `/usr/local/bin/mitra-backup.sh` +
+`mitra-backup.timer`, nightly 02:30 UTC, 14-day retention, logged to
+`/var/log/mitra-backup.log`. Postgres via `pg_dump -Fc`; Qdrant via snapshots.
+**Qdrant is not published on the host**, so a host-side `curl 127.0.0.1:6333`
+silently does nothing - the first version of the script "succeeded" while
+backing up no vectors at all. It now drives Qdrant through the API container
+(already on that network) and lifts the file out with `docker cp`. Restore
+drill run the same day: the dump restored into a scratch database returned
+7,706 conversation messages against 7,710 live, the difference being test
+traffic since the dump. Instructions in `/opt/backups/RESTORE.md`.
+
+**Legacy POC contained.** It bound `0.0.0.0:5050` with only ufw between it and
+the internet, and printed its admin token into `backend_stdout.log` on every
+start. Now binds `127.0.0.1` (via `BIND_HOST`, defaulting to loopback), no
+longer logs the token, and the token itself was rotated - the old one was
+`password`, published in `archived/CLAUDE.md` in a **public** repository. The
+old value now returns 401. Backups: `/root/legacy-app.py.backup-2026-08-22`,
+`/root/legacy-env.backup-2026-08-22`.
+
+**The `/legacy/` route is gone.** It proxied to `host.docker.internal:5050`,
+which the container cannot reach (ufw drops bridge traffic to that host port),
+so every public request hung for the full 300s `proxy_read_timeout` while
+holding a worker - an unauthenticated denial-of-service path. Removed, with an
+explicit `return 404` so a stale bookmark gets a clean answer instead of the
+student page. Do not reinstate without a short timeout AND an access
+restriction.
+
+**Qdrant image pinned** from `:latest` to `:v1.19.0` (the version actually
+running), so a rebuild cannot silently change the datastore.
+
+**fail2ban installed** for sshd (5 attempts / 10 min / 1 h ban). It logged
+failed attempts within seconds of starting - the box is being scanned
+continuously.
+
+**First dependency scan ever run**, and it found something: `pypdf 5.1.0`
+carried **37 advisories**, fixed in 6.15.0; the other 37 packages were clean.
+Exposure was low (ingestion only, admin-supplied PDFs, not the request path)
+but the fix was verified rather than assumed: extraction from the real B.V.Sc.
+prospectus is **byte-identical** between 5.1.0 and 6.15.0 - same 69 pages, same
+201,112 characters, same sha256 - including `extraction_mode="layout"`, which
+is the mode ingestion actually uses and which the first comparison missed.
+Bumped, rebuilt, rolled; `pip-audit` now reports no known vulnerabilities.
+
+**A rate-limit artifact worth recognising.** Running two suites back-to-back
+from one container gave B.V.Sc. 17/18 then Dairy 12/24 - which looks like a
+regression and is not. 42 requests from one source address inside a minute hit
+the 30/min per-client limit. After the window reset, Dairy returned 24/24 with
+zero 429s. This is the same shared-bucket effect that the MAFSU proxy creates
+for real students; when running suites against production containers, either
+wait out the window or raise the limit on a throwaway container.
+
+**Still open after this pass:** external uptime alerting (nothing pages anyone
+if the site falls over), per-person admin accounts, staged corpus release, an
+independent penetration test, and the domain/TLS work that blocks the rest.
